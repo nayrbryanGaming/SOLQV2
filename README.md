@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-# warungpay-core
-Core payment orchestration system enabling crypto and IDRX-based customer payments to settle over existing QRIS and e-wallet rails, without merchant onboarding, system changes, or fund custody.
-=======
-# warungpay
-=======
 # WarungPay
->>>>>>> 4d11e37 (Upload WarungPay V2 and update README)
 
 Customer-side payment orchestration for QRIS.
 Crypto and IDRX in. Rupiah settles to existing QRIS wallets. No merchant change.
@@ -22,12 +14,6 @@ Merchants do not touch crypto.
 QRIS remains the system of record.
 WarungPay only orchestrates.
 
-<<<<<<< HEAD
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
->>>>>>> 6a465ab (Initial commit: WarungPay — Solana Pay POS for Indonesian MSMEs 🇮🇩)
-=======
 ## Problem
 
 Indonesia already solved retail payments with QRIS.
@@ -280,4 +266,3 @@ We believe in the power of the community. **WarungPay** will be released as an o
 
 ## 💬 Contact Us
 Interested in collaborating or supporting the development of WarungPay? Reach out to us through the **Superteam Indonesia** community channels.
->>>>>>> 4d11e37 (Upload WarungPay V2 and update README)
