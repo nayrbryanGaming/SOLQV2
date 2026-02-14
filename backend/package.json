@@ -1,0 +1,27 @@
+{
+  "name": "warungpay-backend",
+  "version": "1.0.0",
+  "description": "WarungPay Backend Orchestrator",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "dev": "ts-node-dev src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "body-parser": "^1.20.2",
+    "@solana/web3.js": "^1.78.0",
+    "bignumber.js": "^9.1.1",
+    "joi": "^17.9.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6",
+    "@types/node": "^20.4.5",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13",
+    "ts-node-dev": "^2.0.0"
+  }
+}

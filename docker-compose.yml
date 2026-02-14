@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    depends_on:
+      - redis
+    networks:
+      - warungpay-net
+
+  redis:
+    image: "redis:alpine"
+    networks:
+      - warungpay-net
+
+networks:
+  warungpay-net:
+    driver: bridge
