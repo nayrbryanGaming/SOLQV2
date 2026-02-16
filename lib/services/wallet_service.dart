@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class WalletService {
   // Simulates a wallet signature (e.g. Phantom / Solflare)
   static Future<String> signTransaction(String amount, String currency) async {

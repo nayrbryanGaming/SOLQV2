@@ -19,6 +19,7 @@ interface PaymentIntent {
         rate?: number;
     };
     qris_data: any;
+    merchant_account?: string;
     tx_hash?: string;
     settlement_ref?: string;
 }
@@ -66,7 +67,8 @@ router.post('/payment-intents', (req: Request, res: Response) => {
                 quote_id: `qt_${Date.now()}`,
                 rate: quote.rate
             },
-            qris_data: decoded
+            qris_data: decoded,
+            merchant_account: decoded.merchantAccountInfo['26'] || 'UNKNOWN'
         };
 
         // Store it
@@ -137,10 +139,10 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
             amount: intent.amount_details.fiat_amount || 10000,
             currency: 'IDR',
             destinationAccount: {
-                bankCode: 'GOPAY',
-                accountNumber: intent.merchant.pan as string
+                bankCode: 'GOPAY', // Default or extracted from QRIS metadata if available
+                accountNumber: intent.merchant_account || 'UNKNOWN'
             },
-            referenceId: id
+            referenceId: intent.id
         });
 
         if (settlementResult.status === 'SUCCESS') {

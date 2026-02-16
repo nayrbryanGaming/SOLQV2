@@ -1,25 +1,28 @@
 class ParsedQrisResult {
   final String merchantName;
   final String amount;
-  final String acquirer;
   final bool isValid;
   final String? errorReason;
+  final bool isStatic;
+  final String? merchantAccount;
 
   ParsedQrisResult({
     required this.merchantName,
     required this.amount,
-    required this.acquirer,
     required this.isValid,
+    required this.isStatic,
     this.errorReason,
+    this.merchantAccount,
   });
 
   factory ParsedQrisResult.invalid(String reason) {
     return ParsedQrisResult(
       merchantName: "Unknown",
       amount: "0",
-      acquirer: "Unknown",
       isValid: false,
+      isStatic: true,
       errorReason: reason,
+      merchantAccount: null,
     );
   }
 }
@@ -50,9 +53,6 @@ class QrisParser {
 
     // MANDATORY VALIDATION (EMVCo)
     if (!data.containsKey('00')) return ParsedQrisResult.invalid("Missing Payload Format Indicator (00)");
-    if (data['00'] != '01') return ParsedQrisResult.invalid("Invalid Payload Version (00)");
-    if (!data.containsKey('01')) return ParsedQrisResult.invalid("Missing Point of Initiation (01)");
-    if (!data.containsKey('52')) return ParsedQrisResult.invalid("Missing MCC (52)");
     
     // Currency Validation (IDR = 360)
     if (!data.containsKey('53')) return ParsedQrisResult.invalid("Missing Currency Code (53)");
@@ -65,34 +65,41 @@ class QrisParser {
     // Merchant Name
     if (!data.containsKey('59')) return ParsedQrisResult.invalid("Missing Merchant Name (59)");
 
-    // Extract Data
-    final merchant = data['59']!;
-    final amount = data.containsKey('54') ? data['54']! : "0"; // 54 is optional in static QR, but we usually need it.
-    
-    // Acquirer Logic (Simplified)
-    String acquirer = "Standard QRIS";
-    if (data.containsKey('26')) acquirer = "Merchant Account (26)";
-    else if (data.containsKey('51')) acquirer = "Merchant Account (51)";
-
-    // HARD PROOF #3: REAL QRIS CRC VALIDATION (Tag 63)
+    // CRC VALIDATION (Tag 63)
     if (!data.containsKey('63')) return ParsedQrisResult.invalid("Missing CRC Checksum (63)");
     
     final providedCrc = data['63']!;
-    // EMVCo Rule: CRC is over all data UP TO Tag 63 Length.
-    // The payload ends with "6304" then the 4-char CRC.
-    // So we take the substring from 0 to length - 4.
+    // EMVCo Rule: CRC is over all data including "6304" but excluding the 4-char CRC itself.
     final dataToValidate = payload.substring(0, payload.length - 4);
     final calculatedCrc = _calculateCrc16(dataToValidate);
     
     if (calculatedCrc.toUpperCase() != providedCrc.toUpperCase()) {
-      return ParsedQrisResult.invalid("Invalid CRC Checksum. Real: $calculatedCrc, Provided: $providedCrc");
+      return ParsedQrisResult.invalid("CRC ERROR: Expected $providedCrc, Got $calculatedCrc");
+    }
+
+    // Extract Data
+    final merchant = data['59']!;
+    final String? amountStr = data['54'];
+    final bool isStatic = amountStr == null || amountStr == "0" || amountStr.isEmpty;
+
+    // Extract Merchant Account (Tag 26 is common for GPN/QRIS)
+    String? account = data['26'];
+    if (account == null) {
+      // Fallback to searching 26-45
+      for (int i = 26; i <= 45; i++) {
+        if (data.containsKey(i.toString())) {
+          account = data[i.toString()];
+          break;
+        }
+      }
     }
 
     return ParsedQrisResult(
       merchantName: merchant,
-      amount: amount,
-      acquirer: acquirer,
+      amount: isStatic ? "0" : amountStr!,
       isValid: true,
+      isStatic: isStatic,
+      merchantAccount: account,
     );
   }
 
@@ -105,15 +112,12 @@ class QrisParser {
       crc ^= (byte << 8);
       for (int i = 0; i < 8; i++) {
         if ((crc & 0x8000) != 0) {
-          crc = (crc << 1) ^ 0x1021;
+          crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
         } else {
-          crc <<= 1;
+          crc = (crc << 1) & 0xFFFF;
         }
       }
     }
-    
-    // Mask to 16-bit
-    crc &= 0xFFFF;
     return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
   }
 }

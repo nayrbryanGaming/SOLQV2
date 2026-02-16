@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class WarungPayService {
+class SOLQService {
   final String baseUrl;
 
   // For Android Emulator, use 10.0.2.2 instead of localhost
-  WarungPayService({this.baseUrl = 'http://10.0.2.2:3000/v1'});
+  SOLQService({this.baseUrl = 'http://10.0.2.2:3000/v1'});
 
   Future<Map<String, dynamic>> createPaymentIntent(String qrisPayload, {int? amount}) async {
     final url = Uri.parse('$baseUrl/payment-intents');

@@ -1,72 +1,75 @@
-# WarungPay V2
+SOLQ acts purely as an **orchestrator** between these components.
 
-Customer-Side Payment Orchestrator for QRIS.
+---
 
-## Project Structure
+## Payment Flow (End-to-End)
 
-- `lib/`: Flutter Consumer App
-- `backend/`: Node.js/TypeScript Backend Orchestrator
+1. User opens SOLQ and connects a Solana wallet (e.g. Phantom)
+2. User scans a physical QRIS code at a merchant
+3. SOLQ parses QRIS payload (EMVCo standard)
+4. SOLQ determines payment amount:
+   - Dynamic QRIS → amount locked
+   - Static QRIS → user inputs amount manually
+5. SOLQ requests a real-time swap quote (SOL/USDC → IDRX)
+6. User authorizes payment by signing a wallet transaction
+7. Swap executes on-chain
+8. Settlement is delegated to partner rails
+9. Merchant receives rupiah as normal
+10. SOLQ confirms settlement via event-based callback
 
-## Prerequisites
+---
 
-- Node.js (v16+)
-- Flutter (v3.0+)
-- Android Studio / VS Code
+## QRIS Intelligence (“Mata Pinter”)
 
-## Setup Instructions
+SOLQ implements a QRIS parser compliant with EMVCo specifications.
 
-### 1. Backend
+- **Dynamic QRIS**
+  - Detects presence of Tag 54 (Transaction Amount)
+  - Amount is locked and cannot be overridden
+- **Static QRIS**
+  - Detects missing Tag 54
+  - Prompts user to input amount manually
+- **Merchant Resolution**
+  - Extracts merchant PAN / account identifiers (Tag 26/27)
+  - Routes settlement automatically
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-   Server will start on `http://localhost:3000`.
+This allows SOLQ to work with **any existing QRIS sticker**.
 
-### 2. Consumer App (Flutter)
+---
 
-1. Get dependencies:
-   ```bash
-   flutter pub get
-   ```
-2. Run the app (ensure an emulator or device is connected):
-   ```bash
-   flutter run
-   ```
+## Wallet Integration
 
-## Key Features Implemented (Phase 1, 2, & 3)
+SOLQ uses non-custodial wallet authorization.
 
-- **Payment Orchestrator**: `backend` (Decodes QRIS, maps to intents, routes without holding funds)
-- **External Wallet Trigger**: `lib/screens/payment_confirmation_screen.dart` (Signals external signing events)
-- **Settlement Request Engine**: `backend/src/services/bankPartnerService.ts` (Requests licensed partners to settle IDR)
-- **Signal-Truth Separation**: `POST /confirm` accepts signals; Backend independently verifies on-chain truth.
-- **Static QR / Manual Input**: Auto-detects 0-value QRs and prompts for amount (compliant user input flow).
-- **Compliance Logs**: `backend/src/services/auditLogger.ts` (Immutable record of orchestration steps).
+- Wallets are connected via Solana Mobile Wallet Adapter
+- Private keys never leave the wallet application
+- SOLQ generates a **payment intent**
+- User authorizes intent via cryptographic signature
 
-## How to Test
+SOLQ cannot move funds without explicit user consent.
 
-### Development Mode
-1. Start Backend: `npm run dev`
-2. Start Frontend: `flutter run`
+---
 
-### Production Mode (Docker)
-1. Run containers:
-   ```bash
-   docker-compose up --build
-   ```
-2. Backend will be available at `http://localhost:3000`.
+## On-Chain Execution
 
-### Verification Steps
-1. Scan a valid QRIS (Static).
-2. See payment details in App (including Crypto Rate).
-3. Click **Confirm Payment**.
-4. Observe status change: `processing` -> `settling` -> `completed`.
-5. Check `backend/audit_logs.jsonl` for compliance records.
+- Real-time routing via DEX aggregation
+- Atomic swap logic to ensure sufficient IDRX output
+- Slippage-protected execution
+- Solana-native low latency and low fees
+
+---
+
+## Settlement & Confirmation
+
+- IDRX is routed to partner settlement infrastructure
+- SOLQ does not custody funds at any stage
+- Settlement confirmation is event-driven (webhook-based)
+- UI updates only on confirmed settlement signal
+
+This avoids polling and ensures deterministic transaction state.
+
+---
+
+## State Machine
+
+All payments follow a strict, auditable state machine:

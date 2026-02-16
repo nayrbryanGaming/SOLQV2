@@ -1,37 +1,49 @@
 enum PaymentState {
   CREATED,
-  AWAITING_AUTHORIZATION, // Was AWAITING_SIGNATURE
-  AUTHORIZED,             // New intermediate state
-  AWAITING_SETTLEMENT,    // Was PROCESSING
+  PENDING_AMOUNT, // FOR STATIC QRIS
+  AUTHORIZATION_REQUESTED,
+  AUTHORIZED,
+  AWAITING_SETTLEMENT,
   COMPLETED,
   FAILED,
-  EXPIRED                 // New state for timeout
+  EXPIRED
 }
 
 class PaymentIntent {
-  final String id;
+  final String intentId;
   final String merchantName;
-  final String amount;
-  final String acquirer;
+  final String amountIdr;
+  final String currency;
   final PaymentState state;
+  final DateTime? authorizationExpiresAt;
+  final String? settlementReference;
+  final String? estimatedCryptoAmount;
+  final double? quotedRate;
+  final double? platformFee;
+  final double? networkFee;
+  final double? slippage;
+  final double? maxFee;
+  final String? merchantAccount;
   final DateTime createdAt;
-  
-  // Regulator-Safe Terminology
-  final String? authorizationSignature; // Was signature
-  final DateTime? authorizationExpiresAt; // New safety rule
-  
-  final String? partnerRef;
+  final DateTime updatedAt;
 
   PaymentIntent({
-    required this.id,
+    required this.intentId,
     required this.merchantName,
-    required this.amount,
-    required this.acquirer,
+    required this.amountIdr,
+    this.currency = 'IDR',
     required this.state,
-    required this.createdAt,
-    this.authorizationSignature,
     this.authorizationExpiresAt,
-    this.partnerRef,
+    this.settlementReference,
+    this.estimatedCryptoAmount,
+    this.quotedRate,
+    this.platformFee,
+    this.networkFee,
+    this.slippage,
+    this.maxFee,
+    this.merchantAccount,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
   bool get isExpired => 
@@ -42,50 +54,81 @@ class PaymentIntent {
 
   PaymentIntent copyWith({
     PaymentState? state,
-    String? authorizationSignature,
+    String? amountIdr,
+    String? estimatedCryptoAmount,
+    double? quotedRate,
+    double? platformFee,
+    double? networkFee,
+    double? slippage,
+    double? maxFee,
     DateTime? authorizationExpiresAt,
-    String? partnerRef,
+    String? settlementReference,
+    String? merchantAccount,
+    DateTime? updatedAt,
   }) {
     return PaymentIntent(
-      id: this.id,
+      intentId: this.intentId,
       merchantName: this.merchantName,
-      amount: this.amount,
-      acquirer: this.acquirer,
+      amountIdr: amountIdr ?? this.amountIdr,
+      currency: this.currency,
       state: state ?? this.state,
       createdAt: this.createdAt,
-      authorizationSignature: authorizationSignature ?? this.authorizationSignature,
+      updatedAt: updatedAt ?? DateTime.now(),
       authorizationExpiresAt: authorizationExpiresAt ?? this.authorizationExpiresAt,
-      partnerRef: partnerRef ?? this.partnerRef,
+      settlementReference: settlementReference ?? this.settlementReference,
+      estimatedCryptoAmount: estimatedCryptoAmount ?? this.estimatedCryptoAmount,
+      quotedRate: quotedRate ?? this.quotedRate,
+      platformFee: platformFee ?? this.platformFee,
+      networkFee: networkFee ?? this.networkFee,
+      slippage: slippage ?? this.slippage,
+      maxFee: maxFee ?? this.maxFee,
+      merchantAccount: merchantAccount ?? this.merchantAccount,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
+      'intentId': intentId,
       'merchantName': merchantName,
-      'amount': amount,
-      'acquirer': acquirer,
+      'amountIdr': amountIdr,
+      'currency': currency,
       'state': state.index,
-      'createdAt': createdAt.toIso8601String(),
-      'authorizationSignature': authorizationSignature,
       'authorizationExpiresAt': authorizationExpiresAt?.toIso8601String(),
-      'partnerRef': partnerRef,
+      'settlementReference': settlementReference,
+      'estimatedCryptoAmount': estimatedCryptoAmount,
+      'quotedRate': quotedRate,
+      'platformFee': platformFee,
+      'networkFee': networkFee,
+      'slippage': slippage,
+      'maxFee': maxFee,
+      'merchantAccount': merchantAccount,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
     };
   }
 
   factory PaymentIntent.fromJson(Map<String, dynamic> json) {
     return PaymentIntent(
-      id: json['id'],
+      intentId: json['intentId'],
       merchantName: json['merchantName'],
-      amount: json['amount'],
-      acquirer: json['acquirer'],
+      amountIdr: json['amountIdr'],
+      currency: json['currency'] ?? 'IDR',
       state: PaymentState.values[json['state']],
-      createdAt: DateTime.parse(json['createdAt']),
-      authorizationSignature: json['authorizationSignature'],
       authorizationExpiresAt: json['authorizationExpiresAt'] != null 
           ? DateTime.parse(json['authorizationExpiresAt']) 
           : null,
-      partnerRef: json['partnerRef'],
+      settlementReference: json['settlementReference'],
+      estimatedCryptoAmount: json['estimatedCryptoAmount'],
+      quotedRate: json['quotedRate'],
+      platformFee: json['platformFee'],
+      networkFee: json['networkFee'],
+      slippage: json['slippage'],
+      maxFee: json['maxFee'],
+      merchantAccount: json['merchantAccount'],
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: json['updatedAt'] != null 
+          ? DateTime.parse(json['updatedAt']) 
+          : DateTime.parse(json['createdAt']),
     );
   }
 }
