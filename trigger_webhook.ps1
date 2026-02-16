@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "🔥 WARUNGPAY WEBHOOK TRIGGER (HARD PROOF #2)" -ForegroundColor Green
+Write-Host "🔥 SOLQ WEBHOOK TRIGGER (HARD PROOF #2)" -ForegroundColor Green
 Write-Host "Use this to prove ASYNC CONTROL of the Orchestrator." -ForegroundColor Gray
 Write-Host ""
 
@@ -34,3 +34,4 @@ try {
 }
 
 Pause
+

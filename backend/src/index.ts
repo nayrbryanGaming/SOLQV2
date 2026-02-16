@@ -15,9 +15,10 @@ app.use('/v1', paymentRoutes);
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {
-    res.status(200).json({ status: 'OK', service: 'WarungPay Orchestrator' });
+    res.status(200).json({ status: 'OK', service: 'SOLQ Orchestrator' });
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
+

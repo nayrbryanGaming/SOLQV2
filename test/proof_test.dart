@@ -8,7 +8,7 @@ void main() {
   SharedPreferences.setMockInitialValues({});
 
   test('IRREFUTABLE PROOF: Full Transaction Lifecycle Simulation', () async {
-    print('\n🚀 STARTING WARUNGPAY NUCLEAR AUDIT...');
+    print('\n🚀 STARTING SOLQ NUCLEAR AUDIT...');
     final service = OrchestratorService();
     await service.init();
 
@@ -45,7 +45,9 @@ void main() {
     expect(states.contains(PaymentState.AUTHORIZED), true, reason: 'Must sign wallet');
     expect(states.contains(PaymentState.COMPLETED), true, reason: 'Must settle funds');
 
-    print('\n👑 AUDIT PASSED: WARUNGPAY IS ROBUST AND VERIFIABLE.');
+    print('\n👑 AUDIT PASSED: SOLQ IS ROBUST AND VERIFIABLE.');
     print('--------------------------------------------------');
   });
 }
+
+

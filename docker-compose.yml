@@ -10,13 +10,14 @@ services:
     depends_on:
       - redis
     networks:
-      - warungpay-net
+      - SOLQ-net
 
   redis:
     image: "redis:alpine"
     networks:
-      - warungpay-net
+      - SOLQ-net
 
 networks:
-  warungpay-net:
+  SOLQ-net:
     driver: bridge
+

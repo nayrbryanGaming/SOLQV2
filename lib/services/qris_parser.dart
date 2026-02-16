@@ -121,3 +121,4 @@ class QrisParser {
     return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
   }
 }
+

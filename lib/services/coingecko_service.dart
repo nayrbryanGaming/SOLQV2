@@ -35,3 +35,4 @@ class CoinGeckoService {
     return deviation < 0.02; // 2% tolerance
   }
 }
+

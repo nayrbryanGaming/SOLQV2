@@ -1,5 +1,5 @@
 /**
- * WarungPay QRIS Decoder Service
+ * SOLQ QRIS Decoder Service
  * Parses EMVCo MPM (Merchant Presented Mode) QR Codes (ISO/IEC 18004)
  * Focuses on ID Indonesia Standard (QRIS) structure
  */
@@ -76,3 +76,4 @@ export class QRISDecoder {
         return true;
     }
 }
+

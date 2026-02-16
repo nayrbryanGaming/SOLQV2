@@ -22,7 +22,7 @@ interface DisbursementResponse {
 export class BankPartnerService {
     /**
      * REQUEST SETTLEMENT FROM IDRX (STABELIFY/STRAITSX)
-     * WarungPay acts as the Orchestrator. 
+     * SOLQ acts as the Orchestrator. 
      * Requirement from Steven/Nael: Use the real 'pipa' off-ramp.
      */
     public static async requestSettlement(request: DisbursementRequest): Promise<DisbursementResponse> {
@@ -75,3 +75,4 @@ export class BankPartnerService {
         }
     }
 }
+

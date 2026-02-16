@@ -6,7 +6,7 @@ import '../models/payment_intent.dart';
 import 'solana_service.dart';
 import 'partner_service.dart';
 import 'jupiter_service.dart';
-import 'SOLQ_service.dart';
+import 'solq_service.dart';
 import 'coingecko_service.dart';
 
 class OrchestratorService {
@@ -190,7 +190,7 @@ class OrchestratorService {
           // This allows the boss to see the "Sign Transaction" screen with real SOL
           print("[ORCHESTRATOR] Generating Real Devnet Transaction for Demo Proof...");
           base64Tx = await solana.generateDemoTransaction(
-            "SOLQDevnet1111111111111111111111111111", // Demo recipient
+            "SOLQ_DEVNET_PROOFS1111111111111111111111111111", // Demo recipient
             1000000, // 0.001 SOL
           );
         }
@@ -372,3 +372,4 @@ class OrchestratorService {
     print("[GOD-MODE] SIMULATION COMPLETE.");
   }
 }
+

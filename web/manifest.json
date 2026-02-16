@@ -1,6 +1,6 @@
 {
-    "name": "warungpay",
-    "short_name": "warungpay",
+    "name": "SOLQ",
+    "short_name": "SOLQ",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
@@ -33,3 +33,4 @@
         }
     ]
 }
+

@@ -8,3 +8,4 @@ class WalletService {
     return "sig_mock_${DateTime.now().millisecondsSinceEpoch}_${currency}";
   }
 }
+

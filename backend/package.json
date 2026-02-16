@@ -1,7 +1,7 @@
 {
-  "name": "warungpay-backend",
+  "name": "SOLQ-backend",
   "version": "1.0.0",
-  "description": "WarungPay Backend Orchestrator",
+  "description": "SOLQ Backend Orchestrator",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
@@ -25,3 +25,4 @@
     "ts-node-dev": "^2.0.0"
   }
 }
+

@@ -30,3 +30,4 @@ class AuditLogService {
     await prefs.remove('audit_logs');
   }
 }
+
