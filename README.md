@@ -35,11 +35,11 @@ No merchant onboarding. No custody. No behavior change.
 
 ```mermaid
 graph TD
-    A[User Wallet (Solana)] -->|Signature| B[Wallet Authorization]
+    A["User Wallet (Solana)"] -->|Signature| B[Wallet Authorization]
     B -->|Jupiter| C[On-chain Swap]
     C -->|IDRX| D[Rupiah Stablecoin]
     D --> E[Partner Settlement Rail]
-    E --> F[Merchant Bank / E-money Account (QRIS)]
+    E --> F["Merchant Bank / E-money Account (QRIS)"]
 ```
 
 SOLQ acts purely as an **orchestrator** between these components.
