@@ -289,7 +289,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
                             child: Text(
-                              "~ ${(double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0 / 100).toStringAsFixed(2)} IDRX (Verified by CoinGecko)",
+                              "~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0) / 100).toStringAsFixed(2)} IDRX (Verified by CoinGecko)",
                               style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                           ),

@@ -202,3 +202,9 @@ SOLQ is under active development and currently in MVP stage.
 This repository represents the core orchestration logic and system design used for validation, accelerator evaluation, and ecosystem collaboration.
 
 ---
+
+## License
+
+**CLOSED SOURCE / PROPRIETARY**
+
+All rights reserved. This software and associated documentation files are proprietary and confidential. Unauthorized copying, modification, distribution, or use of this software via any medium is strictly prohibited.
