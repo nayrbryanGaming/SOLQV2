@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum PaymentState {
   CREATED,
   PENDING_AMOUNT, // FOR STATIC QRIS
@@ -24,8 +26,17 @@ class PaymentIntent {
   final double? slippage;
   final double? maxFee;
   final String? merchantAccount;
+  final String? bankCode;
+  final String? nmid;
   final DateTime createdAt;
   final DateTime updatedAt;
+  
+  // SAM ALTMAN FEE TRANSPARENCY FIELDS
+  final double? effectiveFeePercent;  // Total fee as percentage (for transparency)
+  final double? userSavingsVsQris;    // How much user saves vs QRIS
+  
+  // QRIS PAYLOAD PERSISTENCE
+  final String? qrisPayload;
 
   PaymentIntent({
     required this.intentId,
@@ -42,15 +53,20 @@ class PaymentIntent {
     this.slippage,
     this.maxFee,
     this.merchantAccount,
+    this.bankCode,
+    this.nmid,
     required this.createdAt,
     required this.updatedAt,
+    this.effectiveFeePercent,
+    this.userSavingsVsQris,
+    this.qrisPayload,
   });
 
   bool get isExpired => 
       state != PaymentState.COMPLETED && 
       state != PaymentState.FAILED &&
       authorizationExpiresAt != null && 
-      DateTime.now().isAfter(authorizationExpiresAt!);
+      DateTime.now().isAfter(authorizationExpiresAt ?? DateTime.now());
 
   PaymentIntent copyWith({
     PaymentState? state,
@@ -64,7 +80,12 @@ class PaymentIntent {
     DateTime? authorizationExpiresAt,
     String? settlementReference,
     String? merchantAccount,
+    String? bankCode,
+    String? nmid,
     DateTime? updatedAt,
+    double? effectiveFeePercent,
+    double? userSavingsVsQris,
+    String? qrisPayload,
   }) {
     return PaymentIntent(
       intentId: this.intentId,
@@ -83,6 +104,11 @@ class PaymentIntent {
       slippage: slippage ?? this.slippage,
       maxFee: maxFee ?? this.maxFee,
       merchantAccount: merchantAccount ?? this.merchantAccount,
+      bankCode: bankCode ?? this.bankCode,
+      nmid: nmid ?? this.nmid,
+      effectiveFeePercent: effectiveFeePercent ?? this.effectiveFeePercent,
+      userSavingsVsQris: userSavingsVsQris ?? this.userSavingsVsQris,
+      qrisPayload: qrisPayload ?? this.qrisPayload,
     );
   }
 
@@ -102,33 +128,53 @@ class PaymentIntent {
       'slippage': slippage,
       'maxFee': maxFee,
       'merchantAccount': merchantAccount,
+      'bankCode': bankCode,
+      'nmid': nmid,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'effectiveFeePercent': effectiveFeePercent,
+      'userSavingsVsQris': userSavingsVsQris,
+      'qrisPayload': qrisPayload,
     };
   }
 
   factory PaymentIntent.fromJson(Map<String, dynamic> json) {
+    // Map backend string status to Flutter PaymentState enum
+    PaymentState mapState(String? status) {
+      if (status == 'requires_payment_method') return PaymentState.CREATED;
+      if (status == 'processing') return PaymentState.AUTHORIZATION_REQUESTED;
+      if (status == 'settling') return PaymentState.AWAITING_SETTLEMENT;
+      if (status == 'completed') return PaymentState.COMPLETED;
+      if (status == 'failed') return PaymentState.FAILED;
+      return PaymentState.CREATED; // Default
+    }
+
     return PaymentIntent(
-      intentId: json['intentId'],
-      merchantName: json['merchantName'],
-      amountIdr: json['amountIdr'],
-      currency: json['currency'] ?? 'IDR',
-      state: PaymentState.values[json['state']],
+      intentId: json['id']?.toString() ?? json['intentId']?.toString() ?? '',
+      merchantName: json['merchant']?['name']?.toString() ?? json['merchantName']?.toString() ?? 'SME Merchant',
+      amountIdr: json['amount_details']?['fiat_amount']?.toString() ?? json['amountIdr']?.toString() ?? '0',
+      currency: json['amount_details']?['currency_source']?.toString() ?? json['currency']?.toString() ?? 'IDR',
+      state: json['status'] != null ? mapState(json['status']) : (json['state'] != null ? PaymentState.values[json['state'] as int] : PaymentState.CREATED),
       authorizationExpiresAt: json['authorizationExpiresAt'] != null 
           ? DateTime.parse(json['authorizationExpiresAt']) 
           : null,
-      settlementReference: json['settlementReference'],
-      estimatedCryptoAmount: json['estimatedCryptoAmount'],
-      quotedRate: json['quotedRate'],
-      platformFee: json['platformFee'],
-      networkFee: json['networkFee'],
-      slippage: json['slippage'],
-      maxFee: json['maxFee'],
-      merchantAccount: json['merchantAccount'],
-      createdAt: DateTime.parse(json['createdAt']),
+      settlementReference: json['tx_hash']?.toString() ?? json['settlement_ref']?.toString() ?? json['settlementReference']?.toString(),
+      estimatedCryptoAmount: json['amount_details']?['crypto_amount']?.toString() ?? json['estimatedCryptoAmount']?.toString(),
+      quotedRate: json['amount_details']?['rate']?.toDouble() ?? json['quotedRate']?.toDouble(),
+      platformFee: json['platformFee']?.toDouble(),
+      networkFee: json['networkFee']?.toDouble(),
+      slippage: json['slippage']?.toDouble(),
+      maxFee: json['maxFee']?.toDouble(),
+      merchantAccount: json['merchant_account']?.toString() ?? json['merchantAccount']?.toString(),
+      bankCode: json['bank_code']?.toString() ?? json['bankCode']?.toString(),
+      nmid: json['nmid']?.toString(),
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
       updatedAt: json['updatedAt'] != null 
           ? DateTime.parse(json['updatedAt']) 
-          : DateTime.parse(json['createdAt']),
+          : DateTime.now(),
+      effectiveFeePercent: json['effectiveFeePercent']?.toDouble(),
+      userSavingsVsQris: json['userSavingsVsQris']?.toDouble(),
+      qrisPayload: json['qris_data'] != null ? jsonEncode(json['qris_data']) : json['qrisPayload']?.toString(),
     );
   }
 }

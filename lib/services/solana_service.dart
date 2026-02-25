@@ -1,178 +1,344 @@
 import 'package:url_launcher/url_launcher.dart';
 import 'package:app_links/app_links.dart';
+import 'package:bs58/bs58.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'package:solana/solana.dart'; 
-import 'package:solana/encoder.dart';
+import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:solana/solana.dart';
+import 'web_provider.dart';
+import 'walletconnect_service.dart';
 
 class SolanaService {
-  // Singleton
   static final SolanaService _instance = SolanaService._internal();
   factory SolanaService() => _instance;
+
+  late final String _dappPubKeyB58;
+
   SolanaService._internal() {
+    final random = Random.secure();
+    final bytes = Uint8List(32);
+    for (var i = 0; i < 32; i++) bytes[i] = random.nextInt(256);
+    _dappPubKeyB58 = base58.encode(bytes);
     _initDeepLinks();
+    _loadSavedConnection();
   }
 
   String? _connectedPublicKey;
+  String? _connectedWalletType; // NEW: Track Wallet Type
   final StreamController<String> _signatureController = StreamController.broadcast();
   Stream<String> get signatureStream => _signatureController.stream;
 
-  // Listen for callbacks from Phantom
-  void _initDeepLinks() {
-    final _appLinks = AppLinks();
-    
-    _appLinks.uriLinkStream.listen((Uri? uri) {
-      if (uri != null) _handleIncomingLink(uri.toString());
+  bool get isConnected => _connectedPublicKey != null;
+  String? get connectedAddress => _connectedPublicKey;
+  String? get currentWalletType => _connectedWalletType; // NEW: Expose Wallet Type (Renamed to fix cache)
+
+  // ═══════════════════════════════════════════════
+  //  PERSISTENCE — survive app kill/restart
+  // ═══════════════════════════════════════════════
+  Future<void> _loadSavedConnection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedAddr = prefs.getString('connected_wallet');
+      final savedType = prefs.getString('connected_wallet_type'); // NEW
+      
+      if (savedAddr != null && savedAddr.isNotEmpty) {
+        _connectedPublicKey = savedAddr;
+        _connectedWalletType = savedType ?? 'Unknown'; // Default if missing
+        print("[WALLET] ✅ Restored saved connection: $savedAddr ($savedType)");
+        _signatureController.add("CONNECTED");
+      }
+    } catch (e) {
+      print("[WALLET] No saved connection: $e");
+    }
+  }
+
+  Future<void> _saveConnection(String? address, {String? type}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (address != null) {
+      await prefs.setString('connected_wallet', address);
+      if (type != null) await prefs.setString('connected_wallet_type', type);
+    } else {
+      await prefs.remove('connected_wallet');
+      await prefs.remove('connected_wallet_type');
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  //  DEEP LINK HANDLER — catches ALL callbacks
+  // ═══════════════════════════════════════════════
+  void _initDeepLinks() async {
+    final appLinks = AppLinks();
+
+    // 1. CRITICAL: Check link that LAUNCHED/RECREATED the app
+    //    (This is what we were missing — Phantom kills our app,
+    //     Android recreates it with the deep link as intent)
+    try {
+      final initialLink = await appLinks.getInitialAppLink();
+      if (initialLink != null) {
+        print("[WALLET] 🔥 INITIAL LAUNCH LINK: $initialLink");
+        _handleCallback(initialLink);
+      }
+    } catch (e) {
+      print("[WALLET] getInitialAppLink error: $e");
+    }
+
+    // 2. Links that arrive WHILE app is already running
+    appLinks.uriLinkStream.listen((Uri? uri) {
+      if (uri != null) {
+        print("[WALLET] 📨 STREAM LINK: $uri");
+        _handleCallback(uri);
+      }
     }, onError: (err) {
-      print("Deep Link Error: $err");
+      print("[WALLET] Stream error: $err");
     });
   }
 
-  bool get isConnected => _connectedPublicKey != null;
-  String? get connectedAddress => _connectedPublicKey;
+  void _handleCallback(Uri uri) {
+    final uriStr = uri.toString().toLowerCase();
+    print("[WALLET] Processing Callback: $uri");
 
-  void _handleIncomingLink(String link) {
-    print("Incoming Deep Link: $link");
-    final uri = Uri.parse(link);
-    
-    // Handle Connect Response (Phantom Deep Link v1)
-    if (uri.path.contains('onConnect') || uri.queryParameters.containsKey('phantom_encryption_public_key')) {
-      final phantomKey = uri.queryParameters['phantom_encryption_public_key'];
-      // In a real MWA/v1 handshake, we'd do a key exchange here.
-      // For the Hackathon Proof, receiving ANY response from Phantom's connect 
-      // with a public key is the "Hard Proof" that the link worked.
-      
-      // We'll extract the 'data' or 'public_key' if present
-      final pubKey = uri.queryParameters['public_key']; 
-      if (pubKey != null) {
+    // CONNECT callback
+    if (uriStr.contains('onconnect') ||
+        uri.queryParameters.containsKey('phantom_encryption_public_key') ||
+        uri.queryParameters.containsKey('public_key') ||
+        uri.queryParameters.containsKey('address')) {
+
+      final pubKey = uri.queryParameters['public_key'] ??
+                     uri.queryParameters['address'] ??
+                     uri.queryParameters['account'] ??
+                     uri.queryParameters['phantom_encryption_public_key'] ??
+                     uri.queryParameters['data'];
+
+      if (pubKey != null && pubKey.isNotEmpty) {
         _connectedPublicKey = pubKey;
-        print("[WALLET] REAL PUBLIC KEY RECEIVED: $_connectedPublicKey");
+        print("[WALLET] ✅ CONNECTED: $_connectedPublicKey");
+        _saveConnection(_connectedPublicKey, type: _connectedWalletType);
+        _signatureController.add("CONNECTED");
       } else {
-        // Fallback for demo: if we got back to the app, it's a success
-        _connectedPublicKey = phantomKey ?? "Handshake_Success";
+        print("[WALLET] CONNECTION FAILED: No Public Key Returned.");
       }
-      _signatureController.add("CONNECTED"); // Notify orchestrator
+      return;
     }
 
-    // Handle Sign Response
-    if (uri.path.contains('onSign')) {
-      final signature = uri.queryParameters['signature'];
-      if (signature != null) {
-        _signatureController.add(signature);
+    // SIGN callback
+    if (uriStr.contains('onsign') || uri.queryParameters.containsKey('signature')) {
+      final sig = uri.queryParameters['signature'] ?? uri.queryParameters['data'];
+      if (sig != null) {
+        print("[WALLET] SIGNATURE RECEIVED: $sig");
+        _signatureController.add(sig);
+      }
+      return;
+    }
+
+    // SOLANA PAY SUCCESS callback (Redirect from Wallet)
+    if (uriStr.contains('payment-success') || uriStr.contains('signature-success')) {
+      final id = uri.queryParameters['id'] ?? uri.queryParameters['intent_id'] ?? uri.queryParameters['reference'];
+      final sig = uri.queryParameters['signature'] ?? uri.queryParameters['sig'] ?? uri.queryParameters['tx_hash'] ?? uri.queryParameters['data'];
+      
+      if (id != null) {
+        print("[WALLET] Payment Signed & Redirected. Intent: $id Sig: $sig");
+        _signatureController.add("SIGNED:$id:${sig ?? 'PENDING'}");
       }
     }
   }
 
-  // 1. CONNECT (Phantom Direct - Fast Path)
+  // ═══════════════════════════════════════════════
+  //  MANUAL ADDRESS FIX (Emergency Override)
+  // ═══════════════════════════════════════════════
+  Future<void> setConnectedAddress(String address) async {
+    if (address.isEmpty) return;
+    _connectedPublicKey = address;
+    _connectedWalletType = "Manual";
+    await _saveConnection(address, type: "Manual");
+    _signatureController.add("CONNECTED");
+    print("[WALLET] Manual Address Set: $address");
+  }
+
+  // ═══════════════════════════════════════════════
+  //  CONNECT: Phantom
+  // ═══════════════════════════════════════════════
   Future<void> connectPhantom() async {
-    final url = Uri.parse("https://phantom.app/ul/v1/connect?app_url=https://SOLQ.com&redirect_link=SOLQ://onConnect&cluster=devnet");
-    print("[WALLET] Launching Phantom Connect: $url");
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
+    final url = Uri.https('phantom.app', '/ul/v1/connect', {
+      'dapp_encryption_public_key': _dappPubKeyB58,
+      'cluster': 'mainnet-beta',
+      'app_url': 'https://solq.app',
+      'redirect_link': 'solq://onConnect',
+    });
+    print("[WALLET] → Phantom: $url");
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
-  // 1.5 UNIVERSAL CONNECT (Standard Solana Spec)
-  // This triggers the device's default wallet picker for any solana-ready app
-  Future<void> connectUniversal() async {
-    // We use the 'solana:' scheme which is the standard for MWA and Solana Pay
-    final url = Uri.parse("solana:connect?app_url=https://SOLQ.com&redirect_link=SOLQ://onConnect");
-    print("[WALLET] Launching Universal Connect (Solana Spec): $url");
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback to Phantom if no generic handler
-        await connectPhantom();
+  // ═══════════════════════════════════════════════
+  //  CONNECT: Solflare
+  // ═══════════════════════════════════════════════
+  Future<void> connectSolflare() async {
+    final url = Uri.https('solflare.com', '/ul/v1/connect', {
+      'dapp_encryption_public_key': _dappPubKeyB58,
+      'cluster': 'mainnet-beta',
+      'app_url': 'https://solq.app',
+      'redirect_link': 'solq://onConnect',
+    });
+    print("[WALLET] → Solflare: $url");
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  CONNECT: Base / Coinbase Wallet
+  // ═══════════════════════════════════════════════
+  Future<void> connectBase() async {
+    final url = Uri.https('go.cb-w.com', '/dapp', {
+      'cb_url': 'https://solq.app?redirect=solq://onConnect',
+    });
+    print("[WALLET] → Base: $url");
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+
+
+  // ═══════════════════════════════════════════════
+  //  CONNECT: Jupiter (Priority)
+  // ═══════════════════════════════════════════════
+  Future<void> connectJupiter() async {
+    final url = Uri.parse('jupiter://connect?app_url=https://solq.app&redirect_link=solq://onConnect');
+    print("[WALLET] → Jupiter: $url");
+    _connectedWalletType = "Jupiter";
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  UNIVERSAL CONNECT
+  // ═══════════════════════════════════════════════
+  Future<void> connectUniversal({String wallet = 'phantom'}) async {
+    print("[WALLET] Connecting via Universal Intent (Platform: ${kIsWeb ? 'Web' : 'Mobile'})");
+    
+    if (kIsWeb) {
+      if (wallet.toLowerCase() == 'phantom') {
+        final webAddr = await WebProvider.connectPhantom();
+        if (webAddr != null) {
+          _connectedPublicKey = webAddr;
+          _connectedWalletType = "Phantom (Web)";
+          await _saveConnection(webAddr, type: "Phantom (Web)");
+          _signatureController.add("CONNECTED");
+          return;
+        }
       }
-    } catch (e) {
-      await connectPhantom();
     }
+    
+    _connectedWalletType = wallet[0].toUpperCase() + wallet.substring(1);
+
+    // NATIVE INTENT: This triggers the Android OS "Open with" dialog.
+    // The standard solana:connect scheme is supported by all major wallets.
+    final url = Uri.parse('solana:connect?app_url=https://solq.app&redirect_link=solq://onConnect');
+    print("[WALLET] Launching Native Picker: $url");
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
-  // 2. SIGN TRANSACTION (Universal Solana Pay Spec)
+  // ═══════════════════════════════════════════════
+  //  SIGN TRANSACTION (UNIVERSAL OS-NATIVE INTENT)
+  // ═══════════════════════════════════════════════
   Future<void> signSwapTransaction(String base64Transaction) async {
-    // We try the universal 'solana:' scheme first for all-wallet support
-    // Spec: solana:<base64Transaction>?redirect_link=<redirectUrl>
-    final redirectUrl = "SOLQ://onSign";
+    final walletType = (_connectedWalletType ?? '').toLowerCase();
     
-    // Most wallets (Phantom, Solflare, Backpack) support the 'solana:' prefix for transactions
-    final universalUrl = Uri.parse("solana:tx/$base64Transaction?redirect_link=$redirectUrl");
-    final phantomUrl = Uri.parse("https://phantom.app/ul/v1/signTransaction?transaction=$base64Transaction&redirect_link=$redirectUrl");
+    Uri url;
     
-    print("[WALLET] Launching Universal Sign: $universalUrl");
-    
+    // If we have a specific known scheme for the connected wallet, use it.
+    // Otherwise, use the generic solana: scheme which triggers the OS picker.
+    if (walletType.contains('solflare')) {
+      url = Uri.https('solflare.com', '/ul/v1/signTransaction', {
+        'dapp_encryption_public_key': _dappPubKeyB58,
+        'transaction': base64Transaction,
+        'redirect_link': 'solq://onSign',
+      });
+    } else if (walletType.contains('phantom')) {
+      url = Uri.https('phantom.app', '/ul/v1/signTransaction', {
+        'dapp_encryption_public_key': _dappPubKeyB58,
+        'transaction': base64Transaction,
+        'redirect_link': 'solq://onSign',
+      });
+    } else {
+      // UNIVERSAL INTENT: Triggers "Open with" if multiple wallets support it.
+      url = Uri.parse('solana:signTransaction?transaction=$base64Transaction&redirect_link=solq://onSign');
+    }
+
+    print("[WALLET] Signing via: $url");
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  RPC CLIENT (MAINNET)
+  // ═══════════════════════════════════════════════
+  final RpcClient _rpc = RpcClient(
+    "https://api.mainnet-beta.solana.com",
+  );
+
+  // ═══════════════════════════════════════════════
+  //  GET BALANCE
+  // ═══════════════════════════════════════════════
+  Future<double> getBalance() async {
+    if (_connectedPublicKey == null) return 0.0;
     try {
-      if (await canLaunchUrl(universalUrl)) {
-        await launchUrl(universalUrl, mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback to Phantom Direct
-        await launchUrl(phantomUrl, mode: LaunchMode.externalApplication);
-      }
+      final balance = await _rpc.getBalance(_connectedPublicKey!);
+      return balance.value / 1000000000; // Lamports to SOL
     } catch (e) {
-      // Final fallback
-      await launchUrl(phantomUrl, mode: LaunchMode.externalApplication);
+      print("[WALLET] Get Balance Error: $e");
+      return 0.0;
     }
   }
 
-  // 3. REQUEST ON-CHAIN AUDIT (Legacy/Audit Path)
-  Future<void> requestOnChainAudit(String intentId, String amount) async {
-    // ... existing solana pay logic ...
+  // ═══════════════════════════════════════════════
+  //  AIRDROP (Devnet Only - Disabled on Mainnet)
+  // ═══════════════════════════════════════════════
+
+
+  // ═══════════════════════════════════════════════
+  //  DISCONNECT
+  // ═══════════════════════════════════════════════
+  Future<void> disconnect() async {
+    _connectedPublicKey = null;
+    _connectedWalletType = null;
+    await _saveConnection(null);
+    _signatureController.add("DISCONNECTED");
   }
 
-  // 4. AIRDROP DEVNET SOL (Demo/Proof Path)
-  Future<void> airdropDevnetSol() async {
-    if (_connectedPublicKey == null) throw "Wallet not connected";
-    
-    final rpc = SolanaClient(
-      rpcUrl: Uri.parse("https://api.devnet.solana.com"),
-      websocketUrl: Uri.parse("wss://api.devnet.solana.com"),
-    );
-
-    print("[SOLANA] Requesting Airdrop for: $_connectedPublicKey");
-    await rpc.rpcClient.requestAirdrop(_connectedPublicKey!, 1000000000); // 1 SOL
-    print("[SOLANA] Airdrop Requested.");
+  // ═══════════════════════════════════════════════
+  //  PROTOCOL OVERRIDE: DIRECT SOL TRANSFER
+  // ═══════════════════════════════════════════════
+  Future<void> launchSolanaPay(String recipient, double amount) async {
+    // Standard Solana Pay URI Scheme
+    // solana:<recipient>?amount=<amount>&label=<label>&message=<message>
+    final uri = Uri.parse("solana:$recipient?amount=${amount.toStringAsFixed(6)}&label=WarungPay&message=QRIS%20Payment");
+    print("[WALLET] Launching Protocol Override (Solana Pay): $uri");
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  // 5. GENERATE REAL-ISH TRANSACTION (For MWA Handshake Proof)
-  Future<String> generateDemoTransaction(String destination, int lamports) async {
-    final solana = SolanaClient(
-      rpcUrl: Uri.parse("https://api.devnet.solana.com"),
-      websocketUrl: Uri.parse("wss://api.devnet.solana.com"),
-    );
-
-    final recentBlockhash = await solana.rpcClient.getLatestBlockhash();
-    final payer = Ed25519HDPublicKey.fromBase58(_connectedPublicKey!);
-    final recipient = Ed25519HDPublicKey.fromBase58(destination);
-
-    final instruction = SystemInstruction.transfer(
-      fundingAccount: payer,
-      recipientAccount: recipient,
-      lamports: lamports,
-    );
-
-    final message = Message(instructions: [
-      instruction,
-      MemoInstruction(signers: [payer], memo: "SOLQ: Settle Merchant")
-    ]);
-
-    final signed = await solana.signTransaction(
-      message, 
-      [Ed25519HDKeyPair.fromData(Uint8List(32))], // Dummy, wallet will re-sign
-      recentBlockhash: recentBlockhash.value.blockhash,
-    );
-
-    // Encode to base64 for wallet deep link
-    return base64Encode(signed.toByteArray().toList());
+  // ═══════════════════════════════════════════════
+  //  ON-CHAIN VERIFICATION (Phase 4 Truth Only)
+  // ═══════════════════════════════════════════════
+  Future<bool> waitForSignature(String signature) async {
+    print("[RPC] Polling Mainnet for signature commitment: $signature");
+    try {
+      // Manual Polling Loop (Safe for all solana package versions)
+      for (int i = 0; i < 20; i++) {
+        final statuses = await _rpc.getSignatureStatuses([signature]);
+        if (statuses.isNotEmpty && statuses.first != null) {
+          final s = statuses.first!;
+          print("[RPC] Attempt $i Status: ${s.confirmationStatus}");
+          if (s.confirmationStatus == Commitment.finalized) {
+            return true;
+          }
+        }
+        await Future.delayed(const Duration(seconds: 3));
+      }
+      return false;
+    } catch (e) {
+      print("[RPC] ❌ Polling Failure: $e");
+      return false;
+    }
   }
 
-  // 6. SOLANA PAY: MERCHANT TRANSACTION REQUEST (The 'The Real Deal' Path)
   String generateSolanaPayUrl(String amount, String label, String message) {
-    // Spec: solana:<address>?amount=<amount>&label=<label>&message=<message>
-    final baseUrl = "solana:$_connectedPublicKey";
-    final query = "amount=$amount&label=${Uri.encodeComponent(label)}&message=${Uri.encodeComponent(message)}";
-    return "$baseUrl?$query";
+    return "solana:$_connectedPublicKey?amount=$amount&label=${Uri.encodeComponent(label)}&message=${Uri.encodeComponent(message)}";
   }
 }
-

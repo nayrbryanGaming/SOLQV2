@@ -1,6 +1,6 @@
 /**
- * Mock Off-Ramp Partner Service
- * Simulates interaction with a licensed PJP/Exchange
+ * Bank Partner Service
+ * Interaction with licensed PJP/Exchange
  */
 
 interface DisbursementRequest {
@@ -32,13 +32,8 @@ export class BankPartnerService {
         console.log(`[IDRX API] Orchestrating settlement for Ref: ${request.referenceId}`);
 
         if (!apiKey) {
-            console.warn("[WARNING] IDRX_API_KEY is missing. Falling back to Sandbox Mode.");
-            // For Demo only: Success simulation if key is missing but pipeline is built
-            return {
-                status: 'SUCCESS',
-                partnerRef: `sandbox_ref_${Date.now()}`,
-                timestamp: new Date().toISOString()
-            };
+            console.error("[CRITICAL] IDRX_API_KEY is missing. Settlement Request FAILED.");
+            throw new Error("Settlement Configuration Error: Missing API Key");
         }
 
         try {

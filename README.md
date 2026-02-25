@@ -77,40 +77,48 @@ SOLQ implements a QRIS parser compliant with EMVCo specifications.
   - Extracts merchant PAN / account identifiers (Tag 26/27)
   - Routes settlement automatically
 
-This allows SOLQ to work with **any existing QRIS sticker**.
+# SOLQ - Real Mainnet Consumer Payment Orchestrator
+
+**CURRENT STATUS: LIVE MAINNET BETA**
+**STRICTLY NO MOCKS. NO SIMULATIONS. REAL VALUE TRANSFER ONLY.**
+
+SOLQ bridges the gap between Solana wallets and Indonesia's QRIS payment network without intermediate custody.
+
+## Core Features (Real Implementation)
+
+### 1. Universal Wallet Connectivity
+- **Supported Wallets**: Phantom, Solflare, Binance Web3, OKX, Trust Wallet, Bybit, Gate.io.
+- **Protocol**: Uses Android Intent Filters (`solana:`, `bnc:`, `okx:`) for deep linking.
+- **Safety**: App never touches private keys. All signing happens in the external wallet app.
+
+### 2. Real-Time Oracle Pricing
+- **Source**: CoinGecko API (`simple/price`).
+- **Validation**: Jupiter quotes are verified against market rates with < 2% tolerance.
+- **Slippage**: Fixed at 0.5% for reliability.
+
+### 3. On-Chain Settlement Abstraction
+- **Flow**: SOL/USDC -> JUPITER SWAP (ExactOut) -> IDRX (Stablecoin) -> SETTLEMENT WALLET.
+- **Verification**: The backend polls Solana RPC to confirm transaction finality. The UI *only* updates to 'Success' after on-chain confirmation.
+
+## Usage Instructions
+
+1.  **Launch App**: Ensure you have a supported wallet installed (e.g. Phantom or Binance).
+2.  **Connect**: Tap "Connect Wallet". Select your installed wallet.
+3.  **Scan QRIS**: Point camera at ANY standard QRIS code (GoPay, Dana, BCA, etc.).
+4.  **Review**: See the real-time IDR -> SOL quote.
+5.  **Pay**: Tap "Launch External Wallet".
+6.  **Sign**: In your wallet app, approve the transaction.
+7.  **Wait**: App verifies on blockchain (approx 3-10 seconds).
+8.  **Done**: "Settlement Completed" screen appears only when funds are secured.
+
+## Tech Stack & Compliance
+- **Frontend**: Flutter (Immersive Mode, Native Android Intent Handling).
+- **Backend**: Node.js + Express (Solana Service, Price Oracle).
+- **Blockchain**: Solana Mainnet-Beta.
+- **Compliance**: Non-Custodial. Decentralized Orchestration.
 
 ---
-
-## Wallet Integration
-
-SOLQ uses non-custodial wallet authorization.
-
-- Wallets are connected via Solana Mobile Wallet Adapter
-- Private keys never leave the wallet application
-- SOLQ generates a **payment intent**
-- User authorizes intent via cryptographic signature
-
-SOLQ cannot move funds without explicit user consent.
-
----
-
-## On-Chain Execution
-
-- Real-time routing via DEX aggregation
-- Atomic swap logic to ensure sufficient IDRX output
-- Slippage-protected execution
-- Solana-native low latency and low fees
-
----
-
-## Settlement & Confirmation
-
-- IDRX is routed to partner settlement infrastructure
-- SOLQ does not custody funds at any stage
-- Settlement confirmation is event-driven (webhook-based)
-- UI updates only on confirmed settlement signal
-
-This avoids polling and ensures deterministic transaction state.
+*Built for the "Sam Altman / Elon Musk" Challenge: 100% Real, 0% Mock.*
 
 ---
 
@@ -153,6 +161,12 @@ This architecture is designed to align with regulatory expectations for payment 
 - High-frequency QRIS users
 - Payments above micro-transaction thresholds
 - Users seeking instant crypto-to-fiat utility
+
+---
+
+## Success Metrics
+
+**"Gue bakal dapet 50 transaksi pertama dari komunitas crypto Makassar dalam 14 hari."**
 
 ---
 

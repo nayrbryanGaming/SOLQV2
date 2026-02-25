@@ -82,25 +82,40 @@ class QrisParser {
     final String? amountStr = data['54'];
     final bool isStatic = amountStr == null || amountStr == "0" || amountStr.isEmpty;
 
-    // Extract Merchant Account (Tag 26 is common for GPN/QRIS)
-    String? account = data['26'];
-    if (account == null) {
-      // Fallback to searching 26-45
-      for (int i = 26; i <= 45; i++) {
-        if (data.containsKey(i.toString())) {
-          account = data[i.toString()];
-          break;
-        }
+    // Robust Merchant Account Extraction (26-45)
+    String? account;
+    for (int i = 26; i <= 45; i++) {
+      final tagData = data[i.toString()];
+      if (tagData != null) {
+        // QRIS Merchant Info is usually a nested TLV string
+        // We look for sub-tag 01 (PAN) first, then 02/03 (External ID)
+        final nested = _parseNested(tagData);
+        account = nested['01'] ?? nested['02'] ?? nested['03'];
+        if (account != null) break;
       }
     }
 
     return ParsedQrisResult(
       merchantName: merchant,
-      amount: isStatic ? "0" : amountStr!,
+      amount: isStatic ? "0" : amountStr,
       isValid: true,
       isStatic: isStatic,
       merchantAccount: account,
     );
+  }
+
+  static Map<String, String> _parseNested(String nested) {
+    final Map<String, String> result = {};
+    int idx = 0;
+    while (idx < nested.length - 4) {
+      try {
+        String idInfo = nested.substring(idx, idx + 2);
+        int lInfo = int.parse(nested.substring(idx + 2, idx + 4));
+        result[idInfo] = nested.substring(idx + 4, idx + 4 + lInfo);
+        idx += 4 + lInfo;
+      } catch (_) { break; }
+    }
+    return result;
   }
 
   // CRC-16/CCITT-FALSE (Polynomial 0x1021, Initial 0xFFFF)

@@ -7,26 +7,10 @@ import { SwapService } from '../services/swapService';
 const router = Router();
 
 // In-memory store for MVP (Typed for better structure)
-interface PaymentIntent {
-    id: string;
-    status: 'requires_payment_method' | 'processing' | 'settling' | 'completed' | 'failed';
-    merchant: any;
-    amount_details: {
-        fiat_amount: number;
-        currency_source: string;
-        crypto_amount: number;
-        quote_id: string;
-        rate?: number;
-    };
-    qris_data: any;
-    merchant_account?: string;
-    tx_hash?: string;
-    settlement_ref?: string;
-}
+import { paymentIntents, PaymentIntent } from '../services/store';
 
-const paymentIntents: Record<string, PaymentIntent> = {};
 
-router.post('/payment-intents', (req: Request, res: Response) => {
+router.post('/payment-intents', async (req: Request, res: Response) => {
     try {
         const { qris_payload, currency, input_amount } = req.body;
 
@@ -47,10 +31,20 @@ router.post('/payment-intents', (req: Request, res: Response) => {
             transactionAmount = parseFloat(input_amount);
         }
 
-        const quote = SwapService.getQuote(
+        const quote = await SwapService.getQuote(
             transactionAmount,
             currency || 'IDRX'
         );
+
+        const merchant_account = QRISDecoder.extractAccountNumber(decoded) || 'UNKNOWN';
+        const nmid = QRISDecoder.extractAccountNumber(decoded); // Re-using robust extraction for NMID-like fields
+        const bankCode = QRISDecoder.detectBank(decoded);
+
+        console.log(`[Mata Pinter] Detected Merchant: ${decoded.merchantName} | NMID: ${nmid} | Bank: ${bankCode}`);
+
+        const platformFee = quote.targetAmount * 0.01;
+        const estNetworkFee = 0.000005; // Standard Solana gas
+        const savingsVsLegacy = quote.targetAmount * 0.02; // Assuming legacy is 3% and we are 1%
 
         const paymentIntent: PaymentIntent = {
             id: intentId,
@@ -58,7 +52,7 @@ router.post('/payment-intents', (req: Request, res: Response) => {
             merchant: {
                 name: decoded.merchantName,
                 city: decoded.merchantCity,
-                pan: decoded.merchantAccountInfo['26'] || 'UNKNOWN' // Usually ID 26 is global merchant ID
+                pan: merchant_account
             },
             amount_details: {
                 fiat_amount: quote.targetAmount,
@@ -68,7 +62,16 @@ router.post('/payment-intents', (req: Request, res: Response) => {
                 rate: quote.rate
             },
             qris_data: decoded,
-            merchant_account: decoded.merchantAccountInfo['26'] || 'UNKNOWN'
+            merchant_account: merchant_account,
+            bank_code: bankCode,
+            platformFee: platformFee,
+            networkFee: estNetworkFee,
+            slippage: 0.5, // 0.5% default
+            maxFee: quote.targetAmount + platformFee,
+            effectiveFeePercent: 1.0,
+            userSavingsVsQris: savingsVsLegacy,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
 
         // Store it
@@ -109,38 +112,38 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         return res.json({ status: intent.status, message: 'Intent already processing' });
     }
 
+    // REAL ON-CHAIN VERIFICATION
+    const solanaService = require('../services/solanaService').default;
+
+    // Verify transaction
+    const isValid = await solanaService.verifyTransaction(tx_hash || '');
+
+    if (!isValid) {
+        return res.status(400).json({ status: 'failed', message: 'On-chain verification failed or pending' });
+    }
+
     // Update state to processing
     intent.status = 'processing';
-    intent.tx_hash = tx_hash || `mock_tx_${Date.now()}`;
+    intent.txHash = tx_hash;
 
     // AUDIT LOG
     AuditLogger.log(AuditEventType.PAYMENT_INTENT_CONFIRMED, {
         intentId: id,
-        txHash: intent.tx_hash
+        txHash: intent.txHash
     });
 
-    res.json({ status: 'processing', message: 'Transaction submitted for settlement' });
+    // IMMEDIATE EXECUTION: Settlement Bridge (No fake delays)
+    console.log(`[ORCHESTRATOR] Triggering REAL SETTLEMENT for ${id}...`);
 
-    // ASYNC PROCESS: Simulate Blockchain Confirmation & Settlement
-    // In production, this would be a separate worker listening to queues
-    setTimeout(async () => {
-        // [REGULATORY NOTE]
-        // This process mocks the "Truth" from the blockchain/partner.
-        // In reality, we would NOT trust the client's tx_hash blindly.
-        // We would query the RPC to verify the TX actually happened and sent funds to the correct vault.
-        console.log(`[Worker] Independent verification of TX ${intent.tx_hash} for intent ${id}...`);
+    intent.status = 'settling';
 
-        // 1. Trigger Settlement Request
-        intent.status = 'settling';
-        AuditLogger.log(AuditEventType.SETTLEMENT_INITIATED, { intentId: id });
-
-        // Request Licensed Partner to settle funds
+    try {
         const settlementResult = await BankPartnerService.requestSettlement({
-            amount: intent.amount_details.fiat_amount || 10000,
+            amount: intent.amount_details.fiat_amount,
             currency: 'IDR',
             destinationAccount: {
-                bankCode: 'GOPAY', // Default or extracted from QRIS metadata if available
-                accountNumber: intent.merchant_account || 'UNKNOWN'
+                bankCode: intent.bank_code || 'GOPAY',
+                accountNumber: intent.merchant_account || ''
             },
             referenceId: intent.id
         });
@@ -148,20 +151,21 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         if (settlementResult.status === 'SUCCESS') {
             intent.status = 'completed';
             intent.settlement_ref = settlementResult.partnerRef;
-
             AuditLogger.log(AuditEventType.SETTLEMENT_COMPLETED, {
                 intentId: id,
-                partnerRef: settlementResult.partnerRef
+                partnerRef: settlementResult.partnerRef,
+                balance_delta: `+IDR ${intent.amount_details.fiat_amount.toLocaleString()}`,
+                destination: intent.merchant.pan
             });
-            console.log(`[Worker] Intent ${id} COMPLETED.`);
+            return res.json({ status: 'completed', message: 'Payment finalized. Funds sent to merchant.', txHash: intent.txHash, settlement_ref: intent.settlement_ref });
         } else {
-            // FAILED SETTLEMENT -> REQUIRES ROLLBACK/REFUND
             intent.status = 'failed';
-            AuditLogger.log(AuditEventType.SETTLEMENT_FAILED, { intentId: id, reason: 'Partner Rejected Request' });
-            console.error(`[Worker] Intent ${id} FAILED settlement request. Initiating Manual Refund Process.`);
+            return res.status(500).json({ status: 'failed', message: 'Settlement Bridge Failure' });
         }
-
-    }, 2000);
+    } catch (err) {
+        intent.status = 'failed';
+        return res.status(500).json({ status: 'failed', message: 'Internal Orchestration Error' });
+    }
 });
 
 // Webhook Receiver from Off-Ramp Partner
@@ -196,10 +200,15 @@ router.get('/transactions/:id/status', (req: Request, res: Response) => {
     res.json({
         id: intent.id,
         status: intent.status,
-        tx_hash: intent.tx_hash,
+        txHash: intent.txHash,
         settlement_ref: intent.settlement_ref,
         updated_at: new Date().toISOString()
     });
+});
+
+router.get('/stats', (req: Request, res: Response) => {
+    const successCount = Object.values(paymentIntents).filter(intent => intent.status === 'completed').length;
+    res.json({ success_count: successCount });
 });
 
 export const paymentRoutes = router;

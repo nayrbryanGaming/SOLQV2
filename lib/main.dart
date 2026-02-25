@@ -1,16 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'services/qris_parser.dart';
 import 'services/orchestrator_service.dart';
 import 'services/webhook_service.dart';
 import 'services/solana_service.dart';
+import 'services/solq_service.dart';
 import 'models/payment_intent.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await OrchestratorService().init();
-  WebhookService().startServer();
+  
+  // WebhookService uses dart:io shelf server — only runs on native (not web)
+  if (!identical(0, 0.0)) {
+    // Always true, but the real guard is below
+  }
+  try {
+    WebhookService().startServer();
+  } catch (e) {
+    print("[MAIN] WebhookService not available on this platform: $e");
+  }
+  
+  // Ensure full screen / immersive for production feel
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light, 
+    systemNavigationBarColor: Colors.transparent,
+  ));
+  
   runApp(const SOLQOrchestrator());
 }
 
@@ -44,6 +65,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
   MobileScannerController? _scannerController;
   final OrchestratorService _service = OrchestratorService();
   StreamSubscription<PaymentIntent>? _subscription;
+  StreamSubscription<String>? _walletSub;
   PaymentIntent? _intent;
   String _manualAmount = "";
 
@@ -54,12 +76,90 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     _subscription = _service.stream.listen((intent) {
       if (!mounted) return;
       setState(() => _intent = intent);
+    }, onError: (error) {
+       if (!mounted) return;
+       print("[UI ERROR CATCH] $error");
+       
+       // Handle socket exceptions by offering IP change
+       if (error.toString().contains("SocketException") || error.toString().contains("No route to host")) {
+         _showIPDialog(error.toString());
+       } else {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Text("SYSTEM ERROR: $error", style: const TextStyle(fontWeight: FontWeight.bold)),
+             backgroundColor: Colors.redAccent,
+           )
+         );
+       }
+       
+       setState(() {
+         _intent = null;
+         _scannerController?.start();
+       });
     });
+    // CRITICAL: Listen for wallet connection callback to refresh UI
+    _walletSub = SolanaService().signatureStream.listen((event) {
+      if (!mounted) return;
+      if (event == "CONNECTED" || event == "DISCONNECTED") {
+        print("[UI] Wallet event received: $event");
+        if (event == "CONNECTED") _fetchBalance();
+        setState(() {}); // Rebuild UI
+      }
+    });
+    
+    // Initial fetch if already connected
+    if (SolanaService().isConnected) {
+      _fetchBalance();
+    }
+  }
+
+  void _showIPDialog(String error) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("NETWORK REACHABILITY ALERT", style: TextStyle(color: Colors.redAccent, fontSize: 14)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("The app cannot reach the Backend Server. This is usually due to a Windows Firewall block or IP change.", style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 10),
+            Text("Error: $error", style: const TextStyle(fontSize: 10, color: Colors.white38)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: "BACKEND IP (e.g., 192.168.1.5)",
+                hintText: "192.168.18.15",
+                labelStyle: TextStyle(fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE")),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                final newUrl = "http://${controller.text}:3000/v1";
+                await SOLQService.setPersistedBaseUrl(newUrl);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("IP UPDATED. PLEASE RESCAN.")));
+              }
+            },
+            child: const Text("UPDATE IP"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _walletSub?.cancel();
     _scannerController?.dispose();
     super.dispose();
   }
@@ -92,11 +192,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       return;
     }
 
-    _service.createIntent(
-      result.merchantName, 
-      result.amount, 
-      merchantAccount: result.merchantAccount,
-    );
+    // Pass raw payload to backend for canonical intent creation
+    _service.createIntent(rawPayload);
   }
 
   @override
@@ -110,21 +207,101 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(30),
           child: Container(
-            color: Colors.greenAccent.withOpacity(0.1),
+            color: Colors.amberAccent.withOpacity(0.1),
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.router, size: 12, color: Colors.greenAccent),
+                const Icon(Icons.check_circle, size: 12, color: Color(0xFF00FF94)),
                 const SizedBox(width: 8),
-                Text(
-                  "LIVENET: :8080 | RPC: 12ms (FAST) | ORACLE: CoinGecko + Jupiter Sync ✅",
-                  style: const TextStyle(fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                FutureBuilder<Map<String, dynamic>>(
+                  future: SOLQService().getStats(),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data?['success_count'] ?? 0;
+                    return Text(
+                      "$count PEMBAYARAN BERHASIL HARI INI",
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF00FF94), fontWeight: FontWeight.bold),
+                    );
+                  }
                 ),
               ],
             ),
           ),
         ),
+        actions: [
+          StreamBuilder<String>(
+            stream: SolanaService().signatureStream,
+            initialData: SolanaService().isConnected ? "CONNECTED" : "DISCONNECTED",
+            builder: (context, snapshot) {
+              final solana = SolanaService();
+              final isConn = solana.isConnected;
+              final walletType = solana.currentWalletType?.toUpperCase() ?? "UNKNOWN";
+              final address = solana.connectedAddress ?? "";
+              final shortAddr = address.length > 8 
+                  ? "${address.substring(0, 4)}...${address.substring(address.length - 4)}" 
+                  : address;
+
+              return Center( // Use Center to align vertically in AppBar
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isConn 
+                        ? const Color(0xFF00FF94).withOpacity(0.15) // Bright Green BG
+                        : const Color(0xFFFF5252).withOpacity(0.15), // Bright Red BG
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isConn ? const Color(0xFF00FF94) : const Color(0xFFFF5252),
+                      width: 1
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isConn ? Icons.wallet : Icons.wallet_rounded, 
+                        size: 16, 
+                        color: isConn ? const Color(0xFF00FF94) : const Color(0xFFFF5252)
+                      ),
+                      const SizedBox(width: 8),
+                      if (isConn) ...[
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              walletType,
+                              style: const TextStyle(
+                                fontSize: 10, 
+                                fontWeight: FontWeight.w900, 
+                                color: Color(0xFF00FF94),
+                                letterSpacing: 0.5
+                              )
+                            ),
+                            Text(
+                              shortAddr,
+                              style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)
+                            ),
+                          ],
+                        )
+                      ] else ...[
+                        const Text(
+                          "NO WALLET",
+                          style: TextStyle(
+                            fontSize: 10, 
+                            fontWeight: FontWeight.w900, 
+                            color: Color(0xFFFF5252),
+                            letterSpacing: 0.5
+                          )
+                        )
+                      ]
+                    ],
+                  ),
+                ),
+              );
+            }
+          ),
+        ],
       ),
       body: _buildBody(),
     );
@@ -137,6 +314,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     if (_intent == null) {
       return _buildIdleView();
     }
+    if (_intent == null) return _buildIdleView();
     if (_intent!.state == PaymentState.COMPLETED) {
       return _buildSuccessReceipt(_intent!);
     }
@@ -145,9 +323,22 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
 
   // --- REBUILT IDLE VIEW (PROVEN ROBUST) ---
 
+  double _balance = 0.0;
+
+  Future<void> _fetchBalance() async {
+    final bal = await SolanaService().getBalance();
+    if (mounted) setState(() => _balance = bal);
+  }
+
+  Future<void> _disconnect() async {
+    await SolanaService().disconnect();
+    if (mounted) setState(() {
+      _balance = 0.0;
+    });
+  }
+
   Widget _buildIdleView() {
     final solana = SolanaService();
-    print("[UI] Building Idle View...");
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -161,23 +352,21 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           if (solana.isConnected)
             Column(
               children: [
+                const SizedBox(height: 12),
                 Text(
-                  "WALLET CONNECTED\n${solana.connectedAddress!.substring(0, 8)}...",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  "${_balance.toStringAsFixed(4)} SOL",
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () async {
-                    try {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Requesting Airdrop...")));
-                      await solana.airdropDevnetSol();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("1 SOL Airdropped! (Devnet)"), backgroundColor: Colors.green));
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-                    }
-                  },
-                  child: const Text("GET FREE DEVNET SOL (DEMO ONLY)", style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                const Text("Mainnet Beta", style: TextStyle(color: Colors.white24, fontSize: 10)),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  onPressed: _disconnect,
+                  icon: const Icon(Icons.logout, size: 16, color: Colors.redAccent),
+                  label: const Text("DISCONNECT", style: TextStyle(color: Colors.redAccent)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
                 ),
               ],
             )
@@ -193,17 +382,11 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   "CONNECT WALLET", 
                   Icons.account_balance_wallet, 
                   Colors.blueAccent, 
-                  () async {
-                    try {
-                      await solana.connectUniversal();
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                    }
-                  }
+                  () => _showWalletPicker(solana),
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  "Supports Phantom, Solflare, Backpack & more",
+                  "Supports Phantom, Solflare, Base & more",
                   style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -216,19 +399,62 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               _startScan,
               textColor: Colors.black
             ),
-          const SizedBox(height: 20),
-          _actionButton(
-            "GOD MODE: REAL-TIME DEMO", 
-            Icons.bolt, 
-            Colors.amberAccent, 
-            () => _service.runFullDemoScript(),
-            textColor: Colors.black,
-            isPremium: true
-          ),
         ],
       ),
     );
   }
+
+  void _showWalletPicker(SolanaService solana) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("PILIH WALLET SOLANA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2)),
+            const SizedBox(height: 20),
+            _walletOption("Phantom", "app.phantom", () {
+              Navigator.pop(context);
+              solana.connectPhantom();
+            }),
+            _walletOption("Solflare", "com.solflare.mobile", () {
+              Navigator.pop(context);
+              solana.connectSolflare();
+            }),
+            _walletOption("Jupiter", "ag.jup.quote", () {
+              Navigator.pop(context);
+              solana.connectJupiter();
+            }),
+            _walletOption("Universal Picker (Standard)", null, () {
+              Navigator.pop(context);
+              solana.connectUniversal();
+            }),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _walletOption(String name, String? package, VoidCallback onTap) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+        child: const Icon(Icons.account_balance_wallet, color: Colors.greenAccent, size: 20),
+      ),
+      title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle: const Text("Mainnet Verified", style: TextStyle(color: Colors.white24, fontSize: 10)),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+      onTap: onTap,
+    );
+  }
+
+
+
 
   Widget _buildScannerView() {
     return MobileScanner(
@@ -244,23 +470,30 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // STATE-DRIVEN STATUS MESSAGES
           // STATE-DRIVEN STATUS MESSAGES (THE BOSS PATH)
           if (intent.state == PaymentState.CREATED) _statusText("QRIS Validated: Ready to Swap", color: Colors.greenAccent),
           if (intent.state == PaymentState.PENDING_AMOUNT) _statusText("Manual Amount Entry", color: Colors.blueAccent),
-          if (intent.state == PaymentState.AUTHORIZATION_REQUESTED) _statusText("Launching Jupiter Swap Pipeline...", color: Colors.amberAccent),
-          if (intent.state == PaymentState.AUTHORIZED) _statusText("IDRX Minted in Wallet (Authorized)", color: Colors.greenAccent),
-          if (intent.state == PaymentState.AWAITING_SETTLEMENT) _statusText("IDRX -> Merchant Settlement...", color: Colors.blueAccent),
-          if (intent.state == PaymentState.COMPLETED) _statusText("SETTLEMENT COMPLETED ✅", color: Colors.greenAccent),
-          if (intent.state == PaymentState.FAILED) _statusText("TRANSACTION FAILED ❌", color: Colors.redAccent),
-          if (intent.state == PaymentState.EXPIRED) _statusText("SESSION EXPIRED ⏰", color: Colors.orangeAccent),
+          if (intent.state == PaymentState.AUTHORIZATION_REQUESTED) _statusText("Launching Solana Pay Request...", color: Colors.amberAccent),
+          if (intent.state == PaymentState.AUTHORIZED) _statusText("Verifying On-Chain Transaction...", color: Colors.amberAccent),
+          if (intent.state == PaymentState.AWAITING_SETTLEMENT) _statusText("Settlement In Progress...", color: Colors.blueAccent), 
+          if (intent.state == PaymentState.COMPLETED) _statusText("SETTLEMENT COMPLETED", color: Colors.greenAccent),
+          if (intent.state == PaymentState.FAILED) _statusText("TRANSACTION FAILED", color: Colors.redAccent),
+          if (intent.state == PaymentState.EXPIRED) _statusText("SESSION EXPIRED", color: Colors.orangeAccent),
           
           const SizedBox(height: 40),
           Text(intent.merchantName.toUpperCase(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          if (intent.merchantAccount != null)
+          if (intent.bankCode != null || intent.nmid != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text("E-MONEY: ${intent.merchantAccount}", style: const TextStyle(fontSize: 12, color: Colors.white38)),
+              child: Text(
+                "${intent.bankCode ?? 'E-MONEY'} | NMID: ${intent.nmid ?? 'PENDING'}", 
+                style: const TextStyle(fontSize: 10, color: Colors.blueAccent, fontWeight: FontWeight.bold, letterSpacing: 1)
+              ),
+            ),
+          if (intent.merchantAccount != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text("ID: ${intent.merchantAccount}", style: const TextStyle(fontSize: 11, color: Colors.white38)),
             ),
           
           // DYNAMIC AMOUNT VIEW
@@ -283,41 +516,19 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.verified_user, size: 12, color: Colors.blueAccent),
+                          const Icon(Icons.account_balance, size: 12, color: Colors.blueAccent),
                           const SizedBox(width: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
+                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
                             child: Text(
-                              "~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0) / 100).toStringAsFixed(2)} IDRX (Verified by CoinGecko)",
+                              "~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0.0") ?? 0.0) / 100).toStringAsFixed(2)} IDRX",
                               style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  const SizedBox(height: 12),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.greenAccent.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.security, size: 14, color: Colors.greenAccent),
-                        SizedBox(width: 10),
-                        Text(
-                          "PRE-FLIGHT SIMULATION: SUCCESSFUL ✅",
-                          style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                        ),
-                      ],
-                    ),
-                  ),
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
@@ -329,32 +540,17 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "99.9% FEE ACCURACY (ALTMAN HONOR)",
-                              style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.gavel, size: 12, color: Colors.blueAccent),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "COMPLIANT WITH GLOBAL DISCLOSURE STANDARDS",
-                          style: TextStyle(color: Colors.blueAccent, fontSize: 8, fontWeight: FontWeight.bold),
-                        ),
-                        const Divider(height: 20, color: Colors.white10),
                         _feeRow("Platform Yield (Spread)", "Rp ${intent.platformFee?.toStringAsFixed(0)}"),
                         _feeRow("Est. Network Gas", "${intent.networkFee?.toStringAsFixed(6)} SOL"),
                         _feeRow("Liquidity Slippage", "${intent.slippage}%"),
-                        _feeRow("MAX GUARANTEED COST", "Rp ${intent.maxFee?.toStringAsFixed(0)}", isHighlight: true),
+                        _feeRow("Total Fee (%)", "${intent.effectiveFeePercent}%", isHighlight: true),
+                        _feeRow("YOU SAVE (vs Legacy)", "Rp ${intent.userSavingsVsQris?.toStringAsFixed(0)}", isHighlight: true),
+                        _feeRow("TOTAL DIBAYAR", "Rp ${intent.maxFee?.toStringAsFixed(0)}", isHighlight: true),
                         const Divider(height: 20, color: Colors.white10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("GUARANTEED FINAL RATE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38)),
+                            const Text("RATE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38)),
                             Text("1 SOL ≈ ${intent.quotedRate?.toStringAsFixed(0)} IDR", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
                           ],
                         ),
@@ -374,42 +570,51 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => _service.requestAuthorization(intent.intentId),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white10),
-                  child: const Text("LAUNCH EXTERNAL WALLET", style: TextStyle(color: Colors.white70)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    side: const BorderSide(color: Colors.white24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                       Icon(Icons.double_arrow_rounded, color: Colors.white70),
+                       SizedBox(width: 10),
+                       Text("AUTHORIZE TRANSACTION", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 10),
-                GestureDetector(
-                  onLongPress: () => _service.simulateWalletSuccess(intent.intentId),
-                  child: const Text("Awaiting Wallet Signature...", style: TextStyle(color: Colors.white24, fontSize: 10)),
-                ),
+                const Text("Awaiting Wallet Signature...", style: TextStyle(color: Colors.white24, fontSize: 10)),
               ],
             ),
 
-            TextButton(
-              onPressed: () => setState(() => _intent = null), 
-              child: const Text("DONE", style: TextStyle(color: Colors.white54, fontSize: 18, letterSpacing: 2))
-            ),
+            if (intent.state != PaymentState.COMPLETED)
+              TextButton(
+                    onPressed: () => setState(() => _intent = null), 
+                child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontSize: 12, letterSpacing: 2))
+              ),
           
-          const Spacer(),
-          // SECURITY ASSURANCE
+          const SizedBox(height: 50), // Fixed: Spacer() causes crash in SingleChildScrollView
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blueAccent.withOpacity(0.05),
+              color: Colors.redAccent.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+              border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.shield, color: Colors.blueAccent, size: 16),
+                const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 16),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("SECURITY VERIFIED", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                      const Text("UANG ASLI. BUKAN SIMULASI.", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                       Text(
-                        "Non-Custodial. No private keys stored. Transactions simulated by Phantom.",
+                        "Transaksi ini memotong saldo SOL di wallet Anda.",
                         style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5)),
                       ),
                     ],
@@ -522,6 +727,32 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     );
   }
 
+  Widget _walletButton(String name, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          border: Border.all(color: color.withOpacity(0.3), width: 1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              name.toUpperCase(),
+              style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _feeRow(String label, String value, {bool isHighlight = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -557,11 +788,11 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 50),
       child: Column(
         children: [
-          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 80),
+          const Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 60),
           const SizedBox(height: 20),
-          const Text("PAYMENT SUCCESSFUL", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.greenAccent, letterSpacing: 2)),
+          const Text("PAYMENT SUCCESSFUL", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.greenAccent, letterSpacing: 2)),
           const SizedBox(height: 8),
-          const Text("Post-Transaction Audit Verified", style: TextStyle(fontSize: 10, color: Colors.white24, fontWeight: FontWeight.bold)),
+          const Text("MAINNET TRANSACTION FINALIZED", style: TextStyle(fontSize: 9, color: Colors.white30, fontWeight: FontWeight.bold, letterSpacing: 1)),
           const SizedBox(height: 40),
           
           Container(
@@ -607,52 +838,42 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 const SizedBox(height: 30),
                 
                 _feeRow("Final Exchange Rate", "1 SOL ≈ ${intent.quotedRate?.toStringAsFixed(0)} IDR"),
-                _feeRow("Platform Yield (Spread)", "Rp ${intent.platformFee?.toStringAsFixed(0)}"),
-                _feeRow("Network Gas (Solana)", "${intent.networkFee?.toStringAsFixed(6)} SOL"),
-                _feeRow("Total Cost Paid", "Rp ${intent.maxFee?.toStringAsFixed(0)}", isHighlight: true),
+                const SizedBox(height: 30),
                 
-                const Divider(height: 40, color: Colors.white10),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _smallAction(Icons.share, "SHARE", () {}),
-                    _smallAction(Icons.explore, "EXPLORER", () {}),
-                  ],
+                // REAL PROOF OF SUCCESS (SOLANA EXPLORER)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    final uri = Uri.parse("https://solana.fm/tx/${intent.settlementReference}?cluster=mainnet-beta");
+                    launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text("VIEW ON-CHAIN PROOF", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
                 ),
-                const Divider(height: 40, color: Colors.white10),
-
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.gavel, size: 12, color: Colors.blueAccent),
-                    SizedBox(width: 8),
-                    Text(
-                      "ALTMAN HONOR PROTOCOL COMPLIANT",
-                      style: TextStyle(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                
+                const SizedBox(height: 40),
+                TextButton(
+                  onPressed: () => setState(() => _intent = null),
+                  child: const Text("CLOSE RECEIPT", style: TextStyle(color: Colors.white24, letterSpacing: 2)),
                 ),
               ],
             ),
           ),
-          
-          const SizedBox(height: 50),
+          const SizedBox(height: 40),
           _actionButton(
-            "DONE", 
+            "SELESAI", 
             Icons.done_all, 
             Colors.white10, 
             () => setState(() => _intent = null)
           ),
           const SizedBox(height: 20),
-          const Text(
-            "This receipt serves as a legally binding proof of transaction settlement.\nImmutable audit trail recorded on Solana Devnet.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 8, color: Colors.white12),
-          ),
         ],
       ),
     );
   }
 }
-

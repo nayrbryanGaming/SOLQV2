@@ -19,13 +19,16 @@ export class AuditLogger {
     private static logFile = path.join(__dirname, '../../audit_logs.jsonl');
 
     public static log(eventType: AuditEventType, data: any) {
-        const entry = {
+        const entryBase = {
             timestamp: new Date().toISOString(),
             eventType,
-            data,
-            hash: 'SHA256_PLACEHOLDER' // In prod, hash previous log for chain of custody
+            data
         };
 
+        const crypto = require('crypto');
+        const hash = crypto.createHash('sha256').update(JSON.stringify(entryBase)).digest('hex');
+
+        const entry = { ...entryBase, integrity_hash: hash };
         const logLine = JSON.stringify(entry) + '\n';
 
         // Append to local file (simulating secure storage)
