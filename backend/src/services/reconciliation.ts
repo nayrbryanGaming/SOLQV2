@@ -15,15 +15,15 @@ export class ReconciliationWorker {
         for (const id in paymentIntents) {
             const intent = paymentIntents[id];
 
-            // Detecting stuck "processing" or "settling" transactions
-            if (intent.status === 'processing' || intent.status === 'settling') {
+            // Detecting stuck "AUTHORIZATION_REQUESTED", "AUTHORIZED", or "AWAITING_SETTLEMENT" transactions
+            if (intent.status === 'AUTHORIZATION_REQUESTED' || intent.status === 'AUTHORIZED' || intent.status === 'AWAITING_SETTLEMENT') {
                 const age = now - (intent.createdAt ? new Date(intent.createdAt).getTime() : now);
 
                 if (age > STUCK_THRESHOLD) {
                     console.warn(`[Reconciliation] 🚨 STUCK DETECTED: Intent ${id} | State: ${intent.status}`);
 
                     // Force Fail stuck intents to allow user retry or cleanup
-                    intent.status = 'failed';
+                    intent.status = 'FAILED';
 
                     AuditLogger.log(AuditEventType.SETTLEMENT_FAILED, {
                         intentId: id,

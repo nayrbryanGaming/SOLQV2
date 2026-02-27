@@ -1,6 +1,6 @@
 export interface PaymentIntent {
     id: string;
-    status: 'requires_payment_method' | 'processing' | 'settling' | 'completed' | 'failed';
+    status: 'CREATED' | 'AUTHORIZATION_REQUESTED' | 'AUTHORIZED' | 'AWAITING_SETTLEMENT' | 'COMPLETED' | 'FAILED';
     merchant: any;
     amount_details: {
         fiat_amount: number;
@@ -31,17 +31,17 @@ export const paymentIntents: Record<string, PaymentIntent> = {};
 // Automatically cleans up old intents every 60 minutes to prevent memory leaks in 30k/day traffic
 setInterval(() => {
     const now = new Date();
-    const oneHourAgo = now.getTime() - (60 * 60 * 1000);
+    const oneDayAgo = now.getTime() - (24 * 60 * 60 * 1000);
 
     let count = 0;
     for (const id in paymentIntents) {
         const createdAt = new Date(paymentIntents[id].createdAt).getTime();
-        if (createdAt < oneHourAgo) {
+        if (createdAt < oneDayAgo) {
             delete paymentIntents[id];
             count++;
         }
     }
     if (count > 0) {
-        console.log(`[GC] Cleaned up ${count} expired payment intents. Memory optimized.`);
+        console.log(`[GC] Cleaned up ${count} expired payment intents. Memory optimized for high-volume 24h cycle.`);
     }
 }, 3600000); // Every hour

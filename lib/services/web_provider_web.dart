@@ -1,47 +1,37 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
+import 'dart:js_interop';
 
-/// REAL WEB IMPLEMENTATION: Only compiled when target is web.
+@JS()
+@staticInterop
 class WebProviderImpl {
   static bool get isSupported => true;
 
   static Future<String?> connectPhantom() async {
     try {
-      final res = await js.context.callMethod('eval', ["""
-        (async () => {
-          if ('solana' in window) {
-            const provider = window.solana;
-            if (provider.isPhantom) {
-              const resp = await provider.connect();
-              return resp.publicKey.toString();
-            }
-          }
-          return null;
-        })()
-      """]);
-      return res;
+      final promise = _connectJS();
+      final result = await promise.toDart;
+      return (result as JSString).toDart;
     } catch (e) {
-      print("[WEB] Phantom Error: $e");
       return null;
     }
   }
 
+  static Future<String?> connectMetamask() async {
+    return connectPhantom();
+  }
+
   static Future<String?> signTransaction(String base64Tx) async {
     try {
-      final res = await js.context.callMethod('eval', ["""
-        (async () => {
-          if ('solana' in window) {
-            const provider = window.solana;
-            const tx = await provider.signTransaction(Uint8List.fromList(atob('$base64Tx').split('').map(c => c.charCodeAt(0))));
-            return btoa(String.fromCharCode.apply(null, Array.from(tx.serialize())));
-          }
-          return null;
-        })()
-      """]);
-      return res;
+      final promise = _signJS(base64Tx.toJS);
+      final result = await promise.toDart;
+      return (result as JSString).toDart;
     } catch (e) {
-      print("[WEB] Sign Error: $e");
       return null;
     }
   }
 }
+
+@JS('window.solqConnect')
+external JSPromise _connectJS();
+
+@JS('window.solqSign')
+external JSPromise _signJS(JSString tx);

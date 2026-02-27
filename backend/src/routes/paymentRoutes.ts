@@ -40,15 +40,13 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
         const nmid = QRISDecoder.extractAccountNumber(decoded); // Re-using robust extraction for NMID-like fields
         const bankCode = QRISDecoder.detectBank(decoded);
 
-        console.log(`[Mata Pinter] Detected Merchant: ${decoded.merchantName} | NMID: ${nmid} | Bank: ${bankCode}`);
-
         const platformFee = quote.targetAmount * 0.01;
         const estNetworkFee = 0.000005; // Standard Solana gas
         const savingsVsLegacy = quote.targetAmount * 0.02; // Assuming legacy is 3% and we are 1%
 
         const paymentIntent: PaymentIntent = {
             id: intentId,
-            status: 'requires_payment_method',
+            status: 'CREATED',
             merchant: {
                 name: decoded.merchantName,
                 city: decoded.merchantCity,
@@ -108,7 +106,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         return res.status(404).json({ error: 'Payment Intent not found' });
     }
 
-    if (intent.status !== 'requires_payment_method') {
+    if (intent.status !== 'CREATED' && intent.status !== 'AUTHORIZATION_REQUESTED') {
         return res.json({ status: intent.status, message: 'Intent already processing' });
     }
 
@@ -122,8 +120,8 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         return res.status(400).json({ status: 'failed', message: 'On-chain verification failed or pending' });
     }
 
-    // Update state to processing
-    intent.status = 'processing';
+    // Update state to authorized
+    intent.status = 'AUTHORIZED';
     intent.txHash = tx_hash;
 
     // AUDIT LOG
@@ -133,9 +131,9 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
     });
 
     // IMMEDIATE EXECUTION: Settlement Bridge (No fake delays)
-    console.log(`[ORCHESTRATOR] Triggering REAL SETTLEMENT for ${id}...`);
+    // IMMEDIATE EXECUTION: Settlement Bridge (No fake delays)
 
-    intent.status = 'settling';
+    intent.status = 'AWAITING_SETTLEMENT';
 
     try {
         const settlementResult = await BankPartnerService.requestSettlement({
@@ -149,7 +147,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         });
 
         if (settlementResult.status === 'SUCCESS') {
-            intent.status = 'completed';
+            intent.status = 'COMPLETED';
             intent.settlement_ref = settlementResult.partnerRef;
             AuditLogger.log(AuditEventType.SETTLEMENT_COMPLETED, {
                 intentId: id,
@@ -157,14 +155,14 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
                 balance_delta: `+IDR ${intent.amount_details.fiat_amount.toLocaleString()}`,
                 destination: intent.merchant.pan
             });
-            return res.json({ status: 'completed', message: 'Payment finalized. Funds sent to merchant.', txHash: intent.txHash, settlement_ref: intent.settlement_ref });
+            return res.json({ status: 'COMPLETED', message: 'Payment finalized. Funds sent to merchant.', txHash: intent.txHash, settlement_ref: intent.settlement_ref });
         } else {
-            intent.status = 'failed';
-            return res.status(500).json({ status: 'failed', message: 'Settlement Bridge Failure' });
+            intent.status = 'FAILED';
+            return res.status(500).json({ status: 'FAILED', message: 'Settlement Bridge Failure' });
         }
     } catch (err) {
-        intent.status = 'failed';
-        return res.status(500).json({ status: 'failed', message: 'Internal Orchestration Error' });
+        intent.status = 'FAILED';
+        return res.status(500).json({ status: 'FAILED', message: 'Internal Orchestration Error' });
     }
 });
 
@@ -177,14 +175,12 @@ router.post('/webhooks/settlement', (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Intent not found' });
     }
 
-    console.log(`[Webhook] Received update for ${referenceId}: ${status}`);
-
     if (status === 'SUCCESS') {
-        intent.status = 'completed';
+        intent.status = 'COMPLETED';
         intent.settlement_ref = partnerRef;
         AuditLogger.log(AuditEventType.SETTLEMENT_COMPLETED, { intentId: referenceId, partnerRef });
     } else if (status === 'FAILED') {
-        intent.status = 'failed';
+        intent.status = 'FAILED';
         AuditLogger.log(AuditEventType.SETTLEMENT_FAILED, { intentId: referenceId, reason: 'Webhook Reported Failure' });
     }
 
@@ -207,7 +203,7 @@ router.get('/transactions/:id/status', (req: Request, res: Response) => {
 });
 
 router.get('/stats', (req: Request, res: Response) => {
-    const successCount = Object.values(paymentIntents).filter(intent => intent.status === 'completed').length;
+    const successCount = Object.values(paymentIntents).filter(intent => intent.status === 'COMPLETED').length;
     res.json({ success_count: successCount });
 });
 

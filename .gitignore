@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Node / Backend
+node_modules/
+backend/node_modules/
+backend/dist/
+backend/audit_logs.jsonl
+
+# Secrets & Environment
+.env
+backend/.env
+*.key
+*.pem
+credentials.json

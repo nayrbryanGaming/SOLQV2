@@ -27,7 +27,6 @@ export class PriceService {
         const cached = this.cache[cacheKey];
 
         if (cached && (Date.now() - cached.timestamp < this.CACHE_DURATION)) {
-            console.log(`[PriceService] Returning cached ${tokenId} price: ${cached.price}`);
             return cached.price;
         }
 
@@ -40,13 +39,10 @@ export class PriceService {
             const headers: any = { 'Accept': 'application/json' };
 
             if (apiKey) {
-                console.log(`[PriceService] Fetching ${tokenId} price with SECURE KEY...`);
                 // For Demo/Pro keys, CoinGecko recommends using the 'x-cg-demo-api-key' or 'x-cg-pro-api-key' header
                 // and sometimes the 'pro-api' domain for pro users.
                 // We'll stick to the standard domain but include the header.
                 headers['x-cg-demo-api-key'] = apiKey;
-            } else {
-                console.warn(`[PriceService] No COINGECKO_API_KEY found. Using standard endpoint.`);
             }
 
             const response = await fetch(url, { headers });
@@ -63,20 +59,14 @@ export class PriceService {
                 throw new Error('FATAL: Price Oracle Unreliable - Transaction Blocked');
             }
 
-            // SPREAD MANAGEMENT: Deterministic 1% Platform Revenue
-            // Route to: ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m
-            const platformSpread = price * 0.01;
-            const finalPrice = price - platformSpread;
-
             // Update Cache
             this.cache[cacheKey] = {
                 price: price,
                 timestamp: Date.now()
             };
 
-            return finalPrice;
+            return price;
         } catch (error) {
-            console.error('[PriceService] ORACLE FAILURE:', error);
             throw new Error('Price Oracle Unavailable - System Locked for Safety');
         }
     }
@@ -93,15 +83,11 @@ export class PriceService {
             const diff = Math.abs(jupiterRate - marketPrice);
             const diffPct = (diff / marketPrice) * 100;
 
-            console.log(`[Oracle Check] Jupiter: ${jupiterRate}, Market: ${marketPrice}, Diff: ${diffPct.toFixed(2)}%`);
-
             if (diffPct > tolerancePct) {
-                console.warn(`[Oracle Alert] Price deviation too high! (> ${tolerancePct}%)`);
                 return false;
             }
             return true;
         } catch (e) {
-            console.error("[Oracle Check] FATAL ERROR: ", e);
             // STICT SAFETY: If Oracle is down, we CANNOT guarantee price.
             // Requirement from User: "If CoinGecko fails -> HARD FAIL"
             return false;

@@ -1,4 +1,4 @@
-package com.example.SOLQ
+package com.example.solq
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -11,7 +11,7 @@ const TREASURY_WALLET = new PublicKey('ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqoca
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 // Using IDRX for stable IDR settlement (Mainnet)
-const IDRX_MINT = new PublicKey('IDRXv5nN2uX7PpgasFp6QfFh5ZpK78C30');
+const IDRX_MINT = new PublicKey('idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur');
 
 class SolanaService {
     connection: Connection;
@@ -24,7 +24,6 @@ class SolanaService {
             commitment: 'confirmed',
             wsEndpoint: wssUrl
         });
-        console.log(`[INFRA] Solana RPC Initialized: ${rpcUrl} `);
     }
 
     async createPaymentTransaction(intentId: string, userAccount: string, inputMint: string = SOL_MINT): Promise<string> {
@@ -36,8 +35,6 @@ class SolanaService {
 
         // IDRX (Stabelify) has 2 decimals on Mainnet
         const amountAtomic = Math.floor(amountIdr * 100);
-
-        console.log(`[Jupiter] Orchestrating IDRX Swap: ${amountIdr} IDR -> ${amountAtomic} atomic units`);
 
         // 1. Get Quote (ExactOut - we want specific IDR amount to arrive)
         const quoteParams = new URLSearchParams({
@@ -85,8 +82,6 @@ class SolanaService {
             }
         }
 
-        console.log(`[Jupiter] Quote: In ${quoteData.inAmount} (${inputMint}) -> Out ${quoteData.outAmount} (IDRX)`);
-
         // 2. destinationWallet (Treasury/Settlement Wallet)
         // Jupiter will auto-resolve the ATA and create it if necessary if we just pass destinationWallet.
         const swapBody = {
@@ -111,37 +106,47 @@ class SolanaService {
 
     async verifyTransaction(txHash: string): Promise<boolean> {
         try {
-            console.log(`[VERIFY] Checking ${txHash} for Finalization...`);
             const tx = await this.connection.getTransaction(txHash, {
                 commitment: 'finalized', // Sam Altman Standard: No fake success.
                 maxSupportedTransactionVersion: 0
             });
 
             if (!tx) {
-                console.log(`[VERIFY] Transaction not found or not finalized yet.`);
                 return false;
             }
 
             if (tx.meta?.err) {
-                console.log(`[VERIFY] On-chain transaction error: ${JSON.stringify(tx.meta.err)}`);
                 return false;
             }
 
             // TRUTH CHECK: Ensure the Treasury Wallet actually received the funds
-            const isSettlementTarget = tx.transaction.message.staticAccountKeys.some(
+            // For VersionedTransactions, accounts might be in the Static list or Lookup Table.
+            // But for a swap destination, it MUST be in the account list of the transaction.
+            const allAccounts = tx.transaction.message.getAccountKeys({
+                addressLookupTableAccounts: tx.meta?.loadedAddresses ? [
+                    // This is a simplification; in production you'd fetch the actual LUT accounts
+                    // but for most swaps, the destination is static or explicitly in the message.
+                ] : []
+            });
+
+            const isSettlementTarget = allAccounts.staticAccountKeys.some(
                 k => k.equals(TREASURY_WALLET)
             );
 
             if (!isSettlementTarget) {
-                console.error(`[SECURITY ALERT] Transaction ${txHash} does not involve Treasury Wallet!`);
-                return false;
+                // Secondary check: look through all loaded addresses if LUT was used
+                const lookupTargets = tx.meta?.loadedAddresses?.writable.concat(tx.meta?.loadedAddresses?.readonly ?? []);
+                const foundInLookup = lookupTargets?.some(k => k.equals(TREASURY_WALLET));
+
+                if (!foundInLookup) {
+                    return false;
+                }
             }
 
             // SUCCESS: Finalized on-chain.
-            console.log(`[VERIFY] ✅ Transaction PROVEN on Mainnet: ${txHash}`);
+            // SUCCESS: Finalized on-chain.
             return true;
         } catch (e) {
-            console.error(`[VERIFY ERROR] Oracle Failure or RPC Lag: ${e}`);
             return false;
         }
     }

@@ -1,12 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.SOLQ">
+    package="com.example.solq">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="SOLQ"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -85,6 +85,10 @@
              <action android:name="android.intent.action.VIEW" />
              <data android:scheme="rainbow" /> <!-- Rainbow Wallet -->
         </intent>
+        <intent>
+             <action android:name="android.intent.action.VIEW" />
+             <data android:scheme="backpack" /> <!-- Backpack Wallet -->
+        </intent>
         
         <!-- Wallet Packages -->
         <package android:name="app.phantom" />
@@ -94,6 +98,9 @@
         <package android:name="com.binance.dev" />
         <package android:name="com.okinc.okex.gp" />
         <package android:name="com.wallet.crypto.trustapp" />
+        <package android:name="io.metamask" />
+        <package android:name="ag.jup.quote" />
+        <package android:name="me.rainbow" />
     </queries>
 </manifest>
 

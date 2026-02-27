@@ -5,5 +5,6 @@ class WebProviderImpl {
   static bool get isSupported => false;
 
   static Future<String?> connectPhantom() async => null;
-  static Future<String?> signTransaction(String base64Tx) async => null;
+  static Future<String?> connectMetamask() async => null;
+  static Future<String?> signTransaction(String tx) async => null;
 }

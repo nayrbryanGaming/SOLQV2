@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 enum PaymentState {
-  CREATED,
-  PENDING_AMOUNT, // FOR STATIC QRIS
-  AUTHORIZATION_REQUESTED,
-  AUTHORIZED,
-  AWAITING_SETTLEMENT,
-  COMPLETED,
-  FAILED,
-  EXPIRED
+  created,
+  pendingAmount, // FOR STATIC QRIS
+  authorizationRequested,
+  authorized,
+  awaitingSettlement,
+  completed,
+  failed,
+  expired
 }
 
 class PaymentIntent {
@@ -63,8 +63,8 @@ class PaymentIntent {
   });
 
   bool get isExpired => 
-      state != PaymentState.COMPLETED && 
-      state != PaymentState.FAILED &&
+      state != PaymentState.completed && 
+      state != PaymentState.failed &&
       authorizationExpiresAt != null && 
       DateTime.now().isAfter(authorizationExpiresAt ?? DateTime.now());
 
@@ -88,12 +88,12 @@ class PaymentIntent {
     String? qrisPayload,
   }) {
     return PaymentIntent(
-      intentId: this.intentId,
-      merchantName: this.merchantName,
+      intentId: intentId,
+      merchantName: merchantName,
       amountIdr: amountIdr ?? this.amountIdr,
-      currency: this.currency,
+      currency: currency,
       state: state ?? this.state,
-      createdAt: this.createdAt,
+      createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       authorizationExpiresAt: authorizationExpiresAt ?? this.authorizationExpiresAt,
       settlementReference: settlementReference ?? this.settlementReference,
@@ -141,12 +141,13 @@ class PaymentIntent {
   factory PaymentIntent.fromJson(Map<String, dynamic> json) {
     // Map backend string status to Flutter PaymentState enum
     PaymentState mapState(String? status) {
-      if (status == 'requires_payment_method') return PaymentState.CREATED;
-      if (status == 'processing') return PaymentState.AUTHORIZATION_REQUESTED;
-      if (status == 'settling') return PaymentState.AWAITING_SETTLEMENT;
-      if (status == 'completed') return PaymentState.COMPLETED;
-      if (status == 'failed') return PaymentState.FAILED;
-      return PaymentState.CREATED; // Default
+      if (status == 'CREATED') return PaymentState.created;
+      if (status == 'AUTHORIZATION_REQUESTED') return PaymentState.authorizationRequested;
+      if (status == 'AUTHORIZED') return PaymentState.authorized;
+      if (status == 'AWAITING_SETTLEMENT') return PaymentState.awaitingSettlement;
+      if (status == 'COMPLETED') return PaymentState.completed;
+      if (status == 'FAILED') return PaymentState.failed;
+      return PaymentState.created; // Default
     }
 
     return PaymentIntent(
@@ -154,7 +155,7 @@ class PaymentIntent {
       merchantName: json['merchant']?['name']?.toString() ?? json['merchantName']?.toString() ?? 'SME Merchant',
       amountIdr: json['amount_details']?['fiat_amount']?.toString() ?? json['amountIdr']?.toString() ?? '0',
       currency: json['amount_details']?['currency_source']?.toString() ?? json['currency']?.toString() ?? 'IDR',
-      state: json['status'] != null ? mapState(json['status']) : (json['state'] != null ? PaymentState.values[json['state'] as int] : PaymentState.CREATED),
+      state: json['status'] != null ? mapState(json['status']) : (json['state'] != null ? PaymentState.values[json['state'] as int] : PaymentState.created),
       authorizationExpiresAt: json['authorizationExpiresAt'] != null 
           ? DateTime.parse(json['authorizationExpiresAt']) 
           : null,

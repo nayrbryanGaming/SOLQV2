@@ -3,6 +3,8 @@ import 'package:url_launcher/url_launcher.dart'; // REQUIRED IMPORT
 import '../models/payment_intent.dart';
 import 'solq_service.dart';
 import 'solana_service.dart';
+import 'coingecko_service.dart';
+import 'jupiter_service.dart';
 
 class OrchestratorService {
   static final OrchestratorService _instance = OrchestratorService._internal();
@@ -23,13 +25,11 @@ class OrchestratorService {
         if (parts.length >= 3) {
           final intentId = parts[1];
           final signature = parts[2];
-          print("[ORCHESTRATOR] ⚡ Signature Received from Wallet: $signature");
           confirmOnChain(intentId, signature);
         }
       } else if (event != "CONNECTED" && event != "DISCONNECTED" && event != "DISCONNECT") {
         // Handle raw signature (from solq://onSign?signature=...)
         if (_currentIntent != null && event.length > 30) {
-           print("[ORCHESTRATOR] ⚡ Raw Signature Bridge: $event");
            confirmOnChain(_currentIntent!.intentId, event);
         }
       }
@@ -38,23 +38,21 @@ class OrchestratorService {
 
   Future<void> confirmOnChain(String intentId, String signature) async {
     try {
-      print("[ORCHESTRATOR] ⚡ Direct RPC Verification Started: $signature");
+      
       
       // Update UI to show we are verifying on Mainnet
-      _currentIntent = _currentIntent!.copyWith(state: PaymentState.AWAITING_SETTLEMENT);
+      _currentIntent = _currentIntent!.copyWith(state: PaymentState.awaitingSettlement);
       _intentController.add(_currentIntent!);
 
       // Phase 4 Truth: Poll Solana RPC
       final isFinalized = await SolanaService().waitForSignature(signature);
       
       if (!isFinalized) {
-        print("[ORCHESTRATOR] ❌ Verification Timeout/Failure for $signature");
-        _currentIntent = _currentIntent!.copyWith(state: PaymentState.FAILED);
+        _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
         _intentController.add(_currentIntent!);
         return;
       }
 
-      print("[ORCHESTRATOR] ✅ ON-CHAIN TRUTH CONFIRMED. Syncing settlement with backend...");
       
       final baseUrl = await SOLQService.getPersistedBaseUrl();
       await SOLQService(baseUrl: baseUrl).confirmPayment(intentId, signature);
@@ -63,8 +61,7 @@ class OrchestratorService {
       await syncStatus();
 
     } catch (e) {
-      print("[ORCHESTRATOR] Confirm Failure: $e");
-      _currentIntent = _currentIntent!.copyWith(state: PaymentState.FAILED);
+      _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
       _intentController.add(_currentIntent!);
     }
   }
@@ -79,7 +76,7 @@ class OrchestratorService {
   // STEP 1: CREATE INTENT (FROM QRIS)
   Future<void> createIntent(String qrisPayload) async {
     try {
-      print("[ORCHESTRATOR] Creating intent from QRIS...");
+      
       
       // 1. Fetch Real-Time IDR Rate (Elon/Altman Rule)
       final marketPrices = await _coingecko.getPrices();
@@ -98,6 +95,12 @@ class OrchestratorService {
       if (_currentIntent!.amountIdr != "0") {
         final quote = await _jupiter.getQuote(_currentIntent!.amountIdr);
         if (quote != null) {
+          // ORACLE CHECK: Sam Altman verification logic
+          final isValid = _coingecko.verifyRate(quote.price, marketPrices['SOL']!);
+          if (!isValid) {
+            throw Exception("SECURITY BLOCK: Terindikasi manipulasi harga oracle. Transaksi dibatalkan.");
+          }
+
           _currentIntent = _currentIntent!.copyWith(
             quotedRate: quote.price,
             estimatedCryptoAmount: quote.outAmount,
@@ -112,10 +115,8 @@ class OrchestratorService {
       }
 
       _intentController.add(_currentIntent!);
-      print("[ORCHESTRATOR] Intent Created & Quoted: ${_currentIntent!.intentId}");
 
     } catch (e) {
-      print("[ORCHESTRATOR] Create Intent Failed: $e");
       _intentController.addError("Gagal memproses pembayaran. Detail: $e");
     }
   }
@@ -123,7 +124,7 @@ class OrchestratorService {
   // STEP 1.5: SET MANUAL AMOUNT (IF STATIC QRIS)
   Future<void> setAmount(String intentId, String amountIdr) async {
     if (_currentIntent == null || _currentIntent!.qrisPayload == null) {
-      print("[ORCHESTRATOR] Cannot set amount: Missing Intent or QRIS Payload");
+      // Cannot set amount
       return;
     }
 
@@ -143,6 +144,12 @@ class OrchestratorService {
       // 3. Enrich with Real-Time Quote (Elon Musk Standard)
       final quote = await _jupiter.getQuote(amountIdr);
       if (quote != null) {
+        // ORACLE CHECK: Sam Altman verification logic
+        final isValid = _coingecko.verifyRate(quote.price, (await _coingecko.getPrices())!['SOL']!);
+        if (!isValid) {
+           throw Exception("SECURITY BLOCK: Terindikasi manipulasi harga oracle. Transaksi dibatalkan.");
+        }
+
         _currentIntent = _currentIntent!.copyWith(
           quotedRate: quote.price,
           estimatedCryptoAmount: quote.outAmount,
@@ -158,7 +165,6 @@ class OrchestratorService {
       _intentController.add(_currentIntent!);
       
     } catch (e) {
-       print("[ORCHESTRATOR] Set Amount Failed: $e");
        _intentController.addError("Gagal menetapkan nominal: $e");
     }
   }
@@ -168,56 +174,55 @@ class OrchestratorService {
     if (_currentIntent == null) return;
     
     // Update state locally first for UI responsiveness
-    _currentIntent = _currentIntent!.copyWith(state: PaymentState.AUTHORIZATION_REQUESTED);
+    _currentIntent = _currentIntent!.copyWith(state: PaymentState.authorizationRequested);
     _intentController.add(_currentIntent!);
 
     try {
       final id = _currentIntent!.intentId;
-      
-      // AB TEST: Support direct signing bridge for non-SolanaPay wallets
-      // If the wallet type is known to be "strict" or if we want to be more proactive
       final solana = SolanaService();
       
+      // BOSS RULE: No simulations. Try DIRECT TRANSACTION BRIDGE first if wallet is connected.
+      // This is more reliable than Solana Pay for most wallets as it gives us a direct hash.
       if (solana.isConnected) {
-        print("[ORCHESTRATOR] Wallet connected. Attempting DIRECT TRANSACTION BRIDGE...");
         try {
-          // 1. Get transaction via backend POST
+          // 1. Get transaction via backend POST (Real Mainnet Transaction)
           final baseUrl = await SOLQService.getPersistedBaseUrl();
           final txData = await SOLQService(baseUrl: baseUrl).getSolanaPayTransaction(id, solana.connectedAddress!);
           final txBase64 = txData['transaction'];
           
           if (txBase64 != null) {
-            print("[ORCHESTRATOR] Transaction fetched. Launching direct sign...");
             await solana.signSwapTransaction(txBase64);
             return;
           }
         } catch (e) {
-             print("[ORCHESTRATOR] Direct bridge fetch failed, falling back to Solana Pay Scheme: $e");
+             // Fallback
         }
       }
 
-      // FALLBACK: Standard Solana Pay Protocol
-      final baseUrl = SOLQService().baseUrl;
+      // FALLBACK: Standard Solana Pay Protocol (Universal)
+      // This works by having the wallet app fetch the transaction from our backend.
+      final baseUrl = await SOLQService.getPersistedBaseUrl();
       final host = baseUrl.replaceAll('http://', '').replaceAll('/v1', '');
-      final solanaPayUrl = "solana:http://$host/solana-pay/$id";
       
-      print("[ORCHESTRATOR] Launching Solana Pay Scheme: $solanaPayUrl");
+      // Solana Pay URI format: solana:https://<host>/solana-pay/<id>
+      // We use https if possible, or http for local/dev debugging (though BOSS wants REAL).
+      final scheme = baseUrl.startsWith('https') ? 'https' : 'http';
+      final solanaPayUrl = "solana:$scheme://$host/solana-pay/$id";
       
       final uri = Uri.parse(solanaPayUrl);
       
+      // Launch and hope the OS picks it up
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        // Last Effort: Direct SOL transfer (Manual Bridge)
-        print("[ORCHESTRATOR] Wallet app not found for scheme. Attempting universal solana: URI...");
-        final universalUri = Uri.parse("solana:$id"); // Some wallets handle this
+        // Last Effort: Direct link to well-known wallets
+        final universalUri = Uri.parse("solana:connect?redirect=$solanaPayUrl"); 
         await launchUrl(universalUri, mode: LaunchMode.externalApplication);
       }
 
     } catch (e) {
-      print("[ORCHESTRATOR] Auth Request Error: $e");
-      // Revert state if launch fails
-      _currentIntent = _currentIntent!.copyWith(state: PaymentState.FAILED);
+      // Auth Request Error
+      _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
       _intentController.add(_currentIntent!);
     }
   }
@@ -225,16 +230,13 @@ class OrchestratorService {
   // LISTEN FOR WEBHOOK UPDATES (Called by WebhookService)
   Future<void> handleAsyncWebhook(String intentId, String status, String refId) async {
     if (_currentIntent == null || _currentIntent!.intentId != intentId) {
-      print("[ORCHESTRATOR] Webhook ignored: Intent mismatch or null");
       return;
     }
-
-    print("[ORCHESTRATOR] Handling Async Webhook: $status | Ref: $refId");
 
     final normalizedStatus = status.toUpperCase();
     if (normalizedStatus == 'COMPLETED' || normalizedStatus == 'SUCCESS') {
        _currentIntent = _currentIntent!.copyWith(
-         state: PaymentState.COMPLETED,
+         state: PaymentState.completed,
          settlementReference: refId
        );
        _intentController.add(_currentIntent!);
@@ -244,10 +246,10 @@ class OrchestratorService {
         _currentIntent = PaymentIntent.fromJson(updatedData);
         _intentController.add(_currentIntent!);
        } catch(e) {
-         print("[ORCHESTRATOR] Failed to sync full details after webhook: $e");
+         // Sync failed
        }
     } else if (status == 'FAILED') {
-       _currentIntent = _currentIntent!.copyWith(state: PaymentState.FAILED);
+       _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
        _intentController.add(_currentIntent!);
     }
   }
@@ -264,16 +266,14 @@ class OrchestratorService {
     
     if (intentId != _currentIntent!.intentId) return;
 
-    print("[ORCHESTRATOR] On-Chain Status Update: $status | TX: $txHash");
-
     if (status == 'completed' || status == 'COMPLETED') {
        _currentIntent = _currentIntent!.copyWith(
-         state: PaymentState.COMPLETED,
+         state: PaymentState.completed,
          settlementReference: txHash
        );
        _intentController.add(_currentIntent!);
     } else if (status == 'failed' || status == 'FAILED') {
-       _currentIntent = _currentIntent!.copyWith(state: PaymentState.FAILED);
+       _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
        _intentController.add(_currentIntent!);
     }
   }
@@ -289,10 +289,9 @@ class OrchestratorService {
       if (newIntent.state != _currentIntent!.state) {
         _currentIntent = newIntent;
         _intentController.add(_currentIntent!);
-        print("[ORCHESTRATOR] Sync Success: New State = ${newIntent.state}");
       }
     } catch (e) {
-      print("[ORCHESTRATOR] Sync Failed: $e");
+      // Log failure silently or via proper logger in real prod, but BOSS wants NO PRINT
     }
   }
 }

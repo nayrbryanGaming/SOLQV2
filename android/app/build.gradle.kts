@@ -6,8 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.SOLQ"
-    compileSdk = 35
+    namespace = "com.example.solq"
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.SOLQ" // Rebranded from warungpay
+        applicationId = "com.example.solq" // Rebranded from warungpay
         minSdk = 24
         targetSdk = 35
         versionCode = flutter.versionCode
@@ -39,4 +39,11 @@ android {
 flutter {
     source = "../.."
 }
+
+// ═══════════════════════════════════════════════
+// TAHAPAN RELEASE APK WAJIB HAPUS APP DEBUG LAMA 
+// Fixed: Removed embedded adb commands that suspended build.
+// Use clean_run.ps1 instead.
+// ═══════════════════════════════════════════════
+
 

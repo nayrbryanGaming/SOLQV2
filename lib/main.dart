@@ -21,7 +21,7 @@ void main() async {
   try {
     WebhookService().startServer();
   } catch (e) {
-    print("[MAIN] WebhookService not available on this platform: $e");
+    // WebhookService not available on this platform
   }
   
   // Ensure full screen / immersive for production feel
@@ -78,7 +78,6 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       setState(() => _intent = intent);
     }, onError: (error) {
        if (!mounted) return;
-       print("[UI ERROR CATCH] $error");
        
        // Handle socket exceptions by offering IP change
        if (error.toString().contains("SocketException") || error.toString().contains("No route to host")) {
@@ -101,12 +100,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     _walletSub = SolanaService().signatureStream.listen((event) {
       if (!mounted) return;
       if (event == "CONNECTED" || event == "DISCONNECTED") {
-        print("[UI] Wallet event received: $event");
-        if (event == "CONNECTED") _fetchBalance();
-        setState(() {}); // Rebuild UI
       }
     });
-    
     // Initial fetch if already connected
     if (SolanaService().isConnected) {
       _fetchBalance();
@@ -145,6 +140,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               if (controller.text.isNotEmpty) {
                 final newUrl = "http://${controller.text}:3000/v1";
                 await SOLQService.setPersistedBaseUrl(newUrl);
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("IP UPDATED. PLEASE RESCAN.")));
               }
@@ -200,14 +196,23 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SOLQ', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+        title: const Text('SOLQ', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 4, color: Color(0xFF00FF94))),
         centerTitle: true,
         backgroundColor: Colors.black,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [const Color(0xFF00FF94).withValues(alpha: 0.1), Colors.black]
+            )
+          ),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(30),
           child: Container(
-            color: Colors.amberAccent.withOpacity(0.1),
+            color: Colors.amberAccent.withValues(alpha: 0.1),
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -224,6 +229,18 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                     );
                   }
                 ),
+                const SizedBox(width: 16),
+                GestureDetector(
+                  onTap: () => _showIPDialog("MANUAL CONFIGURATION"),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white24),
+                      borderRadius: BorderRadius.circular(4)
+                    ),
+                    child: const Text("IP", style: TextStyle(fontSize: 8, color: Colors.white38)),
+                  ),
+                )
               ],
             ),
           ),
@@ -247,8 +264,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: isConn 
-                        ? const Color(0xFF00FF94).withOpacity(0.15) // Bright Green BG
-                        : const Color(0xFFFF5252).withOpacity(0.15), // Bright Red BG
+                        ? const Color(0xFF00FF94).withValues(alpha: 0.15) // Bright Green BG
+                        : const Color(0xFFFF5252).withValues(alpha: 0.15), // Bright Red BG
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isConn ? const Color(0xFF00FF94) : const Color(0xFFFF5252),
@@ -315,7 +332,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       return _buildIdleView();
     }
     if (_intent == null) return _buildIdleView();
-    if (_intent!.state == PaymentState.COMPLETED) {
+    if (_intent!.state == PaymentState.completed) {
       return _buildSuccessReceipt(_intent!);
     }
     return _buildStatusView(_intent!);
@@ -332,9 +349,11 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
 
   Future<void> _disconnect() async {
     await SolanaService().disconnect();
-    if (mounted) setState(() {
-      _balance = 0.0;
-    });
+    if (mounted) {
+      setState(() {
+        _balance = 0.0;
+      });
+    }
   }
 
   Widget _buildIdleView() {
@@ -364,7 +383,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   icon: const Icon(Icons.logout, size: 16, color: Colors.redAccent),
                   label: const Text("DISCONNECT", style: TextStyle(color: Colors.redAccent)),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                    side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.5)),
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
                 ),
@@ -408,46 +427,104 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF121212),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
+        height: MediaQuery.of(context).size.height * 0.7,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("PILIH WALLET SOLANA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2)),
+            const Text("PILIH DOMPET / WALLET", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2)),
             const SizedBox(height: 20),
-            _walletOption("Phantom", "app.phantom", () {
-              Navigator.pop(context);
-              solana.connectPhantom();
-            }),
-            _walletOption("Solflare", "com.solflare.mobile", () {
-              Navigator.pop(context);
-              solana.connectSolflare();
-            }),
-            _walletOption("Jupiter", "ag.jup.quote", () {
-              Navigator.pop(context);
-              solana.connectJupiter();
-            }),
-            _walletOption("Universal Picker (Standard)", null, () {
-              Navigator.pop(context);
-              solana.connectUniversal();
-            }),
-            const SizedBox(height: 10),
+            Expanded(
+              child: ListView(
+                children: [
+                  _walletButton("Phantom", Icons.account_balance_wallet, Colors.purpleAccent, () {
+                    Navigator.pop(context);
+                    solana.connectPhantom();
+                  }),
+                  _walletButton("Solflare", Icons.account_balance_wallet, Colors.orangeAccent, () {
+                    Navigator.pop(context);
+                    solana.connectSolflare();
+                  }),
+                  _walletButton("Jupiter", Icons.rocket_launch, Colors.greenAccent, () {
+                    Navigator.pop(context);
+                    solana.connectJupiter();
+                  }),
+                  _walletButton("Metamask", Icons.token, Colors.orange, () {
+                    Navigator.pop(context);
+                    solana.connectMetamask();
+                  }),
+                  _walletButton("Binance Web3", Icons.account_balance, Colors.yellow, () {
+                    Navigator.pop(context);
+                    solana.connectCex('Binance', 'bnc://app.binance.com/defi/wallet/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
+                  }),
+                  _walletButton("OKX Wallet", Icons.grid_view, Colors.white, () {
+                    Navigator.pop(context);
+                    solana.connectCex('OKX', 'okx://wallet/dapp/details?dappUrl=https://solq.app&redirect_link=solq://onConnect');
+                  }),
+                  _walletButton("Trust Wallet", Icons.security, Colors.blueAccent, () {
+                    Navigator.pop(context);
+                    solana.connectCex('Trust', 'trust://solana/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
+                  }),
+                  _walletButton("Bybit", Icons.currency_bitcoin, Colors.orangeAccent, () {
+                    Navigator.pop(context);
+                    solana.connectCex('Bybit', 'bybitapp://open/route?name=web3&url=https://solq.app');
+                  }),
+                  _walletButton("Gate.io", Icons.g_translate, Colors.redAccent, () {
+                    Navigator.pop(context);
+                    solana.connectCex('Gate.io', 'gateio://wallet/connect?url=https://solq.app');
+                  }),
+                  _walletButton("Backpack", Icons.backpack, Colors.red, () {
+                    Navigator.pop(context);
+                    solana.connectCex('Backpack', 'backpack://wallet/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
+                  }),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Divider(color: Colors.white10),
+                  ),
+                  _walletOption("Jupiter App (MWA)", "ag.jup.quote", () {
+                    Navigator.pop(context);
+                    solana.connectJupiter();
+                  }, 
+                  icon: Icons.rocket_launch, 
+                  color: Colors.greenAccent, 
+                  desc: "Recommended for Low Fees"
+                  ),
+                  _walletOption("Browser Extension (Web Only)", null, () {
+                    Navigator.pop(context);
+                    solana.connectUniversal(wallet: 'universal');
+                  }, 
+                  icon: Icons.extension_rounded, 
+                  color: Colors.blueAccent,
+                  desc: "Supports all desktop extensions"
+                  ),
+                  _walletOption("Other Wallet App", null, () {
+                    Navigator.pop(context);
+                    solana.connectUniversal();
+                  }, 
+                  icon: Icons.grid_view_sharp, 
+                  color: Colors.white38,
+                  desc: "Uses Solana Universal Intent"
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _walletOption(String name, String? package, VoidCallback onTap) {
+  Widget _walletOption(String name, String? package, VoidCallback onTap, {IconData icon = Icons.account_balance_wallet, Color color = Colors.greenAccent, String desc = "Mainnet Verified"}) {
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
-        child: const Icon(Icons.account_balance_wallet, color: Colors.greenAccent, size: 20),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: color, size: 20),
       ),
       title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-      subtitle: const Text("Mainnet Verified", style: TextStyle(color: Colors.white24, fontSize: 10)),
+      subtitle: Text(desc, style: const TextStyle(color: Colors.white24, fontSize: 10)),
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
       onTap: onTap,
     );
@@ -471,14 +548,14 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // STATE-DRIVEN STATUS MESSAGES (THE BOSS PATH)
-          if (intent.state == PaymentState.CREATED) _statusText("QRIS Validated: Ready to Swap", color: Colors.greenAccent),
-          if (intent.state == PaymentState.PENDING_AMOUNT) _statusText("Manual Amount Entry", color: Colors.blueAccent),
-          if (intent.state == PaymentState.AUTHORIZATION_REQUESTED) _statusText("Launching Solana Pay Request...", color: Colors.amberAccent),
-          if (intent.state == PaymentState.AUTHORIZED) _statusText("Verifying On-Chain Transaction...", color: Colors.amberAccent),
-          if (intent.state == PaymentState.AWAITING_SETTLEMENT) _statusText("Settlement In Progress...", color: Colors.blueAccent), 
-          if (intent.state == PaymentState.COMPLETED) _statusText("SETTLEMENT COMPLETED", color: Colors.greenAccent),
-          if (intent.state == PaymentState.FAILED) _statusText("TRANSACTION FAILED", color: Colors.redAccent),
-          if (intent.state == PaymentState.EXPIRED) _statusText("SESSION EXPIRED", color: Colors.orangeAccent),
+          if (intent.state == PaymentState.created) _statusText("QRIS Validated: Ready to Swap", color: Colors.greenAccent),
+          if (intent.state == PaymentState.pendingAmount) _statusText("Manual Amount Entry", color: Colors.blueAccent),
+          if (intent.state == PaymentState.authorizationRequested) _statusText("Launching Solana Pay Request...", color: Colors.amberAccent),
+          if (intent.state == PaymentState.authorized) _statusText("Verifying On-Chain Transaction...", color: Colors.amberAccent),
+          if (intent.state == PaymentState.awaitingSettlement) _statusText("Settlement In Progress...", color: Colors.blueAccent), 
+          if (intent.state == PaymentState.completed) _statusText("SETTLEMENT COMPLETED", color: Colors.greenAccent),
+          if (intent.state == PaymentState.failed) _statusText("TRANSACTION FAILED", color: Colors.redAccent),
+          if (intent.state == PaymentState.expired) _statusText("SESSION EXPIRED", color: Colors.orangeAccent),
           
           const SizedBox(height: 40),
           Text(intent.merchantName.toUpperCase(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1)),
@@ -497,7 +574,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             ),
           
           // DYNAMIC AMOUNT VIEW
-          if (intent.state == PaymentState.PENDING_AMOUNT)
+          if (intent.state == PaymentState.pendingAmount)
             _buildAmountInput(intent)
           else
             Column(
@@ -534,9 +611,9 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.03),
+                      color: Colors.white.withValues(alpha: 0.03),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: Column(
                       children: [
@@ -563,7 +640,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           const SizedBox(height: 60),
           
           // REAL AUTHORIZATION TRIGGER (FOR PROOF)
-          if (intent.state == PaymentState.AUTHORIZATION_REQUESTED)
+          if (intent.state == PaymentState.authorizationRequested)
             Column(
               children: [
                 const CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
@@ -590,7 +667,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               ],
             ),
 
-            if (intent.state != PaymentState.COMPLETED)
+            if (intent.state != PaymentState.completed)
               TextButton(
                     onPressed: () => setState(() => _intent = null), 
                 child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontSize: 12, letterSpacing: 2))
@@ -600,9 +677,9 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.redAccent.withOpacity(0.05),
+              color: Colors.redAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
@@ -615,7 +692,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                       const Text("UANG ASLI. BUKAN SIMULASI.", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                       Text(
                         "Transaksi ini memotong saldo SOL di wallet Anda.",
-                        style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5)),
+                        style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.5)),
                       ),
                     ],
                   ),
@@ -635,9 +712,9 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.blueAccent.withOpacity(0.1),
+            color: Colors.blueAccent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -661,16 +738,22 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           childAspectRatio: 1.5,
           children: List.generate(12, (index) {
             String val = "";
-            if (index < 9) val = "${index + 1}";
-            else if (index == 9) val = "CLR";
-            else if (index == 10) val = "0";
-            else if (index == 11) val = "OK";
+            if (index < 9) {
+              val = "${index + 1}";
+            } else if (index == 9) {
+              val = "CLR";
+            } else if (index == 10) {
+              val = "0";
+            } else if (index == 11) {
+              val = "OK";
+            }
 
             return TextButton(
               onPressed: () {
                 setState(() {
-                  if (val == "CLR") _manualAmount = "";
-                  else if (val == "OK") {
+                  if (val == "CLR") {
+                    _manualAmount = "";
+                  } else if (val == "OK") {
                     if (_manualAmount.isNotEmpty && _manualAmount != "0") {
                       _service.setAmount(intent.intentId, _manualAmount);
                       _manualAmount = "";
@@ -706,7 +789,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       decoration: isPremium ? BoxDecoration(
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
+            color: color.withValues(alpha: 0.3),
             blurRadius: 30,
             spreadRadius: 5,
           )
@@ -721,7 +804,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           elevation: isPremium ? 20 : 10,
-          shadowColor: color.withOpacity(0.5),
+          shadowColor: color.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -734,8 +817,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         width: 100,
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
+          color: color.withValues(alpha: 0.08),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Column(
@@ -766,23 +849,6 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     );
   }
 
-  Widget _smallAction(IconData icon, String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.white70, size: 20),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSuccessReceipt(PaymentIntent intent) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 50),
@@ -799,7 +865,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.01)],
+                colors: [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.01)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -807,7 +873,7 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               border: Border.all(color: Colors.white10),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.greenAccent.withOpacity(0.05),
+                  color: Colors.greenAccent.withValues(alpha: 0.05),
                   blurRadius: 40,
                   spreadRadius: -10,
                 )

@@ -9,10 +9,10 @@ class JupiterQuoteResponse {
   final double price; // Real-time market price (IDR per SOL)
   
   // THE ALTMAN DISCLOSURE: Full Fee Transparency
-  final double platformFeeIdr;       // SOLQ Revenue (0.5% - embedded in spread)
+  final double platformFeeIdr;       // SOLQ Revenue (1.0% - embedded in spread)
   final double networkFeeSol;         // Solana gas (actual blockchain cost)
   final double slippagePct;           // Liquidity protection (0.5%)
-  final double maxTotalFeeIdr;        // GUARANTEED MAX (0.65% total)
+  final double maxTotalFeeIdr;        // GUARANTEED MAX (1.6% total)
   final double effectiveFeePercent;   // User-facing fee % (for transparency)
   final double userSavingsVsQris;     // How much user saves vs traditional QRIS
 
@@ -34,13 +34,14 @@ class JupiterService {
   static const String _swapUrl = "https://quote-api.jup.ag/v6/swap";
   
   // REAL TOKEN MINTS (Production)
-  static const String idrxMint = "IDRXv5nN2uX7PpgasFp6QfFh5ZpK78C30"; // IDRX Stablecoin
+  static const String idrxMint = "idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur"; // IDRX Stablecoin
   static const String solMint = "So11111111111111111111111111111111111111112"; // Wrapped SOL
   static const String usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
   
   // TREASURY WALLET (All Revenue Flows Here)
   // Sam Altman Challenge: Automated, embedded revenue without user noticing
   static const String treasuryWallet = "ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m";
+  static const String treasuryIdrxAta = "QVpWTCsVLDSLusuwNu3ucEQmeDUjCid1kap5qXzii38";
   
   // THE ALTMAN FEE STRATEGY:
   // Platform Fee: 1.0% (100 bps) - embedded in Jupiter swap, strategic revenue yield
@@ -61,13 +62,16 @@ class JupiterService {
     try {
       final amountIdrNum = double.parse(amountIdr);
       
-      // Calculate required SOL input for target IDR output
-      // We request quote for 0.1 SOL as baseline, then scale
+      // 1. Convert IDR to atomic IDRX (2 decimals)
+      final amountAtomic = (amountIdrNum * 100).toInt();
+      
+      // Calculate required SOL input for target IDR output (EXACT OUT)
       final url = Uri.parse(
         "$_quoteUrl?"
         "inputMint=$solMint&"
         "outputMint=$idrxMint&"
-        "amount=100000000&"  // 0.1 SOL
+        "amount=$amountAtomic&"
+        "swapMode=ExactOut&"
         "slippageBps=$slippageBps&"
         "platformFeeBps=$platformFeeBps"
       );
@@ -88,9 +92,9 @@ class JupiterService {
         // This is embedded in Jupiter swap and goes to treasury wallet
         final platformFee = amountIdrNum * (platformFeeBps / 10000);
         
-        // 2. Network Fee (Actual Solana Gas)
-        final networkFeeLamports = 6000;
-        final networkFeeSol = networkFeeLamports / 1000000000;
+        // 2. Network Fee (Actual Solana Gas - Mainnet estimate for Versioned Tx)
+        const networkFeeLamports = 15000; 
+        const networkFeeSol = networkFeeLamports / 1000000000;
         final networkFeeIdr = networkFeeSol * pricePerSol;
         
         // 3. Slippage Protection (0.5% - User Protection, Not Revenue)
@@ -109,17 +113,6 @@ class JupiterService {
         final legacyRate = amountIdrNum * 0.025; // 2.5% benchmark
         final userSavings = legacyRate - totalFeeIdr;
         
-        print("[JUPITER] Quote Received:");
-        print("  Amount: Rp ${amountIdrNum.toStringAsFixed(0)}");
-        print("  Rate: 1 SOL = Rp ${pricePerSol.toStringAsFixed(0)}");
-        print("  Platform Fee: Rp ${platformFee.toStringAsFixed(0)} (0.5%)");
-        print("  Network Gas: Rp ${networkFeeIdr.toStringAsFixed(2)}");
-        print("  Slippage Buffer: Rp ${slippageFee.toStringAsFixed(0)} (0.5%)");
-        print("  Total Fee: Rp ${totalFeeIdr.toStringAsFixed(0)} (${effectiveFeePercent.toStringAsFixed(2)}%)");
-        print("  Max Guaranteed: Rp ${actualMaxFee.toStringAsFixed(0)}");
-        print("  User Saves: Rp ${userSavings.toStringAsFixed(0)} vs QRIS");
-        print("  Revenue to Treasury: Rp ${platformFee.toStringAsFixed(0)}");
-        
         return JupiterQuoteResponse(
           rawQuote: data,
           outAmount: data['outAmount'].toString(),
@@ -131,11 +124,9 @@ class JupiterService {
           effectiveFeePercent: effectiveFeePercent,
           userSavingsVsQris: userSavings,
         );
-      } else {
-        print("[JUPITER] HTTP Error ${response.statusCode}: ${response.body}");
-      }
+      } 
     } catch (e) {
-      print("[JUPITER ERROR] $e");
+      // Jupiter error handling
     }
     return null;
   }
@@ -150,7 +141,8 @@ class JupiterService {
           'userPublicKey': userPublicKey,
           'wrapAndUnwrapSol': true, // User pays SOL gas for wrapping
           'computeUnitPriceMicroLamports': 1000, // User pays for priority
-          'feeAccount': treasuryWallet, 
+          // Sam Altman Revenue Extraction - Explicit Platform Fee Routing via exact ATA
+          'feeAccount': treasuryIdrxAta, 
         }),
       );
 
@@ -159,7 +151,7 @@ class JupiterService {
         return data['swapTransaction']; // Base64 encoded transaction
       }
     } catch (e) {
-      print("[JUPITER SWAP ERROR] $e");
+       // Silent catch
     }
     return null;
   }

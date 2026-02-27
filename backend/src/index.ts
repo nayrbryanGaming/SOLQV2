@@ -54,19 +54,21 @@ app.post('/solana-pay/:intentId', async (req: Request, res: Response) => {
 
         const txBase64 = await solanaService.createPaymentTransaction(intentId, account, inputMint);
 
+        const { paymentIntents } = require('./services/store');
+        if (paymentIntents[intentId]) {
+            paymentIntents[intentId].status = 'AUTHORIZATION_REQUESTED';
+        }
+
         res.status(200).json({
             transaction: txBase64,
             message: "Verify Amount & Sign"
         });
 
     } catch (error: any) {
-        console.error("Solana Pay Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SOLQ] Orchestrator running on http://0.0.0.0:${PORT}`);
-    console.log(`[SOLQ] Solana Pay Endpoint: http://0.0.0.0:${PORT}/solana-pay/:id`);
+app.listen(Number(PORT), '0.0.0.0', () => {
 });
 

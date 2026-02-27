@@ -14,5 +14,6 @@ class WebProvider {
   static bool get isSupported => kIsWeb;
 
   static Future<String?> connectPhantom() => platform.WebProviderImpl.connectPhantom();
+  static Future<String?> connectMetamask() => platform.WebProviderImpl.connectMetamask();
   static Future<String?> signTransaction(String base64Tx) => platform.WebProviderImpl.signTransaction(base64Tx);
 }

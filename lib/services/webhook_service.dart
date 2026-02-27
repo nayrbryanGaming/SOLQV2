@@ -46,12 +46,10 @@ class WebhookService {
       
       // === SECURITY LAYER 1: RATE LIMITING ===
       if (!_checkRateLimit(clientIp)) {
-        print("[SECURITY] 🚨 Rate limit exceeded from $clientIp");
         return Response(429, body: "Rate limit exceeded");
       }
       
       final payload = await request.readAsString();
-      print("[WEBHOOK RECEIVED] From: $clientIp | Size: ${payload.length} bytes");
       
       try {
         final Map<String, dynamic> data = jsonDecode(payload);
@@ -59,7 +57,6 @@ class WebhookService {
         // === SECURITY LAYER 2: SIGNATURE VERIFICATION ===
         final signature = request.headers['x-solq-signature'];
         if (!_verifySignature(payload, signature)) {
-          print("[SECURITY] 🚨 Invalid signature from $clientIp");
           return Response.forbidden("Invalid signature");
         }
         
@@ -68,18 +65,15 @@ class WebhookService {
         final timestamp = data['timestamp'] as int?;
         
         if (nonce == null || timestamp == null) {
-          print("[SECURITY] 🚨 Missing nonce/timestamp");
           return Response.badRequest(body: "Missing security headers");
         }
         
         if (_processedNonces.contains(nonce)) {
-          print("[SECURITY] 🚨 Replay attack detected! Nonce: $nonce");
           return Response.forbidden("Duplicate nonce");
         }
         
         final webhookAge = DateTime.now().millisecondsSinceEpoch - timestamp;
         if (webhookAge > webhookTimeoutWindow.inMilliseconds) {
-          print("[SECURITY] 🚨 Webhook too old: ${webhookAge}ms");
           return Response.forbidden("Webhook expired");
         }
         
@@ -96,12 +90,10 @@ class WebhookService {
         final String status = data['status'];
         final String refId = data['refId'] ?? "REF_${DateTime.now().millisecondsSinceEpoch}";
 
-        print("[WEBHOOK] ✅ Security checks passed. Processing: $intentId");
         await OrchestratorService().handleAsyncWebhook(intentId, status, refId);
 
         return Response.ok(jsonEncode({'status': 'processed', 'intentId': intentId}));
       } catch (e) {
-        print("[WEBHOOK ERROR] $e");
         return Response.internalServerError(body: "Webhook Error: $e");
       }
     });
@@ -120,11 +112,9 @@ class WebhookService {
 
       _server = await shelf_io.serve(router.call, InternetAddress.anyIPv4, 8080);
       _lastError = null;
-      print('[WEBHOOK SERVER] Ready at http://$_ipAddress:8080/webhook/settlement');
     } catch (e) {
       _server = null;
       _lastError = "Start Failed: $e";
-      print('[WEBHOOK SERVER] Failed: $e');
     }
   }
 
