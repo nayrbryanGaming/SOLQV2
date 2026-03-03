@@ -45,3 +45,5 @@ flutter:
     - assets/logo.png
     - assets/logos/solq_logo_wordmark.jpg
     - assets/logos/solq_logo_icon.jpg
+    - assets/logos/solq_logo_wordmark_transparent.png
+    - assets/logos/solq_logo_icon_transparent.png
