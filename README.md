@@ -58,17 +58,15 @@ SOLQ operates strictly as a technical orchestration layer.
 
 ---
 
-## Repository Notice
+## 🔒 Proprietary Logic & Repository Scope
 
-This repository contains selected components related to the SOLQ orchestration system.
+This public repository contains selected orchestration components and interface layers. Core routing logic and internal settlement infrastructure are maintained separately.
 
-Certain internal infrastructure modules, routing logic, and proprietary mechanisms are not included in this repository.
-
-All trademarks, brand assets, and intellectual property associated with SOLQ remain the exclusive property of SOLQ Technologies.
+All trademarks, brand assets, and intellectual property associated with SOLQ are the exclusive property of SOLQ Technologies.
 
 ---
 
-## Intellectual Property
+## ⚖️ License & Terms
 
 © 2026 SOLQ Technologies. All Rights Reserved.
 
@@ -80,14 +78,6 @@ Unauthorized reproduction, commercial usage, or derivative redistribution of pro
 
 Infrastructure development phase.  
 Production release versioning follows internal deployment cycles.
-
----
-
-## About
-
-SOLQ enables users to initiate QRIS merchant payments using Solana-based assets through a non-custodial orchestration framework.
-
-The system prioritizes reliability, compliance alignment, and infrastructure integrity before scale.
 
 ---
 
