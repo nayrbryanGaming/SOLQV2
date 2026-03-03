@@ -37,11 +37,11 @@ SOLQ is a non-custodial orchestration layer designed to bridge high-velocity Sol
 
 ```mermaid
 graph TD
-    A["User Wallet (Solana)"] -->|Signature| B[Authorization Layer]
-    B -->|Jupiter| C[On-chain Asset Conversion]
-    C -->|IDRX| D[Settlement Liquidity]
-    D --> E[Institutional Settlement Rails]
-    E --> F["QRIS Merchant Endpoint"]
+    A["User Wallet (Client)"] -->|Authorized Intent| B[Orchestration Engine]
+    B -->|Jupiter Aggregator| C[On-chain Asset Conversion]
+    C -->|IDRX Liquidity| D[Settlement Inventory]
+    D --> E[Institutional Payment Rails]
+    E --> F["Legacy QRIS Endpoint"]
 ```
 
 SOLQ operates as the technical bridge between decentralized authorization and regulated settlement.
@@ -90,6 +90,12 @@ stateDiagram-v2
 - **Compliance Delegation**: Fiat movement is handled by licensed and regulated financial infrastructure partners.
 - **Auditability**: Every transaction maintains a cryptographically verifiable trail on the Solana blockchain.
 
+### 4. Infrastructure Resilience & Observability
+- **RPC Redundancy**: The orchestration engine utilizes a tiered provider strategy (failover between primary/secondary nodes) to eliminate single-point-of-failure risks.
+- **Failure Domain Isolation**: Circuit-breaker logic is implemented across external swap and price oracles to prevent state corruption during upstream volatility.
+- **Real-time Telemetry**: Detailed event-stream monitoring tracks settlement latency, quote variance, and on-chain confirmation throughput.
+- **Threat Modeling**: Active validation of transaction payloads against EMVCo-compliant QRIS schemas to prevent injection or invalid routing intents.
+
 ---
 
 ## 🏢 Repository Scope & IP
@@ -108,7 +114,5 @@ This public repository contains selected interface components and orchestration 
 - **Next Phase**: Expansion of partner settlement rails and cross-border QR interoperability.
 
 ---
-
-## About
 
 SOLQ enables instant QRIS utility for Solana users through a high-performance orchestration framework that prioritizes reliability, compliance, and non-custodial integrity.
