@@ -6,11 +6,88 @@
   <img src="assets/logos/solq_logo_icon_transparent.png" alt="SOLQ Icon" width="100"/>
 </p>
 
-<p align="center">
-  <strong>SOLQ (WarungPay)</strong> — The Institutional Non-custodial Solana Payment Orchestrator.
-  <br/>
-  <em>Bridging Global Crypto Liquidity with Indonesia's National Payment Rails.</em>
-</p>
+# SOLQ — Non-Custodial Solana Payment Orchestrator
+
+SOLQ is a consumer-side, non-custodial payment orchestrator designed to bridge Solana-based digital assets with Indonesia’s national QRIS payment rails.
+
+It enables users to initiate authorized on-chain transactions for real-world merchant payments — without merchant-side infrastructure changes and without asset custody.
+
+---
+
+## Overview
+
+SOLQ focuses on infrastructure correctness, deterministic settlement flow, and regulatory-aligned orchestration.
+
+The system is engineered to:
+
+- Orchestrate user-authorized on-chain payment intents
+- Interact with public blockchain state only
+- Delegate fiat settlement to regulated financial infrastructure partners
+- Maintain strict non-custodial boundaries
+
+SOLQ does **not** hold, transmit, or store user funds.
+
+---
+
+## Core Architecture Principles
+
+### 1. Non-Custodial by Design
+- Users retain full control of private keys.
+- All blockchain interactions require explicit wallet authorization.
+- SOLQ interacts exclusively with public keys and signed transaction payloads.
+
+### 2. Deterministic Payment Lifecycle
+- State-driven orchestration model
+- On-chain confirmation verification
+- Structured event-based reconciliation logic
+
+### 3. Infrastructure Separation
+- Wallet layer isolated from orchestration layer
+- Settlement delegation abstracted from user authorization layer
+- No internal access to user-controlled assets
+
+---
+
+## Regulatory Positioning
+
+SOLQ operates strictly as a technical orchestration layer.
+
+- No custody of digital or fiat assets
+- No direct handling of settlement funds
+- Execution delegated to licensed and regulated partners where required
+
+---
+
+## Repository Notice
+
+This repository contains selected components related to the SOLQ orchestration system.
+
+Certain internal infrastructure modules, routing logic, and proprietary mechanisms are not included in this repository.
+
+All trademarks, brand assets, and intellectual property associated with SOLQ remain the exclusive property of SOLQ Technologies.
+
+---
+
+## Intellectual Property
+
+© 2026 SOLQ Technologies. All Rights Reserved.
+
+Unauthorized reproduction, commercial usage, or derivative redistribution of proprietary components is strictly prohibited.
+
+---
+
+## Status
+
+Infrastructure development phase.  
+Production release versioning follows internal deployment cycles.
+
+---
+
+## About
+
+SOLQ enables users to initiate QRIS merchant payments using Solana-based assets through a non-custodial orchestration framework.
+
+The system prioritizes reliability, compliance alignment, and infrastructure integrity before scale.
 
 ---
 
@@ -22,63 +99,3 @@
 | [**Icon (Transparent)**](assets/logos/solq_logo_icon_transparent.png) | PNG | Favicons, Avatars |
 | [**Wordmark (Standard)**](assets/logos/solq_logo_wordmark.jpg) | JPEG | Print, PDF, Standard Backgrounds |
 | [**Icon (Standard)**](assets/logos/solq_logo_icon.jpg) | JPEG | Print, Branding Collateral |
-
----
-
-## 🔒 Enterprise Confidentiality
-**STATUS: PROPRIETARY & CONFIDENTIAL**
-
-This repository contains the core orchestration engine for SOLQ. All technical logic, routing algorithms, and settlement protocols are protected intellectual property. Unauthorized access, reproduction, or reverse engineering is strictly prohibited and subject to international legal enforcement.
-
----
-
-## 🚀 Overview
-
-**SOLQ** is a high-performance, non-custodial payment orchestrator designed to unify the Solana ecosystem with real-world commerce. By leveraging Indonesia's national **QRIS** rails, SOLQ allows users to utilize on-chain assets for physical merchant payments without requiring merchant-side infrastructure changes or custodial intervention.
-
-### Core Value Drivers
-- **Seamless Interoperability**: Instant bridge between Solana wallets and national payment standards.
-- **Pure Non-Custodial Architecture**: Users maintain absolute control of their private keys; SOLQ only orchestrates authorized intents.
-- **Optimized Settlement Rails**: High-efficiency routing to ensure competitive rates and deterministic confirmation.
-
----
-
-## 🛠 Project Foundations
-
-### 1. Terminal Security
-- Built on a **Zero-Trust** architecture.
-- Full wallet isolation: The application interacts exclusively with public keys via secure intent protocols.
-- Cryptographic verification of all on-chain settlement proofs.
-
-### 2. Market Execution
-- Real-time liquidity aggregation via decentralized protocols.
-- Advanced slippage protection and multi-oracle price verification.
-- Deterministic outcome state machine for all payment lifecycles.
-
-### 3. Institutional Settlement
-- Orchestration layer for compliant fiat settlement.
-- Robust event-driven confirmation engine.
-- Automated reconciliation and audit logging.
-
----
-
-## 🛡 Regulatory & Compliance
-
-SOLQ is engineered for transparency and regulatory alignment:
-- **No Asset Custody**: We do not hold, transmit, or store user funds.
-- **Orchestration Only**: Our role is strictly limited to the technical orchestration of user-authorized on-chain events.
-- **Partner Delegation**: Settlement execution is delegated to licensed and regulated financial infrastructure partners.
-
----
-
-## ⚖️ License & Intellectual Property
-
-**© 2026 SOLQ Technologies. All Rights Reserved.**
-
-This software is strictly **CLOSED SOURCE** and **PROPRIETARY**. These assets are registered intellectual property in 50+ jurisdictions. Use of logos, trademarks, and code logic is restricted to authorized personnel only. 
-
----
-
-<p align="center">
-  <em>Secured by SOLQ Engineering Laboratory.</em>
-</p>
