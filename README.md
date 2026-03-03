@@ -7,155 +7,59 @@
 </p>
 
 <p align="center">
-  <strong>Website:</strong> <a href="https://solq.id">solq.id</a> | <strong>Status:</strong> Live Mainnet Beta
+  <strong>Website:</strong> <a href="https://solq.id">solq.id</a> | <strong>Status:</strong> Controlled Mainnet-Beta
 </p>
 
 ---
 
-## 🏢 Brand Assets — Official Logos (©️ Copyright, 50 Countries)
+## 🏢 Brand Assets
 
-| File | Format | Usage |
+Standardized brand assets for the SOLQ ecosystem.
+
+| Version | Format | Usage |
 |------|--------|-------|
-| [`solq_logo_wordmark_transparent.png`](assets/logos/solq_logo_wordmark_transparent.png) | PNG (transparent BG) | Primary — Digital, Web, App |
-| [`solq_logo_icon_transparent.png`](assets/logos/solq_logo_icon_transparent.png) | PNG (transparent BG) | Icon, Favicon, Avatar |
-| [`solq_logo_wordmark.jpg`](assets/logos/solq_logo_wordmark.jpg) | JPEG | Print, White Background |
-| [`solq_logo_icon.jpg`](assets/logos/solq_logo_icon.jpg) | JPEG | Print, White Background |
+| [**Wordmark (Transparent)**](assets/logos/solq_logo_wordmark_transparent.png) | PNG | Digital, Web, App Header |
+| [**Icon (Transparent)**](assets/logos/solq_logo_icon_transparent.png) | PNG | Favicons, Avatars |
+| [**Wordmark (Standard)**](assets/logos/solq_logo_wordmark.jpg) | JPEG | Print, PDF, Standard Backgrounds |
+| [**Icon (Standard)**](assets/logos/solq_logo_icon.jpg) | JPEG | Print, Branding Collateral |
 
-> ⚠️ **PROPRIETARY**: These logos are registered intellectual property in 50 countries. Unauthorized use is strictly prohibited.
-
----
-
-# SOLQ
-
-**SOLQ** is a non-custodial payment orchestrator that enables users to pay any existing **QRIS merchant** using **Solana-based assets**, without onboarding merchants and without holding funds.
-
-SOLQ bridges **on-chain authorization** with **Indonesia’s national payment rails (QRIS)** by orchestrating wallet signatures, on-chain swaps, and off-chain rupiah settlement in a single seamless flow.
+> 🔒 **Proprietary Notice**: These assets are registered intellectual property of SOLQ Technologies. Unauthorized use is prohibited.
 
 ---
 
-## Why SOLQ Exists
+# SOLQ — Institutional Payment Orchestration
 
-Indonesia has millions of QRIS-enabled merchants, yet crypto users still face a broken payment experience:
-
-- Off-ramping crypto to rupiah is slow and fragmented
-- Merchants must be onboarded individually in most crypto payment solutions
-- Existing systems force users to leave their wallet, swap manually, then pay
-
-**SOLQ removes all of that friction.**
-
-Users simply scan an existing QRIS code and authorize payment from their Solana wallet.  
-Merchants receive rupiah as usual.  
-No merchant onboarding. No custody. No behavior change.
+SOLQ is a non-custodial orchestration layer designed to bridge high-velocity Solana assets with national payment rails (QRIS). By decoupling transaction authorization from fiat settlement, SOLQ enables seamless real-world utility without centralized custody.
 
 ---
 
-## Core Principles
-
-- **Consumer-side only** — SOLQ runs on the payer’s device
-- **Non-custodial by design** — SOLQ never holds user or merchant funds
-- **QRIS-native** — works with existing physical QRIS codes
-- **Regulator-conscious architecture** — authorization and settlement are delegated, not centralized
-
----
-
-## High-Level Architecture
+## 🏗 High-Level Architecture
 
 ```mermaid
 graph TD
-    A["User Wallet (Solana)"] -->|Signature| B[Wallet Authorization]
-    B -->|Jupiter| C[On-chain Swap]
-    C -->|IDRX| D[Rupiah Stablecoin]
-    D --> E[Partner Settlement Rail]
-    E --> F["Merchant Bank / E-money Account (QRIS)"]
+    A["User Wallet (Solana)"] -->|Signature| B[Authorization Layer]
+    B -->|Jupiter| C[On-chain Asset Conversion]
+    C -->|IDRX| D[Settlement Liquidity]
+    D --> E[Institutional Settlement Rails]
+    E --> F["QRIS Merchant Endpoint"]
 ```
 
-SOLQ acts purely as an **orchestrator** between these components.
+SOLQ operates as the technical bridge between decentralized authorization and regulated settlement.
 
 ---
 
-## Payment Flow (End-to-End)
+## 🔄 Transaction Lifecycle
 
-1. User opens SOLQ and connects a Solana wallet (e.g. Phantom)
-2. User scans a physical QRIS code at a merchant
-3. SOLQ parses QRIS payload (EMVCo standard)
-4. SOLQ determines payment amount:
-   - Dynamic QRIS → amount locked
-   - Static QRIS → user inputs amount manually
-5. SOLQ requests a real-time swap quote (SOL/USDC → IDRX)
-6. User authorizes payment by signing a wallet transaction
-7. Swap executes on-chain
-8. Settlement is delegated to partner rails
-9. Merchant receives rupiah as normal
-10. SOLQ confirms settlement via event-based callback
+1. **Intent Authorization**: User signs a transaction via a supported Solana wallet (Phantom, Solflare, etc.).
+2. **On-Chain Execution**: Conversion to stable assets via decentralized liquidity aggregators.
+3. **Settlement Routing**: Automated instruction to designated settlement partners.
+4. **Finality Verification**: RPC-based polling confirms transaction finalization on the Solana Mainnet.
 
 ---
 
-## QRIS Intelligence (“Mata Pinter”)
+## 🔒 Transaction State Machine
 
-SOLQ implements a QRIS parser compliant with EMVCo specifications.
-
-- **Dynamic QRIS**
-  - Detects presence of Tag 54 (Transaction Amount)
-  - Amount is locked and cannot be overridden
-- **Static QRIS**
-  - Detects missing Tag 54
-  - Prompts user to input amount manually
-- **Merchant Resolution**
-  - Extracts merchant PAN / account identifiers (Tag 26/27)
-  - Routes settlement automatically
-
----
-
-# SOLQ - Real Mainnet Consumer Payment Orchestrator
-
-**CURRENT STATUS: LIVE MAINNET BETA**
-**STRICTLY NO MOCKS. NO SIMULATIONS. REAL VALUE TRANSFER ONLY.**
-
-SOLQ bridges the gap between Solana wallets and Indonesia's QRIS payment network without intermediate custody.
-
-## Core Features (Real Implementation)
-
-### 1. Universal Wallet Connectivity
-- **Supported Wallets**: Phantom, Solflare, Binance Web3, OKX, Trust Wallet, Bybit, Gate.io.
-- **Protocol**: Uses Android Intent Filters (`solana:`, `bnc:`, `okx:`) for deep linking.
-- **Safety**: App never touches private keys. All signing happens in the external wallet app.
-
-### 2. Real-Time Oracle Pricing
-- **Source**: CoinGecko API (`simple/price`).
-- **Validation**: Jupiter quotes are verified against market rates with < 2% tolerance.
-- **Slippage**: Fixed at 0.5% for reliability.
-
-### 3. On-Chain Settlement Abstraction
-- **Flow**: SOL/USDC -> JUPITER SWAP (ExactOut) -> IDRX (Stablecoin) -> SETTLEMENT WALLET.
-- **Revenue**: Automatic 1.0% platform fee routed to Treasury Wallet (`ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m`).
-- **Transparency**: Every fee (network, platform, slippage) is displayed before signature. 99.9% estimation accuracy.
-- **Verification**: The backend polls Solana RPC to confirm transaction finality. The UI *only* updates to 'Success' after on-chain confirmation (Finalized status).
-
-## Usage Instructions
-
-1.  **Launch App**: Ensure you have a supported wallet installed (e.g. Phantom or Binance).
-2.  **Connect**: Tap "Connect Wallet". Select your installed wallet.
-3.  **Scan QRIS**: Point camera at ANY standard QRIS code (GoPay, Dana, BCA, etc.).
-4.  **Review**: See the real-time IDR -> SOL quote.
-5.  **Pay**: Tap "Launch External Wallet".
-6.  **Sign**: In your wallet app, approve the transaction.
-7.  **Wait**: App verifies on blockchain (approx 3-10 seconds).
-8.  **Done**: "Settlement Completed" screen appears only when funds are secured.
-
-## Tech Stack & Compliance
-- **Frontend**: Flutter (Immersive Mode, Native Android Intent Handling).
-- **Backend**: Node.js + Express (Solana Service, Price Oracle).
-- **Blockchain**: Solana Mainnet-Beta.
-- **Compliance**: Non-Custodial. Decentralized Orchestration.
-
----
-*Built for the "Sam Altman / Elon Musk" Challenge: 100% Real, 0% Mock.*
-
----
-
-## State Machine
-
-All payments follow a strict, auditable state machine:
+The system enforces a deterministic lifecycle to ensure auditability:
 
 ```mermaid
 stateDiagram-v2
@@ -167,91 +71,44 @@ stateDiagram-v2
     COMPLETED --> [*]
 ```
 
-No state skipping. No ambiguous transitions.
+---
+
+## System Pillars
+
+### 1. Non-Custodial Security
+- Zero-access architecture: The system never touches private keys.
+- Authorization is delegated to external wallet providers via standard intent protocols.
+- Deterministic on-chain verification of every protocol event.
+
+### 2. Infrastructure Engineering
+- **ExactOut Execution**: Minimizes slippage and ensures exact IDR settlement values.
+- **Mainnet Finality Polling**: System status only transitions to 'Completed' upon verified RPC finalization.
+- **Oracle Integrity**: Price discovery via diversified data feeds with hard-fail protection logic.
+
+### 3. Regulatory Alignment
+- **Separation of Concerns**: Authorization (On-Chain) is decoupled from Settlement (Off-Chain).
+- **Compliance Delegation**: Fiat movement is handled by licensed and regulated financial infrastructure partners.
+- **Auditability**: Every transaction maintains a cryptographically verifiable trail on the Solana blockchain.
 
 ---
 
-## Non-Custodial & Regulatory Posture
+## 🏢 Repository Scope & IP
 
-SOLQ:
-- Does **not** store balances
-- Does **not** custody funds
-- Does **not** act as an e-wallet
-- Does **not** issue QR codes
+This public repository contains selected interface components and orchestration logic. The core routing engine and internal settlement infrastructure are maintained as proprietary modules.
 
-SOLQ only:
-- Requests authorization
-- Orchestrates execution
-- Delegates settlement to licensed partners
-
-This architecture is designed to align with regulatory expectations for payment intermediaries.
+- **Status**: Controlled Mainnet-Beta.
+- **License**: Closed Source / Proprietary.
+- **IP Protection**: All rights reserved by SOLQ Technologies.
 
 ---
 
-## Target Users (Initial)
+## 📈 Phase 1 Roadmap
 
-- Crypto-native users
-- High-frequency QRIS users
-- Payments above micro-transaction thresholds
-- Users seeking instant crypto-to-fiat utility
+- **Current Goal**: 50+ verified institutional-grade settlements to confirm structural stability.
+- **Next Phase**: Expansion of partner settlement rails and cross-border QR interoperability.
 
 ---
 
-## Success Metrics
+## About
 
-**"Gue bakal dapet 50 transaksi pertama dari komunitas crypto Makassar dalam 14 hari."**
-
----
-
-## Roadmap (High-Level)
-
-**Phase 1 — MVP**
-- QRIS scanning & parsing
-- Wallet authorization
-- On-chain swap execution
-- Sandbox settlement
-
-**Phase 2 — Accelerator**
-- Partner settlement integration
-- Reliability hardening
-- UX latency optimization
-- Compliance review
-
-**Phase 3 — Scale**
-- Multi-wallet support
-- Multi-chain routing
-- International QR expansion
-
----
-
-## What SOLQ Is Not
-
-- Not a POS system
-- Not a merchant app
-- Not a custodial wallet
-- Not an exchange
-- Not a payment gateway replacing QRIS
-
-SOLQ is **infrastructure**, not a surface product.
-
----
-
-## One-Sentence Summary
-
-> **SOLQ scans QRIS, orchestrates wallet authorization and on-chain swaps, and delegates rupiah settlement — without holding funds.**
-
----
-
-## Status
-
-SOLQ is under active development and currently in MVP stage.
-
-This repository represents the core orchestration logic and system design used for validation, accelerator evaluation, and ecosystem collaboration.
-
----
-
-## License
-
-**CLOSED SOURCE / PROPRIETARY**
-
-All rights reserved. This software and associated documentation files are proprietary and confidential. Unauthorized copying, modification, distribution, or use of this software via any medium is strictly prohibited.
+SOLQ enables instant QRIS utility for Solana users through a high-performance orchestration framework that prioritizes reliability, compliance, and non-custodial integrity.
