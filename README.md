@@ -29,7 +29,45 @@ SOLQ does **not** hold, transmit, or store user funds.
 
 ---
 
-## Core Architecture Principles
+## 🏗 High-Level Architecture
+
+```mermaid
+graph TD
+    A["User Wallet (Solana)"] -->|Signature| B[Wallet Authorization]
+    B -->|Jupiter| C[On-chain Swap]
+    C -->|IDRX| D[Rupiah Stablecoin]
+    D --> E[Partner Settlement Rail]
+    E --> F["Merchant Bank / E-money Account (QRIS)"]
+```
+
+SOLQ acts purely as an **orchestrator** between these high-performance institutional components.
+
+---
+
+## 🔄 Payment Lifecycle
+
+1. **Authorization**: User initiates intent via a supported Solana wallet.
+2. **On-Chain Execution**: Decentralized swap protocols execute asset conversion to stable assets.
+3. **Settlement Logic**: Orchestrated routing to designated settlement endpoints.
+4. **Finalization**: Multi-oracle verification of transaction finality on the Solana mainnet.
+
+---
+
+## 🔒 Transaction State Machine
+
+SOLQ enforces a strict, linear state machine to ensure auditability and transaction integrity:
+
+```mermaid
+stateDiagram-v2
+    [*] --> CREATED
+    CREATED --> AUTHORIZATION_REQUESTED
+    AUTHORIZATION_REQUESTED --> AUTHORIZED
+    AUTHORIZED --> AWAITING_SETTLEMENT
+    AWAITING_SETTLEMENT --> COMPLETED
+    COMPLETED --> [*]
+```
+
+---
 
 ### 1. Non-Custodial by Design
 - Users retain full control of private keys.
