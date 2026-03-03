@@ -1,4 +1,18 @@
-# SOLQ
+<p align="center">
+  <img src="assets/logos/solq_logo_wordmark.jpg" alt="SOLQ - Solana-Based Payments" width="480"/>
+</p>
+
+<p align="center">
+  <img src="assets/logos/solq_logo_icon.jpg" alt="SOLQ Icon" width="120"/>
+</p>
+
+<p align="center">
+  <strong>SOLQ</strong> — Non-custodial Solana payment orchestrator for Indonesia's QRIS payment rails.
+  <br/>
+  <em>Real blockchain. Real settlement. Zero custody.</em>
+</p>
+
+---
 
 **SOLQ** is a non-custodial payment orchestrator that enables users to pay any existing **QRIS merchant** using **Solana-based assets**, without onboarding merchants and without holding funds.
 

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.solq"
-    compileSdk = 36
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
