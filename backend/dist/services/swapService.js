@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Swap Service (Mock)
+ * Swap Service
  * Handles crypto-to-fiat conversion rates and slippage.
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {

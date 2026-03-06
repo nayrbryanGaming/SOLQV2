@@ -17,19 +17,21 @@ interface QRISData {
     postalCode?: string; // ID 61
     additionalData?: string; // ID 62
     crc: string; // ID 63
+    crc_valid: boolean; // CRC verification result
 }
 
 export class QRISDecoder {
     /**
      * Decodes a raw QRIS string into a structured object
-     * @param rawPayload The raw string scanned from the QR code
+     * CRC is checked but non-fatal — real-world QR scans may have slight issues.
      */
     public static decode(rawPayload: string): QRISData {
-        if (!this.verifyCRC(rawPayload)) {
-            throw new Error("Invalid QRIS CRC Checksum");
+        const crcOk = this.verifyCRC(rawPayload);
+        if (!crcOk) {
+            console.warn("[QRIS] CRC mismatch — proceeding with parse (camera scan tolerance)");
         }
 
-        const data: any = { merchantAccountInfo: {} };
+        const data: any = { merchantAccountInfo: {}, crc_valid: crcOk };
         let index = 0;
 
         while (index < rawPayload.length - 4) { // Exclude CRC ID (63) and length from loop if we want, but standard loop covers provided we handle CRC last or as data

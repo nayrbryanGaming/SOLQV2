@@ -14,6 +14,14 @@ class SolanaService {
 
   late final String _dappPubKeyB58;
 
+  // Multi-RPC Failover (Mainnet Reliability)
+  static const List<String> _rpcEndpoints = [
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-mainnet.g.alchemy.com/v2/demo",
+    "https://rpc.ankr.com/solana",
+  ];
+  int _currentRpcIndex = 0;
+
   SolanaService._internal() {
     final random = Random.secure();
     final bytes = Uint8List(32);
@@ -41,15 +49,21 @@ class SolanaService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedAddr = prefs.getString('connected_wallet');
-      final savedType = prefs.getString('connected_wallet_type'); // NEW
+      final savedType = prefs.getString('connected_wallet_type');
       
       if (savedAddr != null && savedAddr.isNotEmpty) {
-        _connectedPublicKey = savedAddr;
-        _connectedWalletType = savedType ?? 'Unknown'; // Default if missing
-        _signatureController.add("CONNECTED");
+        // Validation: Ensure it's a valid B58 address before committing
+        try {
+          base58.decode(savedAddr);
+          _connectedPublicKey = savedAddr;
+          _connectedWalletType = savedType ?? 'Unknown';
+          _signatureController.add("CONNECTED");
+        } catch (_) {
+          await prefs.remove('connected_wallet');
+        }
       }
     } catch (e) {
-      // No saved connection
+      // Persistence layer failure
     }
   }
 
@@ -175,12 +189,8 @@ class SolanaService {
       return;
     }
 
-    final url = Uri.https('phantom.app', '/ul/v1/connect', {
-      'dapp_encryption_public_key': _dappPubKeyB58,
-      'cluster': 'mainnet-beta',
-      'app_url': 'https://solq.app',
-      'redirect_link': 'solq://onConnect',
-    });
+    // Use Universal Link for better reliability on Android/iOS
+    final url = Uri.parse('https://phantom.app/ul/v1/connect?dapp_encryption_public_key=$_dappPubKeyB58&cluster=mainnet-beta&app_url=https://solq.app&redirect_link=solq://onConnect');
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
@@ -200,12 +210,8 @@ class SolanaService {
       return;
     }
 
-    final url = Uri.https('solflare.com', '/ul/v1/connect', {
-      'dapp_encryption_public_key': _dappPubKeyB58,
-      'cluster': 'mainnet-beta',
-      'app_url': 'https://solq.app',
-      'redirect_link': 'solq://onConnect',
-    });
+    // Solflare Universal Link
+    final url = Uri.parse('https://solflare.com/ul/v1/connect?dapp_encryption_public_key=$_dappPubKeyB58&cluster=mainnet-beta&app_url=https://solq.app&redirect_link=solq://onConnect');
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
@@ -225,11 +231,14 @@ class SolanaService {
       return;
     }
 
-    // Jupiter supports standard solana:connect but we can try its specific scheme too
+    // Jupiter direct scheme support
     final url = Uri.parse('jupiter://connect?app_url=https://solq.app&redirect_link=solq://onConnect&cluster=mainnet-beta');
     
     try {
-       await launchUrl(url, mode: LaunchMode.externalApplication);
+       final launched = await launchUrl(url, mode: LaunchMode.externalNonBrowserApplication);
+       if (!launched) {
+         await connectUniversal(wallet: 'jupiter');
+       }
     } catch (e) {
        await connectUniversal(wallet: 'jupiter');
     }
@@ -242,7 +251,7 @@ class SolanaService {
     _connectedWalletType = cexName;
     
     if (kIsWeb) {
-      final webAddr = await WebProvider.connectPhantom(); // window.okxwallet etc handled in JS
+      final webAddr = await WebProvider.connectPhantom(); 
       if (webAddr != null) {
         _connectedPublicKey = webAddr;
         await _saveConnection(webAddr, type: cexName);
@@ -254,10 +263,9 @@ class SolanaService {
     final url = Uri.parse(schemeUrl);
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
-      // We manually add WAITING state since these act as browsers
       _signatureController.add("WAITING_BROWSER");
     } catch(e) {
-      await connectUniversal(wallet: cexName.toLowerCase()); // Fallback to intent
+      await connectUniversal(wallet: cexName.toLowerCase());
     }
   }
 
@@ -277,50 +285,46 @@ class SolanaService {
       }
     }
 
-    // NATIVE EVM: Use correct universal link for MetaMask mobile browser
+    // MetaMask Universal Link to its internal DApp browser
     final url = Uri.parse('https://metamask.app.link/dapp/solq.app');
-    
-    try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      await connectUniversal(wallet: 'metamask');
-    }
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   // ═══════════════════════════════════════════════
   //  UNIVERSAL CONNECT
   // ═══════════════════════════════════════════════
   Future<void> connectUniversal({String wallet = 'universal'}) async {
-    
     if (kIsWeb) {
-      // Web logic remains the same
-      if (wallet.toLowerCase() == 'phantom' || wallet == 'universal') {
-        final webAddr = await WebProvider.connectPhantom();
-        if (webAddr != null) {
-          _connectedPublicKey = webAddr;
-          _connectedWalletType = "Phantom (Web)";
-          await _saveConnection(webAddr, type: "Phantom (Web)");
-          _signatureController.add("CONNECTED");
-          return;
-        }
+      final webAddr = await WebProvider.connectPhantom();
+      if (webAddr != null) {
+        _connectedPublicKey = webAddr;
+        _connectedWalletType = "Universal (Web)";
+        await _saveConnection(webAddr, type: "Universal (Web)");
+        _signatureController.add("CONNECTED");
+        return;
       }
     }
     
     _connectedWalletType = wallet[0].toUpperCase() + wallet.substring(1);
 
-    // NATIVE INTENT: Using the standard solana:connect protocol
-    // This is the most flexible way to trigger any installed wallet supporting MWA/Solana Pay
-    // Using explicit uri paths to maximize Android Intent Resolution
-    final uri = Uri.parse('solana:connect?app_url=https://solq.app&redirect_link=solq://onConnect&cluster=mainnet-beta');
+    // Standard MWA / Solana Pay Connect URI
+    // Added app identity for improved wallet acceptance
+    // Using both 'solana:' and 'solana-pay:' schemes for maximum compatibility
+    final uri = Uri.parse('solana:connect?app_url=https://solq.app&redirect_link=solq://onConnect&cluster=mainnet-beta&name=SOLQ&icon=https://solq.app/logo.png');
+    final altUri = Uri.parse('solana-pay:connect?app_url=https://solq.app&redirect_link=solq://onConnect&cluster=mainnet-beta');
     
     try {
-      if (await canLaunchUrl(uri)) {
-         await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
-      } else {
-         await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
+       // Try MWA first (Mobile Wallet Adapter)
+       final launched = await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+       if (!launched) {
+          // Try Solana Pay scheme if generic solana: fails
+          final altLaunched = await launchUrl(altUri, mode: LaunchMode.externalNonBrowserApplication);
+          if (!altLaunched) {
+             // Fallback to normal external app (Universal Links)
+             await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+       }
     } catch (e) {
-      // Fallback for devices without a wallet app installed: send to portal or app store
       final fallbackStore = Uri.parse('https://phantom.app/ul/v1/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
       await launchUrl(fallbackStore, mode: LaunchMode.externalApplication);
     }
@@ -344,7 +348,7 @@ class SolanaService {
       return;
     }
 
-    // 1. Phatom/Solflare specific deep links (v1 specs)
+    // 1. Specific deep links for high-adoption wallets (v1 specs)
     if (walletType.contains('solflare')) {
       url = Uri.https('solflare.com', '/ul/v1/signTransaction', {
         'dapp_encryption_public_key': _dappPubKeyB58,
@@ -359,42 +363,49 @@ class SolanaService {
       });
     } else if (walletType.contains('jupiter')) {
        url = Uri.parse('jupiter://signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign');
+    } else if (walletType.contains('okx')) {
+       url = Uri.parse('okx://signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign');
+    } else if (walletType.contains('backpack')) {
+       url = Uri.parse('backpack://signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign');
     } else {
-      // 2. UNIVERSAL INTENT (Recommended for maximum flexibility)
-      // Standard: solana:signTransaction?transaction=<base64>&redirect_link=<url>
-      url = Uri.parse('solana:signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign&cluster=mainnet-beta');
+      // 2. UNIVERSAL SOLANA PAY INTENT (The Boss Standard)
+      url = Uri.parse('solana:signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign&cluster=mainnet-beta&name=SOLQ');
     }
 
     try {
-       if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalNonBrowserApplication);
-       } else {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-       }
+       // Attempt OS Native Dispatch
+       await launchUrl(url, mode: LaunchMode.externalNonBrowserApplication);
     } catch (e) {
+       // Fallback to Universal Intent
        final fallback = Uri.parse('solana:signTransaction?transaction=${Uri.encodeComponent(base64Transaction)}&redirect_link=solq://onSign');
        await launchUrl(fallback, mode: LaunchMode.externalApplication);
     }
   }
 
   // ═══════════════════════════════════════════════
-  //  RPC CLIENT (MAINNET)
+  //  RPC CLIENT (MAINNET with Failover)
   // ═══════════════════════════════════════════════
-  final RpcClient _rpc = RpcClient(
-    "https://api.mainnet-beta.solana.com",
-  );
+  RpcClient get _rpc => RpcClient(_rpcEndpoints[_currentRpcIndex]);
+
+  void _rotateRpc() {
+    _currentRpcIndex = (_currentRpcIndex + 1) % _rpcEndpoints.length;
+  }
 
   // ═══════════════════════════════════════════════
-  //  GET BALANCE
+  //  GET BALANCE (with RPC Failover)
   // ═══════════════════════════════════════════════
   Future<double> getBalance() async {
     if (_connectedPublicKey == null) return 0.0;
-    try {
-      final balance = await _rpc.getBalance(_connectedPublicKey!);
-      return balance.value / 1000000000; // Lamports to SOL
-    } catch (e) {
-      return 0.0;
+
+    for (int attempt = 0; attempt < _rpcEndpoints.length; attempt++) {
+      try {
+        final balance = await _rpc.getBalance(_connectedPublicKey!);
+        return balance.value / 1000000000; // Lamports to SOL
+      } catch (e) {
+        _rotateRpc();
+      }
     }
+    return 0.0;
   }
 
   // ═══════════════════════════════════════════════
@@ -426,23 +437,26 @@ class SolanaService {
   //  ON-CHAIN VERIFICATION (Phase 4 Truth Only)
   // ═══════════════════════════════════════════════
   Future<bool> waitForSignature(String signature) async {
-    try {
-      // Manual Polling Loop (Safe for all solana package versions)
-      for (int i = 0; i < 20; i++) {
-        final statuses = await _rpc.getSignatureStatuses([signature]);
-        final list = statuses.value;
-        if (list.isNotEmpty && list.first != null) {
-          final s = list.first!;
-          if (s.confirmationStatus == Commitment.finalized) {
-            return true;
+    // Poll with RPC failover for reliability
+    for (int i = 0; i < 30; i++) {
+      for (int rpcAttempt = 0; rpcAttempt < _rpcEndpoints.length; rpcAttempt++) {
+        try {
+          final statuses = await _rpc.getSignatureStatuses([signature]);
+          final list = statuses.value;
+          if (list.isNotEmpty && list.first != null) {
+            final s = list.first!;
+            if (s.confirmationStatus == Commitment.finalized) {
+              return true;
+            }
           }
+          break; // RPC call succeeded, wait before next poll
+        } catch (e) {
+          _rotateRpc();
         }
-        await Future.delayed(const Duration(seconds: 3));
       }
-      return false;
-    } catch (e) {
-      return false;
+      await Future.delayed(const Duration(seconds: 2));
     }
+    return false;
   }
 
   String generateSolanaPayUrl(String amount, String label, String message) {

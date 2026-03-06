@@ -21,12 +21,14 @@ var AuditEventType;
 })(AuditEventType || (exports.AuditEventType = AuditEventType = {}));
 class AuditLogger {
     static log(eventType, data) {
-        const entry = {
+        const entryBase = {
             timestamp: new Date().toISOString(),
             eventType,
-            data,
-            hash: 'SHA256_PLACEHOLDER' // In prod, hash previous log for chain of custody
+            data
         };
+        const crypto = require('crypto');
+        const hash = crypto.createHash('sha256').update(JSON.stringify(entryBase)).digest('hex');
+        const entry = Object.assign(Object.assign({}, entryBase), { integrity_hash: hash });
         const logLine = JSON.stringify(entry) + '\n';
         // Append to local file (simulating secure storage)
         fs_1.default.appendFile(this.logFile, logLine, (err) => {

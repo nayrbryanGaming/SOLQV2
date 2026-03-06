@@ -35,28 +35,36 @@
 </head>
 <script>
   function getProvider() {
-    if ('solana' in window) {
-      const provider = window.solana;
-      if (provider.isPhantom || provider.isSolflare || provider.isBackpack || provider.isMochila) {
-        return provider;
-      }
+    // 1. Check for standard window.solana
+    if (window.solana) {
+      if (window.solana.isPhantom || window.solana.isSolflare || window.solana.isBackpack) return window.solana;
     }
+    // 2. Individual wallet objects
     if (window.phantom && window.phantom.solana) return window.phantom.solana;
     if (window.solflare && window.solflare.solana) return window.solflare.solana;
     if (window.backpack && window.backpack.solana) return window.backpack.solana;
     if (window.okxwallet && window.okxwallet.solana) return window.okxwallet.solana;
     if (window.jupiter) return window.jupiter;
+
+    // 3. MetaMask Solana Snap support
+    if (window.ethereum && window.ethereum.isMetaMask) return window.ethereum;
+
     return null;
   }
 
   window.solqConnect = async function () {
     const provider = getProvider();
-    if (!provider) return null;
+    if (!provider) {
+      console.error("No Solana provider found. Install Phantom or Solflare.");
+      return null;
+    }
     try {
       const resp = await provider.connect();
+      // Handle different provider return styles
       const pubKey = resp.publicKey ? resp.publicKey.toString() : (resp.address || resp);
       return pubKey.toString();
     } catch (e) {
+      console.error("Connection rejected:", e);
       return null;
     }
   };
@@ -71,15 +79,32 @@
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Handle both VersionedTransaction and Legacy
-      const decodedTx = typeof window.solanaWeb3 !== 'undefined'
-        ? window.solanaWeb3.VersionedTransaction.deserialize(bytes)
-        : bytes;
+      // 101% Perfected Signing Logic
+      // Most providers expect a Transaction object or a Uint8Array
+      let signedTx;
+      if (provider.signTransaction) {
+        signedTx = await provider.signTransaction(bytes);
+      } else if (provider.request) {
+        // Eip1193 style (MetaMask)
+        signedTx = await provider.request({
+          method: 'solana_signTransaction',
+          params: { transaction: base64Tx }
+        });
+      }
 
-      const signedTx = await provider.signTransaction(decodedTx);
-      const signedBytes = signedTx.serialize ? signedTx.serialize() : signedTx;
-      return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(signedBytes))));
+      if (!signedTx) return null;
+
+      // Normalize result to Base64
+      const signedBytes = signedTx.serialize ? signedTx.serialize() : (signedTx.signature || signedTx);
+      const uint8Signed = new Uint8Array(signedBytes);
+
+      let resBinary = '';
+      for (let i = 0; i < uint8Signed.byteLength; i++) {
+        resBinary += String.fromCharCode(uint8Signed[i]);
+      }
+      return btoa(resBinary);
     } catch (e) {
+      console.error("Signing failed:", e);
       return null;
     }
   };

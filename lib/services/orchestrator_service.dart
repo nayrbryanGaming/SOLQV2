@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:url_launcher/url_launcher.dart'; // REQUIRED IMPORT
+import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/payment_intent.dart';
 import 'solq_service.dart';
 import 'solana_service.dart';
@@ -17,8 +18,20 @@ class OrchestratorService {
   PaymentIntent? _currentIntent;
   PaymentIntent? get currentIntent => _currentIntent;
 
-  // Persistence
+  bool _isInitialized = false;
+  final _coingecko = CoinGeckoService();
+  final _jupiter = JupiterService();
+
+  // Persistence & Init
   Future<void> init() async {
+    if (_isInitialized) return;
+
+    // Warm up price oracle
+    try {
+      await _coingecko.init();
+    } catch (_) {}
+
+    // Listen for wallet signatures
     SolanaService().signatureStream.listen((event) {
       if (event.startsWith("SIGNED:")) {
         final parts = event.split(":");
@@ -27,24 +40,26 @@ class OrchestratorService {
           final signature = parts[2];
           confirmOnChain(intentId, signature);
         }
-      } else if (event != "CONNECTED" && event != "DISCONNECTED" && event != "DISCONNECT") {
-        // Handle raw signature (from solq://onSign?signature=...)
+      } else if (event != "CONNECTED" && event != "DISCONNECTED" && event != "DISCONNECT" && event != "WAITING_BROWSER") {
+        // Handle raw signature
         if (_currentIntent != null && event.length > 30) {
            confirmOnChain(_currentIntent!.intentId, event);
         }
       }
     });
+
+    _isInitialized = true;
   }
 
   Future<void> confirmOnChain(String intentId, String signature) async {
+    if (_currentIntent == null) return;
+
     try {
-      
-      
-      // Update UI to show we are verifying on Mainnet
+      // Update UI to verification state
       _currentIntent = _currentIntent!.copyWith(state: PaymentState.awaitingSettlement);
       _intentController.add(_currentIntent!);
 
-      // Phase 4 Truth: Poll Solana RPC
+      // Phase 4 Truth: Poll Solana RPC for finalization
       final isFinalized = await SolanaService().waitForSignature(signature);
       
       if (!isFinalized) {
@@ -53,12 +68,25 @@ class OrchestratorService {
         return;
       }
 
-      
-      final baseUrl = await SOLQService.getPersistedBaseUrl();
-      await SOLQService(baseUrl: baseUrl).confirmPayment(intentId, signature);
-      
-      // Force sync after backend updates its state
-      await syncStatus();
+      // Confirm with backend — backend verifies on-chain & settles
+      final baseUrl = await SOLQService.getWorkingBaseUrl();
+      final result = await SOLQService(baseUrl: baseUrl).confirmPaymentAndGetResult(intentId, signature);
+
+      // Parse backend response directly
+      final status = result['status']?.toString().toUpperCase() ?? '';
+      if (status == 'COMPLETED') {
+        _currentIntent = _currentIntent!.copyWith(
+          state: PaymentState.completed,
+          settlementReference: result['txHash'] ?? result['settlement_ref'] ?? signature,
+        );
+        _intentController.add(_currentIntent!);
+      } else if (status == 'FAILED') {
+        _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
+        _intentController.add(_currentIntent!);
+      } else {
+        // Fallback: sync status from backend
+        await syncStatus();
+      }
 
     } catch (e) {
       _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
@@ -70,35 +98,30 @@ class OrchestratorService {
     _currentIntent = null;
   }
 
-  final _coingecko = CoinGeckoService();
-  final _jupiter = JupiterService();
-
   // STEP 1: CREATE INTENT (FROM QRIS)
   Future<void> createIntent(String qrisPayload) async {
     try {
-      
-      
-      // 1. Fetch Real-Time IDR Rate (Elon/Altman Rule)
+      // 1. Fetch Real-Time IDR Rate
       final marketPrices = await _coingecko.getPrices();
-      if (marketPrices == null) {
-        throw Exception("Gagal mengambil harga pasar (Circuit Breaker)");
+      if (marketPrices == null || marketPrices['SOL'] == null) {
+        throw Exception("ORACLE FAILURE: Gagal mengambil harga pasar.");
       }
 
-      // 2. Call Backend to parse and register intent
-      final baseUrl = await SOLQService.getPersistedBaseUrl();
+      // 2. Call Backend to parse and register intent (auto-discover: local → cloud)
+      final baseUrl = await SOLQService.getWorkingBaseUrl();
       final solq = SOLQService(baseUrl: baseUrl);
       final response = await solq.createPaymentIntent(qrisPayload);
       
       _currentIntent = PaymentIntent.fromJson(response);
       
       // 3. Enrich with Real-Time Quote from Jupiter
-      if (_currentIntent!.amountIdr != "0") {
+      if (_currentIntent!.amountIdr != "0" && _currentIntent!.amountIdr != "0.0") {
         final quote = await _jupiter.getQuote(_currentIntent!.amountIdr);
         if (quote != null) {
-          // ORACLE CHECK: Sam Altman verification logic
+          // ORACLE CHECK: Verify Jupiter price vs Market
           final isValid = _coingecko.verifyRate(quote.price, marketPrices['SOL']!);
           if (!isValid) {
-            throw Exception("SECURITY BLOCK: Terindikasi manipulasi harga oracle. Transaksi dibatalkan.");
+            throw Exception("SECURITY: Terindikasi manipulasi harga (Deviation > 2.5%).");
           }
 
           _currentIntent = _currentIntent!.copyWith(
@@ -111,43 +134,55 @@ class OrchestratorService {
             effectiveFeePercent: quote.effectiveFeePercent,
             userSavingsVsQris: quote.userSavingsVsQris,
           );
+        } else {
+           throw Exception("JUPITER: Gagal mendapatkan rute swap optimal.");
         }
+      } else {
+        // STATIC QRIS - amount is 0, user must input manually
+        _currentIntent = _currentIntent!.copyWith(
+          state: PaymentState.pendingAmount,
+          qrisPayload: qrisPayload,
+        );
       }
 
       _intentController.add(_currentIntent!);
 
     } catch (e) {
-      _intentController.addError("Gagal memproses pembayaran. Detail: $e");
+      String errorMsg;
+      if (e is TimeoutException || e.toString().contains('TimeoutException') || e.toString().contains('Future not completed')) {
+        errorMsg = 'SERVER TIMEOUT: Backend tidak merespons. Pastikan backend berjalan dan terhubung ke WiFi yang sama. Ketuk ikon ⚙ untuk ubah IP server.';
+      } else if (e is SocketException || e.toString().contains('SocketException') || e.toString().contains('No route to host') || e.toString().contains('Connection refused')) {
+        errorMsg = 'KONEKSI GAGAL: Tidak dapat terhubung ke server. Pastikan backend berjalan. Ketuk ikon ⚙ untuk ubah IP server.';
+      } else {
+        errorMsg = 'Gagal memproses: $e';
+      }
+      _intentController.addError(errorMsg);
     }
   }
 
   // STEP 1.5: SET MANUAL AMOUNT (IF STATIC QRIS)
   Future<void> setAmount(String intentId, String amountIdr) async {
-    if (_currentIntent == null || _currentIntent!.qrisPayload == null) {
-      // Cannot set amount
-      return;
-    }
+    if (_currentIntent == null || _currentIntent!.qrisPayload == null) return;
 
     try {
-      // Basic validation
       int amount = int.parse(amountIdr);
-      
-      // 1. Fetch Real-Time IDR Rate for verification
-      await _coingecko.getPrices();
+      if (amount <= 0) throw Exception("Nominal harus lebih dari 0");
 
-      // 2. Update intent on backend
-      final baseUrl = await SOLQService.getPersistedBaseUrl();
+      // Update intent on backend (auto-discover: local → cloud)
+      final baseUrl = await SOLQService.getWorkingBaseUrl();
       final response = await SOLQService(baseUrl: baseUrl).createPaymentIntent(_currentIntent!.qrisPayload!, amount: amount);
       
       _currentIntent = PaymentIntent.fromJson(response);
       
-      // 3. Enrich with Real-Time Quote (Elon Musk Standard)
+      // Enrich with Real-Time Quote
       final quote = await _jupiter.getQuote(amountIdr);
       if (quote != null) {
-        // ORACLE CHECK: Sam Altman verification logic
-        final isValid = _coingecko.verifyRate(quote.price, (await _coingecko.getPrices())!['SOL']!);
-        if (!isValid) {
-           throw Exception("SECURITY BLOCK: Terindikasi manipulasi harga oracle. Transaksi dibatalkan.");
+        final marketPrices = await _coingecko.getPrices();
+        if (marketPrices != null && marketPrices['SOL'] != null) {
+          final isValid = _coingecko.verifyRate(quote.price, marketPrices['SOL']!);
+          if (!isValid) {
+             throw Exception("SECURITY: Terindikasi manipulasi harga.");
+          }
         }
 
         _currentIntent = _currentIntent!.copyWith(
@@ -165,7 +200,15 @@ class OrchestratorService {
       _intentController.add(_currentIntent!);
       
     } catch (e) {
-       _intentController.addError("Gagal menetapkan nominal: $e");
+      String errorMsg;
+      if (e is TimeoutException || e.toString().contains('TimeoutException') || e.toString().contains('Future not completed')) {
+        errorMsg = 'SERVER TIMEOUT: Backend tidak merespons. Periksa koneksi WiFi dan IP server.';
+      } else if (e is SocketException || e.toString().contains('SocketException') || e.toString().contains('Connection refused')) {
+        errorMsg = 'KONEKSI GAGAL: Tidak dapat terhubung ke server.';
+      } else {
+        errorMsg = 'Gagal menetapkan nominal: $e';
+      }
+      _intentController.addError(errorMsg);
     }
   }
 
@@ -173,7 +216,7 @@ class OrchestratorService {
   Future<void> requestAuthorization(String intentId) async {
     if (_currentIntent == null) return;
     
-    // Update state locally first for UI responsiveness
+    // Update state for UI
     _currentIntent = _currentIntent!.copyWith(state: PaymentState.authorizationRequested);
     _intentController.add(_currentIntent!);
 
@@ -181,12 +224,10 @@ class OrchestratorService {
       final id = _currentIntent!.intentId;
       final solana = SolanaService();
       
-      // BOSS RULE: No simulations. Try DIRECT TRANSACTION BRIDGE first if wallet is connected.
-      // This is more reliable than Solana Pay for most wallets as it gives us a direct hash.
+      // Try DIRECT TRANSACTION if wallet is connected
       if (solana.isConnected) {
         try {
-          // 1. Get transaction via backend POST (Real Mainnet Transaction)
-          final baseUrl = await SOLQService.getPersistedBaseUrl();
+          final baseUrl = await SOLQService.getWorkingBaseUrl();
           final txData = await SOLQService(baseUrl: baseUrl).getSolanaPayTransaction(id, solana.connectedAddress!);
           final txBase64 = txData['transaction'];
           
@@ -194,34 +235,28 @@ class OrchestratorService {
             await solana.signSwapTransaction(txBase64);
             return;
           }
-        } catch (e) {
-             // Fallback
+        } catch (_) {
+          // Fallback to Solana Pay
         }
       }
 
-      // FALLBACK: Standard Solana Pay Protocol (Universal)
-      // This works by having the wallet app fetch the transaction from our backend.
-      final baseUrl = await SOLQService.getPersistedBaseUrl();
-      final host = baseUrl.replaceAll('http://', '').replaceAll('/v1', '');
-      
-      // Solana Pay URI format: solana:https://<host>/solana-pay/<id>
-      // We use https if possible, or http for local/dev debugging (though BOSS wants REAL).
+      // FALLBACK: Solana Pay Protocol
+      final baseUrl = await SOLQService.getWorkingBaseUrl();
+      final host = baseUrl.replaceAll('http://', '').replaceAll('https://', '').replaceAll('/v1', '');
       final scheme = baseUrl.startsWith('https') ? 'https' : 'http';
       final solanaPayUrl = "solana:$scheme://$host/solana-pay/$id";
       
       final uri = Uri.parse(solanaPayUrl);
       
-      // Launch and hope the OS picks it up
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        // Last Effort: Direct link to well-known wallets
-        final universalUri = Uri.parse("solana:connect?redirect=$solanaPayUrl"); 
-        await launchUrl(universalUri, mode: LaunchMode.externalApplication);
+        // Direct fallback to Phantom universal link
+        final phantomUrl = Uri.parse("https://phantom.app/ul/v1/transaction?redirect=solq://onSign&payload=$solanaPayUrl");
+        await launchUrl(phantomUrl, mode: LaunchMode.externalApplication);
       }
 
     } catch (e) {
-      // Auth Request Error
       _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
       _intentController.add(_currentIntent!);
     }
@@ -229,9 +264,7 @@ class OrchestratorService {
 
   // LISTEN FOR WEBHOOK UPDATES (Called by WebhookService)
   Future<void> handleAsyncWebhook(String intentId, String status, String refId) async {
-    if (_currentIntent == null || _currentIntent!.intentId != intentId) {
-      return;
-    }
+    if (_currentIntent == null || _currentIntent!.intentId != intentId) return;
 
     final normalizedStatus = status.toUpperCase();
     if (normalizedStatus == 'COMPLETED' || normalizedStatus == 'SUCCESS') {
@@ -240,14 +273,13 @@ class OrchestratorService {
          settlementReference: refId
        );
        _intentController.add(_currentIntent!);
-       // Optionally sync full details
+
+       // Sync full details
        try {
         final updatedData = await SOLQService().getPaymentIntentStatus(intentId);
         _currentIntent = PaymentIntent.fromJson(updatedData);
         _intentController.add(_currentIntent!);
-       } catch(e) {
-         // Sync failed
-       }
+       } catch(_) {}
     } else if (status == 'FAILED') {
        _currentIntent = _currentIntent!.copyWith(state: PaymentState.failed);
        _intentController.add(_currentIntent!);
@@ -255,8 +287,6 @@ class OrchestratorService {
   }
 
   // LISTEN FOR COMPLETION (WEBHOOK/POLLING)
-  // Sam Altman Standard: No "assume success". 
-  // Poll backend which polls Mainnet RPC.
   void onPaymentStatusUpdate(Map<String, dynamic> data) {
     if (_currentIntent == null) return;
     
@@ -282,7 +312,7 @@ class OrchestratorService {
   Future<void> syncStatus() async {
     if (_currentIntent == null) return;
     try {
-      final baseUrl = await SOLQService.getPersistedBaseUrl();
+      final baseUrl = await SOLQService.getWorkingBaseUrl();
       final updatedData = await SOLQService(baseUrl: baseUrl).getPaymentIntentStatus(_currentIntent!.intentId);
       final newIntent = PaymentIntent.fromJson(updatedData);
       
@@ -290,8 +320,6 @@ class OrchestratorService {
         _currentIntent = newIntent;
         _intentController.add(_currentIntent!);
       }
-    } catch (e) {
-      // Log failure silently or via proper logger in real prod, but BOSS wants NO PRINT
-    }
+    } catch (_) {}
   }
 }

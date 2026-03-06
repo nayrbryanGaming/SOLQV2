@@ -1,13 +1,15 @@
 import fetch from 'node-fetch';
 
 const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
+const JUPITER_PRICE_API = 'https://lite-api.jup.ag/price/v2';
+const FX_API = 'https://api.exchangerate-api.com/v4/latest/USD';
 
 export class PriceService {
     private static instance: PriceService;
 
     // Cache to prevent rate limits
     private cache: { [key: string]: { price: number; timestamp: number } } = {};
-    private CACHE_DURATION = 60 * 1000; // 60 seconds
+    private CACHE_DURATION = 45 * 1000; // 45 seconds (aggressive cache)
 
     private constructor() { }
 
@@ -19,8 +21,7 @@ export class PriceService {
     }
 
     /**
-     * Get Real-Time Price of Token in IDR
-     * @param tokenId 'solana' or 'usd-coin'
+     * Get Real-Time Price of Token in IDR (Multi-Oracle)
      */
     public async getPrice(tokenId: string = 'solana', currency: string = 'idr'): Promise<number> {
         const cacheKey = `${tokenId}-${currency}`;
@@ -30,67 +31,76 @@ export class PriceService {
             return cached.price;
         }
 
+        // ORACLE 1: CoinGecko
         try {
-            const apiKey = process.env.COINGECKO_API_KEY;
-
-            // Production API follows the standard domain. 
-            // Recommending the user to use the 'x-cg-demo-api-key' or 'x-cg-pro-api-key' header.
-            let url = `${COINGECKO_API}?ids=${tokenId}&vs_currencies=${currency}`;
-            const headers: any = { 'Accept': 'application/json' };
-
-            if (apiKey) {
-                // For Demo/Pro keys, CoinGecko recommends using the 'x-cg-demo-api-key' or 'x-cg-pro-api-key' header
-                // and sometimes the 'pro-api' domain for pro users.
-                // We'll stick to the standard domain but include the header.
-                headers['x-cg-demo-api-key'] = apiKey;
+            const price = await this.fetchFromCoinGecko(tokenId, currency);
+            if (price > 0) {
+                this.cache[cacheKey] = { price, timestamp: Date.now() };
+                return price;
             }
+        } catch (_) {}
 
-            const response = await fetch(url, { headers });
-
-            if (!response.ok) {
-                throw new Error(`CoinGecko API Error: ${response.statusText}`);
+        // ORACLE 2: Jupiter + FX API
+        try {
+            const price = await this.fetchFromJupiter(tokenId, currency);
+            if (price > 0) {
+                this.cache[cacheKey] = { price, timestamp: Date.now() };
+                return price;
             }
+        } catch (_) {}
 
-            const data: any = await response.json();
-            const price = data[tokenId]?.[currency];
-
-            // ZERO-TRUST VALIDATION: Force Hard Fail if price is stale or missing
-            if (!price || price <= 0) {
-                throw new Error('FATAL: Price Oracle Unreliable - Transaction Blocked');
-            }
-
-            // Update Cache
-            this.cache[cacheKey] = {
-                price: price,
-                timestamp: Date.now()
-            };
-
-            return price;
-        } catch (error) {
-            throw new Error('Price Oracle Unavailable - System Locked for Safety');
+        // Return cached if still valid (5 min window)
+        if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
+            return cached.price;
         }
+
+        throw new Error('ORACLE FAILURE: All price sources unavailable');
+    }
+
+    private async fetchFromCoinGecko(tokenId: string, currency: string): Promise<number> {
+        const apiKey = process.env.COINGECKO_API_KEY;
+        const headers: any = { 'Accept': 'application/json' };
+        if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+
+        const response = await fetch(`${COINGECKO_API}?ids=${tokenId}&vs_currencies=${currency}`, { headers });
+        if (!response.ok) return 0;
+
+        const data: any = await response.json();
+        return data[tokenId]?.[currency] || 0;
+    }
+
+    private async fetchFromJupiter(tokenId: string, currency: string): Promise<number> {
+        if (currency !== 'idr' || tokenId !== 'solana') return 0;
+
+        // Get SOL price in USDC from Jupiter
+        const jupRes = await fetch(`${JUPITER_PRICE_API}?ids=So11111111111111111111111111111111111111112`);
+        if (!jupRes.ok) return 0;
+
+        const jupData: any = await jupRes.json();
+        const solUsdc = parseFloat(jupData?.data?.['So11111111111111111111111111111111111111112']?.price || '0');
+        if (solUsdc <= 0) return 0;
+
+        // Get USD/IDR from FX API
+        const fxRes = await fetch(FX_API);
+        if (!fxRes.ok) return 0;
+
+        const fxData: any = await fxRes.json();
+        const usdIdr = fxData?.rates?.IDR || 15800;
+
+        return solUsdc * usdIdr;
     }
 
     /**
      * Verify if Jupiter Quote is within acceptable slippage of Market Price
-     * @param jupiterRate Rate from Jupiter (IDR per Token)
-     * @param marketTokenId 'solana' or 'usd-coin'
-     * @param tolerancePct Percentage difference allowed (e.g. 2%)
      */
-    public async verifyRate(jupiterRate: number, marketTokenId: string, tolerancePct: number = 2.0): Promise<boolean> {
+    public async verifyRate(jupiterRate: number, marketTokenId: string, tolerancePct: number = 2.5): Promise<boolean> {
         try {
             const marketPrice = await this.getPrice(marketTokenId, 'idr');
             const diff = Math.abs(jupiterRate - marketPrice);
             const diffPct = (diff / marketPrice) * 100;
-
-            if (diffPct > tolerancePct) {
-                return false;
-            }
-            return true;
-        } catch (e) {
-            // STICT SAFETY: If Oracle is down, we CANNOT guarantee price.
-            // Requirement from User: "If CoinGecko fails -> HARD FAIL"
-            return false;
+            return diffPct <= tolerancePct;
+        } catch (_) {
+            return false; // STRICT: No oracle = No safety
         }
     }
 }

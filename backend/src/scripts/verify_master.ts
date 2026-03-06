@@ -27,7 +27,7 @@ async function verifyMasterIntegrity() {
 
     // 2. Jupiter Quote API (ExactOut Engine)
     try {
-        const res = await fetch('https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur&amount=10000&swapMode=ExactOut');
+        const res = await fetch('https://lite-api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur&amount=10000&swapMode=ExactOut');
         status.jupiter = res.ok ? "✅ ONLINE (v6 Protocol)" : "❌ OFFLINE";
     } catch (e) {
         status.jupiter = "❌ OFFLINE";

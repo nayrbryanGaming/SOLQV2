@@ -1,22 +1,40 @@
 import 'dotenv/config';
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import { paymentRoutes } from './routes/paymentRoutes';
 import solanaService from './services/solanaService';
 import { ReconciliationWorker } from './services/reconciliation';
 
-// Start Autonomous Reconciliation Worker
+// Autonomous Reconciliation (detect stuck TX every 60s)
 ReconciliationWorker.run();
-setInterval(() => {
-    ReconciliationWorker.run();
-}, 60000);
+setInterval(() => ReconciliationWorker.run(), 60000);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ── SECURITY ──
+app.use(bodyParser.json({ limit: '50kb' }));
 app.use(cors());
-app.use(bodyParser.json());
+app.disable('x-powered-by');
+app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+});
+
+// Rate limiter (60 req/min/IP)
+const hits = new Map<string, { n: number; t: number }>();
+app.use((req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip || 'x';
+    const now = Date.now();
+    const e = hits.get(ip);
+    if (!e || now > e.t) { hits.set(ip, { n: 1, t: now + 60000 }); return next(); }
+    if (e.n >= 60) return res.status(429).json({ error: 'Rate limit' });
+    e.n++;
+    next();
+});
+setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now > v.t) hits.delete(k); }, 300000);
 
 // Main Routes
 app.use('/v1', paymentRoutes);
@@ -42,8 +60,18 @@ app.post('/solana-pay/:intentId', async (req: Request, res: Response) => {
         const { intentId } = req.params;
         const { account } = req.body; // Wallet Public Key from Phantom
 
-        if (!account) {
+        if (!account || typeof account !== 'string') {
             return res.status(400).json({ error: "Missing account" });
+        }
+
+        // SECURITY: Validate intentId format (must be pi_ prefix)
+        if (!intentId.startsWith('pi_') || intentId.length > 50) {
+            return res.status(400).json({ error: "Invalid intent ID format" });
+        }
+
+        // SECURITY: Validate Solana public key format (base58, 32-44 chars)
+        if (account.length < 32 || account.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(account)) {
+            return res.status(400).json({ error: "Invalid Solana wallet address" });
         }
 
         // 1. Get Intent
@@ -69,6 +97,20 @@ app.post('/solana-pay/:intentId', async (req: Request, res: Response) => {
     }
 });
 
-app.listen(Number(PORT), '0.0.0.0', () => {
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`[SOLQ] Backend running on port ${PORT}`);
+});
+
+server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+        const altPort = Number(PORT) + 1;
+        console.warn(`[SOLQ] Port ${PORT} in use, trying ${altPort}...`);
+        app.listen(altPort, '0.0.0.0', () => {
+            console.log(`[SOLQ] Backend running on fallback port ${altPort}`);
+        });
+    } else {
+        console.error('[SOLQ] Server error:', err);
+        process.exit(1);
+    }
 });
 

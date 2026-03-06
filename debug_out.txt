@@ -1,0 +1,5 @@
+﻿LOCALAPPDATA = C:\Users\arche\AppData\Local
+Check: C:\Users\arche\AppData\Local\Pub\Cache\hosted\pub.dev -> True
+  FOUND: C:\Users\arche\AppData\Local\Pub\Cache\hosted\pub.dev\mobile_scanner-3.5.7
+Check: C:\Users\arche\AppData\Roaming\Pub\Cache\hosted\pub.dev -> False
+Check: C:\Users\arche\.pub-cache\hosted\pub.dev -> False

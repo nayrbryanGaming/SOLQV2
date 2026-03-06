@@ -7,8 +7,36 @@
 </p>
 
 <p align="center">
-  <strong>Website:</strong> <a href="https://solq.id">solq.id</a> | <strong>Status:</strong> Controlled Mainnet-Beta
+  <strong>Website:</strong> <a href="https://solq.id">solq.id</a> | <strong>Status:</strong> Mainnet Production
 </p>
+
+---
+
+## 🚀 Quick Start (Production Deployment)
+
+### Prerequisites
+- Flutter 3.3.0+
+- Node.js 18+
+- Android Studio / ADB
+
+### 1. Backend Setup
+```bash
+cd backend
+npm install
+npm run build
+npm start
+```
+
+### 2. Flutter App Build
+```bash
+flutter pub get
+flutter build apk --release
+```
+
+### 3. Install on Android
+```bash
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
 
 ---
 

@@ -1,47 +1,54 @@
-# SOLQ 101% PERFECTION - CLEAN RUN & DEPLOYMENT SCRIPT
-# mission: Eradicate all cache, purge old builds, and launch a fresh production-ready APK.
+# ============================================================
+# SOLQ - clean_run.ps1
+# Workaround: adb install fails with spaces in path.
+# Solution: build -> copy APK to C:\tmp -> push -> pm install -> launch
+# ============================================================
 
-Write-Host "🚀 INITIALIZING SOLQ DEEP CLEAN..." -ForegroundColor Cyan
+$ADB   = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+$PKG   = "com.example.solq"
+$APK_SRC = "E:\000VSCODE PROJECT MULAI DARI DESEMBER 2025\SOLQ - 3 MAR 2026 ANDROID STUDIO OPUS\build\app\outputs\flutter-apk\app-debug.apk"
+$APK_TMP = "C:\tmp\solq.apk"
+$ROOT  = "E:\000VSCODE PROJECT MULAI DARI DESEMBER 2025\SOLQ - 3 MAR 2026 ANDROID STUDIO OPUS"
 
-# 1. Purge Flutter Cache
-Write-Host "📦 Purging Flutter build artifacts..."
-flutter clean
+Set-Location $ROOT
 
-# 2. Force uninstall old debug versions (Fixes signature mismatch)
-Write-Host "📱 Uninstalling old versions from connected devices..."
-adb uninstall com.example.solq
-adb uninstall com.nayrbryan.solq
+# ── 1. CLEAN OLD PACKAGES OFF DEVICE ────────────────────────
+Write-Host "`n[1/5] Uninstalling old packages from device..." -ForegroundColor Yellow
+& "$ADB" uninstall com.example.solq        2>$null
+& "$ADB" uninstall com.example.SOLQ        2>$null
+& "$ADB" uninstall com.example.warungpay   2>$null
+& "$ADB" shell pm uninstall --user 0 com.example.solq      2>$null
+& "$ADB" shell pm uninstall --user 0 com.example.SOLQ      2>$null
+& "$ADB" shell pm uninstall --user 0 com.example.warungpay 2>$null
+Write-Host "   Done." -ForegroundColor Green
 
-# 3. Resetting Gradle state...
-Write-Host "🐘 Resetting Gradle state..."
-Remove-Item -Path "android/.gradle" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "android/app/build" -Recurse -Force -ErrorAction SilentlyContinue
+# ── 2. BUILD DEBUG APK ───────────────────────────────────────
+Write-Host "`n[2/5] Building debug APK..." -ForegroundColor Cyan
+flutter build apk --debug
+if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED" -ForegroundColor Red; exit 1 }
+Write-Host "   Build OK." -ForegroundColor Green
 
-# 3. Aggressive Cache Wipe
-Write-Host "🧼 Wiping system caches..."
-flutter pub cache clean --force
+# ── 3. COPY APK TO SHORT PATH (no spaces) ───────────────────
+Write-Host "`n[3/5] Copying APK to C:\tmp\solq.apk ..." -ForegroundColor Cyan
+New-Item -ItemType Directory -Path C:\tmp -Force | Out-Null
+Copy-Item -LiteralPath $APK_SRC -Destination $APK_TMP -Force
+Write-Host "   Copied." -ForegroundColor Green
 
-# 4. Re-fetch Dependencies
-Write-Host "📥 Fetching dependencies..."
-flutter pub get
-
-# 5. Build Verification
-Write-Host "🏗️ Verifying production lints..."
-flutter analyze
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ LINT FAILURE. Resolve before Mainnet deployment." -ForegroundColor Red
-    exit $LASTEXITCODE
+# ── 4. PUSH + INSTALL ON DEVICE ─────────────────────────────
+Write-Host "`n[4/5] Pushing APK to device..." -ForegroundColor Cyan
+& "$ADB" push $APK_TMP /data/local/tmp/solq.apk
+Write-Host "   Installing via pm install..." -ForegroundColor Cyan
+$result = & "$ADB" shell pm install -r -d -g /data/local/tmp/solq.apk
+Write-Host "   pm result: $result"
+if ($result -notmatch "Success") {
+    Write-Host "INSTALL FAILED: $result" -ForegroundColor Red
+    exit 1
 }
+Write-Host "   Installed OK." -ForegroundColor Green
 
-# 6. Launch Recommendation
-Write-Host ""
-Write-Host "✅ PROJECT IS 101% READY FOR MAINNET." -ForegroundColor Green
-Write-Host "------------------------------------------------"
-Write-Host "TO RUN ON PHYSICAL DEVICE FOR 30,000 TX TEST:"
-Write-Host "1. Connect device via USB"
-Write-Host "2. Run: flutter run --release"
-Write-Host ""
-Write-Host "TO BUILD FINAL APK:"
-Write-Host "flutter build apk --release"
-Write-Host "------------------------------------------------"
+# ── 5. LAUNCH APP ────────────────────────────────────────────
+Write-Host "`n[5/5] Launching $PKG ..." -ForegroundColor Cyan
+& "$ADB" shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
+
+Write-Host "`nSOLQ is running on device." -ForegroundColor Green
+Write-Host "To see logs: adb logcat -s flutter" -ForegroundColor White
