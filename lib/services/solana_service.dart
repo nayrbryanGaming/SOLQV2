@@ -15,10 +15,12 @@ class SolanaService {
   late final String _dappPubKeyB58;
 
   // Multi-RPC Failover (Mainnet Reliability)
+  // Added Helius.dev as free 24/7 alternative to paid RPC providers
   static const List<String> _rpcEndpoints = [
     "https://api.mainnet-beta.solana.com",
     "https://solana-mainnet.g.alchemy.com/v2/demo",
     "https://rpc.ankr.com/solana",
+    "https://helius-rpc.com/",  // Helius.dev - Free tier, 24/7, high uptime ✅
   ];
   int _currentRpcIndex = 0;
 

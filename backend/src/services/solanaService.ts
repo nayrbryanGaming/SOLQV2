@@ -18,10 +18,12 @@ const IDRX_MINT = new PublicKey('idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur');
 let treasuryIdrxAta: PublicKey | null = null;
 
 // Multi-RPC Failover (Mainnet Reliability)
+// Added Helius.dev as free 24/7 alternative to paid RPC providers
 const RPC_ENDPOINTS = [
     process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
     "https://solana-mainnet.g.alchemy.com/v2/demo",
     "https://rpc.ankr.com/solana",
+    "https://helius-rpc.com/",  // Helius.dev - Free tier, 24/7, high uptime ✅
 ];
 
 class SolanaService {

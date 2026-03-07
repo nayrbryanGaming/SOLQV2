@@ -23,12 +23,12 @@
    SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
    TREASURY_WALLET=ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m
    ```
-8. Deploy! Railway kasih URL: `https://solq-backend.up.railway.app`
+8. Deploy! Railway kasih URL: `https://nayrbryanGaming.up.railway.app`
 
 ### Update Flutter App:
 Di `lib/services/solq_service.dart`, ganti URL Railway:
 ```dart
-'https://NAMA-APP-MU.up.railway.app/v1',
+'https://nayrbryanGaming.up.railway.app/v1',  // ✅ LIVE
 ```
 
 ---
@@ -107,9 +107,9 @@ File `lib/services/solq_service.dart` sudah update:
 Edit `lib/services/solq_service.dart`:
 ```dart
 static const List<String> _cloudFallbackUrls = [
-  'https://RAILWAY-URL-MU.up.railway.app/v1',   // ← ganti ini
-  'https://RENDER-URL-MU.onrender.com/v1',        // ← ganti ini  
-  'https://KOYEB-URL-MU.koyeb.app/v1',            // ← ganti ini
+  'https://nayrbryanGaming.up.railway.app/v1',  // ✅ RAILWAY — LIVE
+  'https://solq-backend.onrender.com/v1',         // ← ganti kalau udah deploy Render
+  'https://solq-backend.koyeb.app/v1',             // ← ganti kalau udah deploy Koyeb
 ];
 ```
 
@@ -123,4 +123,6 @@ Sekarang langsung:
 3. Update `_cloudFallbackUrls[0]` di Flutter
 4. Build APK baru
 5. **DONE — Backend 24/7 tanpa laptop!**
+
+
 

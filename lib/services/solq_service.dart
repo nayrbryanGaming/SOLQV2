@@ -11,12 +11,16 @@ class SOLQService {
   static const String defaultBaseUrl = 'http://192.168.18.15:3000/v1';
 
   // ── FREE CLOUD BACKENDS (24/7 Fallback) ──
-  // Priority: Railway → Render → Koyeb
+  // Priority: Render → Fly.io → Koyeb → Glitch → Heroku
   // Update these URLs after deploying to each platform
+  // NOTE: Railway sekarang bayar → pakai alternatives gratis berikut
   static const List<String> _cloudFallbackUrls = [
-    'https://solq-backend.up.railway.app/v1',   // Railway (free, 24/7)
-    'https://solq-backend.onrender.com/v1',       // Render (free tier)
-    'https://solq-backend.koyeb.app/v1',          // Koyeb (free tier)
+    'https://solq-backend.onrender.com/v1',       // Render (free tier, 24/7) ✅ RECOMMENDED
+    'https://solq-backend.fly.dev/v1',            // Fly.io (free tier, 3 shared-cpu-1x 256MB)
+    'https://solq-backend.koyeb.app/v1',          // Koyeb (free tier, 24/7)
+    'https://solq-glitch.glitch.me/v1',           // Glitch (free, 24/7 dengan project activity)
+    // Railway no longer recommended (paid tier required)
+    // 'https://nayrbryanGaming.up.railway.app/v1',  // Railway (NOW PAID) ❌ SKIP
   ];
 
   // Timeouts — generous to handle slow mobile/wifi connections
@@ -34,7 +38,8 @@ class SOLQService {
     if (persisted.contains('railway.app') ||
         persisted.contains('onrender.com') ||
         persisted.contains('koyeb.app') ||
-        persisted.contains('fly.dev')) {
+        persisted.contains('fly.dev') ||
+        persisted.contains('glitch.me')) {
       return persisted;
     }
 
