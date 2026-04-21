@@ -16,6 +16,7 @@ const bankPartnerService_1 = require("../services/bankPartnerService");
 const auditLogger_1 = require("../services/auditLogger");
 const swapService_1 = require("../services/swapService");
 const router = (0, express_1.Router)();
+const confirmLocks = new Set();
 // In-memory store for MVP (Typed for better structure)
 const store_1 = require("../services/store");
 router.post('/payment-intents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -46,8 +47,9 @@ router.post('/payment-intents', (req, res) => __awaiter(void 0, void 0, void 0, 
             transactionAmount = parseFloat(input_amount);
         }
         const quote = yield swapService_1.SwapService.getQuote(transactionAmount, currency || 'IDRX');
-        const merchant_account = qrisDecoder_1.QRISDecoder.extractAccountNumber(decoded) || 'UNKNOWN';
-        const nmid = qrisDecoder_1.QRISDecoder.extractAccountNumber(decoded); // Re-using robust extraction for NMID-like fields
+        const extractedAccount = qrisDecoder_1.QRISDecoder.extractAccountNumber(decoded);
+        const merchant_account = extractedAccount || 'UNKNOWN';
+        const nmid = extractedAccount || undefined;
         const bankCode = qrisDecoder_1.QRISDecoder.detectBank(decoded);
         const platformFee = quote.targetAmount * 0.01;
         const estNetworkFee = 0.000005; // Standard Solana gas
@@ -69,6 +71,7 @@ router.post('/payment-intents', (req, res) => __awaiter(void 0, void 0, void 0, 
             },
             qris_data: decoded,
             merchant_account: merchant_account,
+            nmid: nmid,
             bank_code: bankCode,
             platformFee: platformFee,
             networkFee: estNetworkFee,
@@ -103,7 +106,10 @@ router.get('/payment-intents/:id', (req, res) => {
 });
 router.post('/payment-intents/:id/confirm', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const id = req.params.id;
-    const { tx_hash } = req.body;
+    const { tx_hash, payer_account } = req.body;
+    if (confirmLocks.has(id)) {
+        return res.status(409).json({ status: 'pending', message: 'Confirmation already in progress' });
+    }
     // SECURITY: Validate tx_hash format (base58, 87-88 chars for Solana signatures)
     if (!tx_hash || typeof tx_hash !== 'string' || tx_hash.length < 80 || tx_hash.length > 100) {
         return res.status(400).json({ error: 'Invalid transaction hash' });
@@ -112,9 +118,20 @@ router.post('/payment-intents/:id/confirm', (req, res) => __awaiter(void 0, void
     if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(tx_hash)) {
         return res.status(400).json({ error: 'Invalid transaction hash format' });
     }
+    if (payer_account !== undefined) {
+        if (typeof payer_account !== 'string' ||
+            payer_account.length < 32 ||
+            payer_account.length > 44 ||
+            !/^[1-9A-HJ-NP-Za-km-z]+$/.test(payer_account)) {
+            return res.status(400).json({ error: 'Invalid payer_account format' });
+        }
+    }
     const intent = store_1.paymentIntents[id];
     if (!intent) {
         return res.status(404).json({ error: 'Payment Intent not found' });
+    }
+    if (intent.txHash && intent.txHash === tx_hash) {
+        return res.json({ status: intent.status, message: 'Idempotent confirm accepted', txHash: intent.txHash });
     }
     if (intent.status !== 'CREATED' && intent.status !== 'AUTHORIZATION_REQUESTED') {
         return res.json({ status: intent.status, message: 'Intent already processing' });
@@ -124,100 +141,127 @@ router.post('/payment-intents/:id/confirm', (req, res) => __awaiter(void 0, void
     if (existingWithSameHash) {
         return res.status(400).json({ status: 'failed', message: 'REPLAY ATTACK BLOCKED: This tx_hash was already used for another intent.' });
     }
-    // REAL ON-CHAIN VERIFICATION (Multi-RPC Failover)
-    const solanaService = require('../services/solanaService').default;
-    // Verify transaction is finalized on Solana Mainnet
-    const isValid = yield solanaService.verifyTransaction(tx_hash || '');
-    if (!isValid) {
-        return res.status(400).json({ status: 'failed', message: 'On-chain verification failed. TX not finalized or Treasury did not receive funds.' });
-    }
-    // State: AUTHORIZED (on-chain verified)
-    intent.status = 'AUTHORIZED';
-    intent.txHash = tx_hash;
-    auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.PAYMENT_INTENT_CONFIRMED, {
-        intentId: id,
-        txHash: intent.txHash
-    });
-    // ═══════════════════════════════════════════════════════════
-    //  SOLANA → QRIS SETTLEMENT (IDRX OFF-RAMP TO MERCHANT)
-    //
-    //  Jupiter swap verified on-chain → IDRX API sends IDR to
-    //  merchant's GoPay/OVO/Bank account extracted from QRIS.
-    //  If IDRX API fails → fallback to on-chain IDRX settlement.
-    // ═══════════════════════════════════════════════════════════
-    intent.status = 'AWAITING_SETTLEMENT';
+    confirmLocks.add(id);
     try {
-        // Attempt FULL PIPELINE: IDRX off-ramp to merchant bank/e-wallet
-        const settlementResult = yield bankPartnerService_1.BankPartnerService.requestSettlement({
-            amount: intent.amount_details.fiat_amount,
-            currency: 'IDR',
-            destinationAccount: {
-                bankCode: intent.bank_code || 'GOPAY',
-                accountNumber: intent.merchant_account || ''
-            },
-            referenceId: intent.id
-        });
-        if (settlementResult.status === 'SUCCESS' || settlementResult.status === 'PENDING') {
-            intent.status = 'COMPLETED';
-            intent.settlement_ref = settlementResult.partnerRef;
-            auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.SETTLEMENT_COMPLETED, {
-                intentId: id,
-                txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                mode: settlementResult.method,
-                amount_idr: intent.amount_details.fiat_amount,
-                destination: `${intent.bank_code}:${intent.merchant_account}`,
-                estimatedArrival: settlementResult.estimatedArrival,
-                message: settlementResult.message
-            });
-            return res.json({
-                status: 'COMPLETED',
-                message: `Pembayaran berhasil! Rp ${intent.amount_details.fiat_amount.toLocaleString()} dikirim ke ${intent.bank_code || 'merchant'}.`,
-                txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
-                offramp_status: settlementResult.status,
-                offramp_method: settlementResult.method,
-                offramp_eta: settlementResult.estimatedArrival,
-                offramp_message: settlementResult.message,
-                fundsSecured: settlementResult.fundsSecured,
-                treasury: 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m',
-            });
+        // REAL ON-CHAIN VERIFICATION (Multi-RPC Failover)
+        const solanaService = require('../services/solanaService').default;
+        // Verify transaction is finalized on Solana Mainnet
+        const isValid = yield solanaService.verifyTransaction(tx_hash || '', id);
+        if (!isValid) {
+            return res.status(400).json({ status: 'failed', message: 'On-chain verification failed. TX not finalized or Treasury did not receive funds.' });
         }
-        else {
-            // All off-ramp layers failed — fallback to on-chain settlement
-            console.warn(`[SETTLEMENT] Off-ramp failed: ${settlementResult.message}. On-chain fallback.`);
-            intent.status = 'COMPLETED';
-            intent.settlement_ref = `onchain:${tx_hash}`;
-            auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.SETTLEMENT_COMPLETED, {
-                intentId: id,
-                txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                mode: 'ON_CHAIN_FALLBACK',
-                offramp_error: settlementResult.message
+        if (payer_account) {
+            intent.payer_account = payer_account;
+        }
+        // Fallback to signer extracted from finalized on-chain transaction.
+        const onChainPayer = yield solanaService.extractPayerAccount(tx_hash || '');
+        if (onChainPayer) {
+            if (intent.payer_account && intent.payer_account !== onChainPayer) {
+                return res.status(400).json({
+                    status: 'failed',
+                    message: 'Payer mismatch between wallet callback and on-chain signature.'
+                });
+            }
+            intent.payer_account = onChainPayer;
+        }
+        // State: AUTHORIZED (on-chain verified)
+        intent.status = 'AUTHORIZED';
+        intent.txHash = tx_hash;
+        auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.PAYMENT_INTENT_CONFIRMED, {
+            intentId: id,
+            txHash: intent.txHash
+        });
+        // ═══════════════════════════════════════════════════════════
+        //  SOLANA → QRIS SETTLEMENT (IDRX OFF-RAMP TO MERCHANT)
+        //
+        //  Jupiter swap verified on-chain → IDRX API sends IDR to
+        //  merchant's GoPay/OVO/Bank account extracted from QRIS.
+        //  If IDRX API fails → fallback to on-chain IDRX settlement.
+        // ═══════════════════════════════════════════════════════════
+        intent.status = 'AWAITING_SETTLEMENT';
+        try {
+            // Attempt FULL PIPELINE: IDRX off-ramp to merchant bank/e-wallet
+            const settlementResult = yield bankPartnerService_1.BankPartnerService.requestSettlement({
+                amount: intent.amount_details.fiat_amount,
+                currency: 'IDR',
+                destinationAccount: {
+                    bankCode: intent.bank_code || 'GOPAY',
+                    accountNumber: intent.merchant_account || ''
+                },
+                referenceId: intent.id
             });
+            if (settlementResult.status === 'SUCCESS') {
+                intent.status = 'COMPLETED';
+                intent.settlement_ref = settlementResult.partnerRef;
+                auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.SETTLEMENT_COMPLETED, {
+                    intentId: id,
+                    txHash: intent.txHash,
+                    settlement_ref: intent.settlement_ref,
+                    mode: settlementResult.method,
+                    amount_idr: intent.amount_details.fiat_amount,
+                    destination: `${intent.bank_code}:${intent.merchant_account}`,
+                    estimatedArrival: settlementResult.estimatedArrival,
+                    message: settlementResult.message
+                });
+                return res.json({
+                    status: 'COMPLETED',
+                    message: `Pembayaran berhasil! Rp ${intent.amount_details.fiat_amount.toLocaleString()} dikirim ke ${intent.bank_code || 'merchant'}.`,
+                    txHash: intent.txHash,
+                    settlement_ref: intent.settlement_ref,
+                    explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
+                    offramp_status: settlementResult.status,
+                    offramp_method: settlementResult.method,
+                    offramp_eta: settlementResult.estimatedArrival,
+                    offramp_message: settlementResult.message,
+                    fundsSecured: settlementResult.fundsSecured,
+                    payer_account: intent.payer_account,
+                    treasury: 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m',
+                });
+            }
+            else {
+                // All off-ramp layers failed or are still pending.
+                // Do not mark the payment as complete without a settlement confirmation.
+                console.warn(`[SETTLEMENT] Off-ramp pending/failed: ${settlementResult.message}. Marking as awaiting settlement.`);
+                intent.status = 'AWAITING_SETTLEMENT';
+                intent.settlement_ref = settlementResult.partnerRef || `pending:${tx_hash}`;
+                auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.SETTLEMENT_PENDING, {
+                    intentId: id,
+                    txHash: intent.txHash,
+                    settlement_ref: intent.settlement_ref,
+                    mode: 'AWAITING_SETTLEMENT',
+                    offramp_error: settlementResult.message
+                });
+                return res.json({
+                    status: 'AWAITING_SETTLEMENT',
+                    message: 'Pembayaran on-chain terverifikasi. Settlement masih menunggu konfirmasi partner.',
+                    txHash: intent.txHash,
+                    settlement_ref: intent.settlement_ref,
+                    explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
+                    offramp_status: settlementResult.status,
+                    offramp_method: settlementResult.method,
+                    offramp_eta: settlementResult.estimatedArrival,
+                    offramp_message: settlementResult.message,
+                    fundsSecured: settlementResult.fundsSecured,
+                    payer_account: intent.payer_account,
+                });
+            }
+        }
+        catch (err) {
+            // Total failure — keep the payment in settlement pending state.
+            intent.status = 'AWAITING_SETTLEMENT';
+            intent.settlement_ref = `pending:${tx_hash}`;
             return res.json({
-                status: 'COMPLETED',
-                message: 'Pembayaran on-chain berhasil. IDRX di wallet Anda. Off-ramp ke bank sedang diproses ulang.',
+                status: 'AWAITING_SETTLEMENT',
+                message: 'Swap on-chain terverifikasi. Off-ramp masih menunggu retry atau webhook partner.',
                 txHash: intent.txHash,
                 settlement_ref: intent.settlement_ref,
                 explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
-                offramp_status: 'FALLBACK',
-                withdraw_guide: 'Cairkan IDRX: Indodax/Pintu → Jual → WD ke bank'
+                payer_account: intent.payer_account,
             });
         }
     }
-    catch (err) {
-        // Total failure — still mark as completed (on-chain swap already happened)
-        intent.status = 'COMPLETED';
-        intent.settlement_ref = `onchain:${tx_hash}`;
-        return res.json({
-            status: 'COMPLETED',
-            message: 'Swap on-chain berhasil. Off-ramp akan diproses.',
-            txHash: intent.txHash,
-            settlement_ref: intent.settlement_ref,
-            explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`
-        });
+    finally {
+        confirmLocks.delete(id);
     }
 }));
 // Webhook Receiver from Off-Ramp Partner
@@ -253,8 +297,16 @@ router.get('/transactions/:id/status', (req, res) => {
     });
 });
 router.get('/stats', (req, res) => {
-    const successCount = Object.values(store_1.paymentIntents).filter(intent => intent.status === 'COMPLETED').length;
-    res.json({ success_count: successCount });
+    const intents = Object.values(store_1.paymentIntents);
+    const successCount = intents.filter(intent => intent.status === 'COMPLETED').length;
+    const uniqueWalletUsers = new Set(intents
+        .map(intent => intent.payer_account)
+        .filter((value) => typeof value === 'string' && value.trim().length > 0)).size;
+    res.json({
+        success_count: successCount,
+        total_intents: intents.length,
+        unique_wallet_users: uniqueWalletUsers,
+    });
 });
 // Settlement infrastructure status
 router.get('/settlement-info', (req, res) => {

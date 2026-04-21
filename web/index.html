@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <!--
@@ -18,6 +18,7 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
@@ -33,8 +34,180 @@
   <title>SOLQ</title>
   <link rel="manifest" href="manifest.json">
 </head>
+<body>
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <script>
-  function getProvider() {
+  function toBase58(bytes) {
+    const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    if (!bytes || bytes.length === 0) return '';
+    const digits = [0];
+    for (let i = 0; i < bytes.length; i++) {
+      let carry = bytes[i];
+      for (let j = 0; j < digits.length; j++) {
+        const x = digits[j] * 256 + carry;
+        digits[j] = x % 58;
+        carry = Math.floor(x / 58);
+      }
+      while (carry > 0) {
+        digits.push(carry % 58);
+        carry = Math.floor(carry / 58);
+      }
+    }
+    let zeros = 0;
+    while (zeros < bytes.length && bytes[zeros] === 0) {
+      zeros++;
+    }
+    let result = '';
+    for (let i = 0; i < zeros; i++) {
+      result += '1';
+    }
+    for (let i = digits.length - 1; i >= 0; i--) {
+      result += alphabet[digits[i]];
+    }
+    return result;
+  }
+
+  function normalizePublicKey(value) {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (value.toString) return value.toString();
+    return null;
+  }
+
+  function base64ToBytes(base64Tx) {
+    const binaryString = atob(base64Tx);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  function normalizeWalletHint(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function unwrapSolanaProvider(provider) {
+    if (!provider) return null;
+    if (provider.solana && typeof provider.solana === 'object') {
+      return provider.solana;
+    }
+    return provider;
+  }
+
+  function isSolanaProviderLike(provider) {
+    if (!provider) return false;
+    if (provider.isSolana || provider.isPhantom || provider.isSolflare || provider.isBackpack || provider.isOKXWallet || provider.isJupiter) {
+      return true;
+    }
+    if (provider.publicKey && (typeof provider.connect === 'function' || typeof provider.request === 'function')) {
+      return true;
+    }
+    if (typeof provider.signTransaction === 'function' || typeof provider.signAndSendTransaction === 'function') return true;
+    return false;
+  }
+
+  function pushCandidate(list, provider) {
+    const normalized = unwrapSolanaProvider(provider);
+    if (isSolanaProviderLike(normalized)) {
+      list.push(normalized);
+    }
+  }
+
+  function detectWalletHint(provider) {
+    if (!provider) return '';
+    if (provider.isPhantom) return 'phantom';
+    if (provider.isSolflare) return 'solflare';
+    if (provider.isBackpack) return 'backpack';
+    if (provider.isOKXWallet || provider.isOKX) return 'okx';
+    if (provider.isMetaMask) return 'metamask';
+    if (provider.isJupiter) return 'jupiter';
+    return '';
+  }
+
+  function providerScore(provider, hint) {
+    if (!provider || !isSolanaProviderLike(provider)) return 0;
+    const normalizedHint = normalizeWalletHint(hint);
+    if (normalizedHint.includes('phantom') && provider.isPhantom) return 100;
+    if (normalizedHint.includes('solflare') && provider.isSolflare) return 100;
+    if (normalizedHint.includes('backpack') && provider.isBackpack) return 100;
+    if (normalizedHint.includes('okx') && (provider.isOKXWallet || provider.isOKX)) return 100;
+    if (normalizedHint.includes('metamask') && provider.isMetaMask) return 100;
+    if (normalizedHint.includes('jupiter') && provider.isJupiter) return 100;
+
+    let score = 0;
+    if (provider.connect) score += 10;
+    if (provider.signTransaction || provider.signAndSendTransaction || provider.request) score += 10;
+    if (provider.publicKey) score += 5;
+    return score;
+  }
+
+  function pickBestProvider(candidates, hint) {
+    const valid = (candidates || []).filter(Boolean);
+    if (!valid.length) return null;
+
+    const scored = valid
+      .map((provider) => ({ provider, score: providerScore(provider, hint) }))
+      .sort((a, b) => b.score - a.score);
+
+    return scored[0] ? scored[0].provider : null;
+  }
+
+  function getProvider(preferredWallet) {
+    const want = normalizeWalletHint(preferredWallet || window.__solqLastWalletHint);
+
+    const byHint = [];
+    if (want.includes('phantom')) {
+      pushCandidate(byHint, window.phantom && window.phantom.solana ? window.phantom.solana : null);
+    }
+    if (want.includes('solflare')) {
+      pushCandidate(byHint, window.solflare && window.solflare.solana ? window.solflare.solana : null);
+    }
+    if (want.includes('backpack')) {
+      pushCandidate(byHint, window.backpack && window.backpack.solana ? window.backpack.solana : null);
+    }
+    if (want.includes('okx')) {
+      pushCandidate(byHint, window.okxwallet && window.okxwallet.solana ? window.okxwallet.solana : null);
+    }
+    if (want.includes('jupiter')) {
+      pushCandidate(byHint, window.jupiter && window.jupiter.solana ? window.jupiter.solana : window.jupiter || null);
+    }
+    if (want.includes('metamask') && window.ethereum) {
+      const providers = window.ethereum.providers || [window.ethereum];
+      for (const p of providers) {
+        if (p && p.isMetaMask && p.solana) {
+          pushCandidate(byHint, p.solana);
+        }
+      }
+    }
+    for (const p of byHint) {
+      if (p) return p;
+    }
+
+    const providerPool = [];
+
+    if (window.solana && Array.isArray(window.solana.providers)) {
+      for (const p of window.solana.providers) {
+        pushCandidate(providerPool, p);
+      }
+    }
+
+    if (window.solana && window.solana.providers && typeof window.solana.providers === 'object' && !Array.isArray(window.solana.providers)) {
+      for (const p of Object.values(window.solana.providers)) {
+        pushCandidate(providerPool, p);
+      }
+    }
+
+    pushCandidate(providerPool, window.phantom && window.phantom.solana ? window.phantom.solana : null);
+    pushCandidate(providerPool, window.solflare && window.solflare.solana ? window.solflare.solana : null);
+    pushCandidate(providerPool, window.backpack && window.backpack.solana ? window.backpack.solana : null);
+    pushCandidate(providerPool, window.okxwallet && window.okxwallet.solana ? window.okxwallet.solana : null);
+    pushCandidate(providerPool, window.jupiter && window.jupiter.solana ? window.jupiter.solana : null);
+    pushCandidate(providerPool, window.jupiter || null);
+
+    const bestFromPool = pickBestProvider(providerPool, want);
+    if (bestFromPool) return bestFromPool;
+
     // 1. Check for standard window.solana
     if (window.solana) {
       if (window.solana.isPhantom || window.solana.isSolflare || window.solana.isBackpack) return window.solana;
@@ -44,65 +217,135 @@
     if (window.solflare && window.solflare.solana) return window.solflare.solana;
     if (window.backpack && window.backpack.solana) return window.backpack.solana;
     if (window.okxwallet && window.okxwallet.solana) return window.okxwallet.solana;
-    if (window.jupiter) return window.jupiter;
+    if (window.jupiter && window.jupiter.solana) return window.jupiter.solana;
+    if (window.jupiter && isSolanaProviderLike(window.jupiter)) return window.jupiter;
 
-    // 3. MetaMask Solana Snap support
-    if (window.ethereum && window.ethereum.isMetaMask) return window.ethereum;
+    // 3. Check EIP-1193 providers that expose Solana namespace (snaps/wrappers)
+    const providers = (window.ethereum && window.ethereum.providers) ? window.ethereum.providers : [];
+    for (const p of providers) {
+      if (p && (p.isMetaMask || p.isOKX || p.isBraveWallet) && p.solana && isSolanaProviderLike(p.solana)) {
+        return p.solana;
+      }
+    }
 
     return null;
   }
 
-  window.solqConnect = async function () {
-    const provider = getProvider();
+  window.solqConnect = async function (preferredWallet) {
+    const provider = getProvider(preferredWallet);
     if (!provider) {
       console.error("No Solana provider found. Install Phantom or Solflare.");
       return null;
     }
     try {
       const resp = await provider.connect();
-      // Handle different provider return styles
-      const pubKey = resp.publicKey ? resp.publicKey.toString() : (resp.address || resp);
-      return pubKey.toString();
+      const pubKey = normalizePublicKey(
+        (resp && resp.publicKey) ? resp.publicKey :
+        (resp && resp.address) ? resp.address :
+        provider.publicKey ? provider.publicKey : resp
+      );
+      if (pubKey) {
+        const explicitHint = normalizeWalletHint(preferredWallet);
+        window.__solqLastWalletHint = explicitHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+      }
+      return pubKey;
     } catch (e) {
       console.error("Connection rejected:", e);
       return null;
     }
   };
 
-  window.solqSign = async function (base64Tx) {
-    const provider = getProvider();
+  window.solqSign = async function (base64Tx, preferredWallet) {
+    const normalizedHint = normalizeWalletHint(preferredWallet) || window.__solqLastWalletHint || '';
+    const provider = getProvider(normalizedHint);
     if (!provider) return null;
     try {
-      const binaryString = atob(base64Tx);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      if (!window.solanaWeb3) {
+        console.error("@solana/web3.js belum termuat.");
+        return null;
       }
 
-      // 101% Perfected Signing Logic
-      // Most providers expect a Transaction object or a Uint8Array
+      const txBytes = base64ToBytes(base64Tx);
+      let txObject;
+
+      try {
+        txObject = window.solanaWeb3.VersionedTransaction.deserialize(txBytes);
+      } catch (_) {
+        txObject = window.solanaWeb3.Transaction.from(txBytes);
+      }
+
       let signedTx;
-      if (provider.signTransaction) {
-        signedTx = await provider.signTransaction(bytes);
+      if (provider.signAndSendTransaction) {
+        const sent = await provider.signAndSendTransaction(txObject, {
+          skipPreflight: false,
+          maxRetries: 3,
+          preflightCommitment: 'confirmed'
+        });
+        if (typeof sent === 'string') {
+          return sent;
+        }
+        if (sent && sent.signature) {
+          window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+          return sent.signature.toString();
+        }
+      } else if (provider.signTransaction) {
+        signedTx = await provider.signTransaction(txObject);
+
+        const connection = new window.solanaWeb3.Connection(
+          'https://api.mainnet-beta.solana.com',
+          'confirmed'
+        );
+
+        const raw = signedTx.serialize();
+        const signature = await connection.sendRawTransaction(raw, {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
+        if (signature) {
+          window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+          return signature;
+        }
       } else if (provider.request) {
-        // Eip1193 style (MetaMask)
+        // EIP-1193 style with Solana RPC bridge
         signedTx = await provider.request({
-          method: 'solana_signTransaction',
-          params: { transaction: base64Tx }
+          method: 'solana_signAndSendTransaction',
+          params: [{ transaction: base64Tx }]
         });
       }
 
       if (!signedTx) return null;
 
-      // Normalize result to Base64
-      const signedBytes = signedTx.serialize ? signedTx.serialize() : (signedTx.signature || signedTx);
-      const uint8Signed = new Uint8Array(signedBytes);
-
-      let resBinary = '';
-      for (let i = 0; i < uint8Signed.byteLength; i++) {
-        resBinary += String.fromCharCode(uint8Signed[i]);
+      // Priority 1: if wallet already returned a tx signature hash, use it.
+      if (typeof signedTx === 'string') {
+        window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+        return signedTx;
       }
-      return btoa(resBinary);
+      if (signedTx.signature) {
+        if (typeof signedTx.signature === 'string') {
+          window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+          return signedTx.signature;
+        }
+        if (signedTx.signature instanceof Uint8Array) {
+          window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+          return toBase58(signedTx.signature);
+        }
+      }
+
+      // Priority 2: fallback by extracting signature from serialized tx bytes.
+      if (signedTx.serialize) {
+        const raw = signedTx.serialize();
+        const rawBytes = new Uint8Array(raw);
+        if (rawBytes.length >= 65) {
+          const sigLength = rawBytes[0];
+          if (sigLength > 0 && rawBytes.length >= (1 + sigLength * 64)) {
+            const firstSig = rawBytes.slice(1, 65);
+            window.__solqLastWalletHint = normalizedHint || detectWalletHint(provider) || window.__solqLastWalletHint || '';
+            return toBase58(firstSig);
+          }
+        }
+      }
+
+      return null;
     } catch (e) {
       console.error("Signing failed:", e);
       return null;

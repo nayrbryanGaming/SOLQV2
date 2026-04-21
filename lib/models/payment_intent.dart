@@ -31,7 +31,7 @@ class PaymentIntent {
   final DateTime createdAt;
   final DateTime updatedAt;
   
-  // SAM ALTMAN FEE TRANSPARENCY FIELDS
+  // PRODUCTION FEE TRANSPARENCY FIELDS
   final double? effectiveFeePercent;  // Total fee as percentage (for transparency)
   final double? userSavingsVsQris;    // How much user saves vs QRIS
   
@@ -69,6 +69,7 @@ class PaymentIntent {
       DateTime.now().isAfter(authorizationExpiresAt ?? DateTime.now());
 
   PaymentIntent copyWith({
+    String? merchantName,
     PaymentState? state,
     String? amountIdr,
     String? estimatedCryptoAmount,
@@ -89,7 +90,7 @@ class PaymentIntent {
   }) {
     return PaymentIntent(
       intentId: intentId,
-      merchantName: merchantName,
+      merchantName: merchantName ?? this.merchantName,
       amountIdr: amountIdr ?? this.amountIdr,
       currency: currency,
       state: state ?? this.state,
@@ -152,7 +153,13 @@ class PaymentIntent {
 
     return PaymentIntent(
       intentId: json['id']?.toString() ?? json['intentId']?.toString() ?? '',
-      merchantName: json['merchant']?['name']?.toString() ?? json['merchantName']?.toString() ?? 'SME Merchant',
+      merchantName: json['merchant']?['name']?.toString() ??
+          json['qris_translation']?['merchant_name']?.toString() ??
+          json['qris_data']?['translation']?['merchant_name']?.toString() ??
+          json['qris_data']?['merchantNameDisplay']?.toString() ??
+          json['qris_data']?['merchantName']?.toString() ??
+          json['merchantName']?.toString() ??
+          'UNKNOWN MERCHANT',
       amountIdr: json['amount_details']?['fiat_amount']?.toString() ?? json['amountIdr']?.toString() ?? '0',
       currency: json['amount_details']?['currency_source']?.toString() ?? json['currency']?.toString() ?? 'IDR',
       state: json['status'] != null ? mapState(json['status']) : (json['state'] != null ? PaymentState.values[json['state'] as int] : PaymentState.created),
@@ -166,9 +173,22 @@ class PaymentIntent {
       networkFee: json['networkFee']?.toDouble(),
       slippage: json['slippage']?.toDouble(),
       maxFee: json['maxFee']?.toDouble(),
-      merchantAccount: json['merchant_account']?.toString() ?? json['merchantAccount']?.toString(),
-      bankCode: json['bank_code']?.toString() ?? json['bankCode']?.toString(),
-      nmid: json['nmid']?.toString(),
+        merchantAccount: json['merchant_account']?.toString() ??
+          json['merchantAccount']?.toString() ??
+          json['qris_translation']?['merchant_account']?.toString() ??
+          json['qris_data']?['translation']?['merchant_account']?.toString() ??
+          json['qris_data']?['merchantAccount']?.toString(),
+        bankCode: json['bank_code']?.toString() ??
+          json['bankCode']?.toString() ??
+          json['qris_translation']?['bank_code']?.toString() ??
+          json['qris_data']?['translation']?['bank_code']?.toString() ??
+          json['qris_data']?['bankCode']?.toString(),
+      nmid: json['nmid']?.toString() ??
+          json['merchant_id']?.toString() ??
+          json['merchant']?['id']?.toString() ??
+          json['qris_translation']?['merchant_id']?.toString() ??
+          json['qris_data']?['translation']?['merchant_id']?.toString() ??
+          json['qris_data']?['merchantId']?.toString(),
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
       updatedAt: json['updatedAt'] != null 
           ? DateTime.parse(json['updatedAt']) 

@@ -5,7 +5,7 @@
  * CRITICAL: This will be demo'd in front of 500 global investors.
  * ZERO tolerance for lost funds. Every IDRX is accounted for.
  *
- * HOW IT WORKS (honest, no bullshit):
+ * HOW IT WORKS (Transparent, production-grade):
  *
  *   1. User pays SOL/USDC → Jupiter swaps to IDRX → lands in TREASURY WALLET
  *      (on-chain, verifiable on Solana Explorer, funds SAFE)

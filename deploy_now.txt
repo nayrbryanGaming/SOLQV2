@@ -1,6 +1,0 @@
-﻿=== PUSH ===
-adb: error: 18219-byte write failed: No error
-=== INSTALL ===
-adb.exe: no devices/emulators found
-=== LAUNCH ===
-adb.exe: no devices/emulators found

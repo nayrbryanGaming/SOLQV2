@@ -17,7 +17,9 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const body_parser_1 = __importDefault(require("body-parser"));
 const paymentRoutes_1 = require("./routes/paymentRoutes");
+const adminRoutes_1 = require("./routes/adminRoutes");
 const solanaService_1 = __importDefault(require("./services/solanaService"));
+const store_1 = require("./services/store");
 const reconciliation_1 = require("./services/reconciliation");
 // Autonomous Reconciliation (detect stuck TX every 60s)
 reconciliation_1.ReconciliationWorker.run();
@@ -35,15 +37,23 @@ app.use((_req, res, next) => {
 });
 // Rate limiter (60 req/min/IP)
 const hits = new Map();
+const RATE_LIMIT_PER_MIN = Math.max(0, Number(process.env.RATE_LIMIT_PER_MIN || '60'));
+const DISABLE_RATE_LIMIT = process.env.DISABLE_RATE_LIMIT === '1';
+function isLocalIp(ip) {
+    return ip.includes('127.0.0.1') || ip.includes('::1') || ip.includes('::ffff:127.0.0.1');
+}
 app.use((req, res, next) => {
     const ip = req.ip || 'x';
+    if (DISABLE_RATE_LIMIT || RATE_LIMIT_PER_MIN <= 0 || isLocalIp(ip)) {
+        return next();
+    }
     const now = Date.now();
     const e = hits.get(ip);
     if (!e || now > e.t) {
         hits.set(ip, { n: 1, t: now + 60000 });
         return next();
     }
-    if (e.n >= 60)
+    if (e.n >= RATE_LIMIT_PER_MIN)
         return res.status(429).json({ error: 'Rate limit' });
     e.n++;
     next();
@@ -53,6 +63,8 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of hits)
         hits.delete(k); }, 300000);
 // Main Routes
 app.use('/v1', paymentRoutes_1.paymentRoutes);
+app.use('/v1/admin', adminRoutes_1.adminRoutes);
+app.use('/admin', adminRoutes_1.adminRoutes);
 // Health Check
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', service: 'SOLQ Orchestrator' });
@@ -87,9 +99,11 @@ app.post('/solana-pay/:intentId', (req, res) => __awaiter(void 0, void 0, void 0
         // Optional: Support custom input mint via query param (e.g. ?mint=USDC)
         const inputMint = req.query.mint || undefined;
         const txBase64 = yield solanaService_1.default.createPaymentTransaction(intentId, account, inputMint);
-        const { paymentIntents } = require('./services/store');
-        if (paymentIntents[intentId]) {
-            paymentIntents[intentId].status = 'AUTHORIZATION_REQUESTED';
+        if (store_1.paymentIntents[intentId]) {
+            store_1.paymentIntents[intentId].status = 'AUTHORIZATION_REQUESTED';
+            store_1.paymentIntents[intentId].payer_account = account;
+            store_1.paymentIntents[intentId].input_mint = inputMint || store_1.paymentIntents[intentId].input_mint || 'SOL';
+            store_1.paymentIntents[intentId].updatedAt = new Date().toISOString();
         }
         res.status(200).json({
             transaction: txBase64,

@@ -6,8 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.solq"
-    compileSdk = 36
+    namespace = "com.nayrbryan.nusaharvest"
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -20,9 +20,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.solq" // Rebranded from warungpay
+        applicationId = "com.nayrbryan.nusaharvest" // Matched with AndroidManifest.xml
         minSdk = 24
-        targetSdk = 36
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -45,5 +45,4 @@ flutter {
 // Fixed: Removed embedded adb commands that suspended build.
 // Use clean_run.ps1 instead.
 // ═══════════════════════════════════════════════
-
 

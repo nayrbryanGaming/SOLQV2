@@ -1,0 +1,24 @@
+# Large/generated directories
+build/
+android/build/
+ios/Flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# Backend local artifacts
+backend/node_modules/
+backend/dist/
+backend/audit_logs.jsonl
+
+# Flutter and platform artifacts
+**/*.apk
+**/*.aab
+**/*.ipa
+
+# Local environment/config
+**/.env
+**/.env.local
+
+# VCS / editor
+.git/
+.vscode/

@@ -55,10 +55,13 @@ export class QRISDecoder {
             else if (id === '58') data.countryCode = value;
             else if (id === '59') data.merchantName = value;
             else if (id === '60') data.merchantCity = value;
+            else if (id === '62') data.additionalData = value;
             else if (id === '63') data.crc = value;
 
             index += 4 + length;
         }
+
+        data.merchantName = this.normalizeMerchantName(data.merchantName);
 
         return data as QRISData;
     }
@@ -112,11 +115,30 @@ export class QRISDecoder {
             const tag = i.toString();
             const info = data.merchantAccountInfo[tag];
             if (info) {
-                // Priority: Sub-tag 01 (PAN) then 02/03 (Merchant ID)
-                const account = info['01'] || info['02'] || info['03'];
-                if (account && account !== '00') return account;
+                const account = this.pickBestMerchantAccount(info);
+                if (account) return account;
             }
         }
+
+        // Fallback: Additional Data Field (Tag 62) often carries merchant refs.
+        const additional = data.additionalData ? this.parseNestedTLV(data.additionalData) : {};
+        const additionalPreferred = [
+            additional['01'],
+            additional['02'],
+            additional['03'],
+            additional['07'],
+            additional['09'],
+        ];
+        for (const candidate of additionalPreferred) {
+            const normalized = this.normalizeAccountCandidate(candidate);
+            if (normalized) return normalized;
+        }
+
+        for (const value of Object.values(additional)) {
+            const normalized = this.normalizeAccountCandidate(value);
+            if (normalized) return normalized;
+        }
+
         return null;
     }
 
@@ -143,6 +165,43 @@ export class QRISDecoder {
         }
 
         return 'UNKNOWN';
+    }
+
+    private static pickBestMerchantAccount(info: Record<string, string>): string | null {
+        const preferred = [info['01'], info['02'], info['03'], info['04']];
+        for (const candidate of preferred) {
+            const normalized = this.normalizeAccountCandidate(candidate);
+            if (normalized) return normalized;
+        }
+
+        for (const value of Object.values(info)) {
+            const normalized = this.normalizeAccountCandidate(value);
+            if (normalized) return normalized;
+        }
+
+        return null;
+    }
+
+    private static normalizeAccountCandidate(value?: string): string | null {
+        if (!value) return null;
+        const compact = value.trim().replace(/\s+/g, '');
+        if (!compact) return null;
+        if (compact.includes('.') || compact.toUpperCase().includes('WWW')) return null;
+
+        if (/^\d{8,24}$/.test(compact)) return compact;
+
+        // Many QRIS acquirer references are alphanumeric.
+        if (/^[A-Za-z0-9]{8,32}$/.test(compact) && !compact.toUpperCase().startsWith('ID')) {
+            return compact;
+        }
+
+        return null;
+    }
+
+    private static normalizeMerchantName(raw?: string): string {
+        const name = (raw || '').trim();
+        if (!name) return 'UNKNOWN MERCHANT';
+        return name.replace(/\s+/g, ' ');
     }
 }
 

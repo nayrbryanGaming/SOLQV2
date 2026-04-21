@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 /// CoinGecko Oracle Service - OPTIMIZED FOR MAINNET
-/// Sam Altman Challenge: Real-time, manipulation-proof pricing
-/// Multi-Oracle Fallback: CoinGecko → Jupiter Price API → ExchangeRate-API
+/// Multi-Oracle Fallback: CoinGecko -> Jupiter Price API -> ExchangeRate-API
 class CoinGeckoService {
   static final CoinGeckoService _instance = CoinGeckoService._internal();
   factory CoinGeckoService() => _instance;
@@ -16,7 +15,7 @@ class CoinGeckoService {
   static const String solId = "solana";
   static const String usdcId = "usd-coin";
 
-  // Circuit Breaker Settings (Sam Altman Security Standard)
+  // Circuit Breaker Settings (Production Security Standard)
   static const double maxAllowedDeviationPercent = 2.5; // 2.5% max deviation (realistic for volatile markets)
   static const Duration priceValidityWindow = Duration(minutes: 5);
   static const Duration cacheWindow = Duration(seconds: 45); // Aggressive cache for speed
@@ -73,64 +72,49 @@ class CoinGeckoService {
   }
 
   Future<Map<String, double>?> _fetchFromCoinGecko() async {
-    final url = Uri.parse("$_baseUrl/simple/price?ids=$solId,$usdcId&vs_currencies=idr");
-    const String? apiKey = String.fromEnvironment('COINGECKO_API_KEY', defaultValue: '');
-
-    final headers = <String, String>{'Accept': 'application/json'};
-    if (apiKey.isNotEmpty) {
-      headers['x-cg-demo-api-key'] = apiKey;
-    }
-
-    final response = await http.get(url, headers: headers).timeout(const Duration(seconds: 5));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return {
-        'SOL': (data[solId]['idr'] as num).toDouble(),
-        'USDC': (data[usdcId]['idr'] as num).toDouble(),
-      };
-    }
+    try {
+      final url = Uri.parse("$_baseUrl/simple/price?ids=$solId,$usdcId&vs_currencies=idr");
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'SOL': (data[solId]['idr'] as num).toDouble(),
+          'USDC': (data[usdcId]['idr'] as num).toDouble(),
+        };
+      }
+    } catch (_) {}
     return null;
   }
 
   Future<Map<String, double>?> _fetchFromJupiter() async {
-    // Jupiter returns prices in USDC, we need to convert to IDR
-    final jupUrl = Uri.parse("$_jupiterPriceUrl?ids=So11111111111111111111111111111111111111112");
-    final jupRes = await http.get(jupUrl).timeout(const Duration(seconds: 4));
-
-    if (jupRes.statusCode == 200) {
-      final jupData = jsonDecode(jupRes.body);
-      final solUsdc = double.tryParse(jupData['data']?['So11111111111111111111111111111111111111112']?['price']?.toString() ?? '0') ?? 0;
-
-      if (solUsdc <= 0) return null;
-
-      // Get USD/IDR from backup API
-      final fxRes = await http.get(Uri.parse("https://api.exchangerate-api.com/v4/latest/USD")).timeout(const Duration(seconds: 3));
-      if (fxRes.statusCode == 200) {
-        final fxData = jsonDecode(fxRes.body);
-        final usdIdr = (fxData['rates']['IDR'] as num?)?.toDouble() ?? 15800;
-
-        return {
-          'SOL': solUsdc * usdIdr,
-          'USDC': usdIdr,
-        };
+    try {
+      final url = Uri.parse("$_jupiterPriceUrl?ids=So11111111111111111111111111111111111111112,EPjFW36vnjtcMDhT2ED6g31iDxr25LPrYAf1yUvxyLTx&vsToken=idr");
+      final response = await http.get(url).timeout(const Duration(seconds: 8));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        final sol = data['So11111111111111111111111111111111111111112'];
+        final usdc = data['EPjFW36vnjtcMDhT2ED6g31iDxr25LPrYAf1yUvxyLTx'];
+        
+        if (sol != null && usdc != null) {
+          return {
+            'SOL': (sol['price'] as num).toDouble(),
+            'USDC': (usdc['price'] as num).toDouble(),
+          };
+        }
       }
-    }
+    } catch (_) {}
     return null;
   }
-
-  /// CIRCUIT BREAKER: Verify Jupiter Quote vs CoinGecko Market Price
-  /// Sam Altman Standard: Prevent price manipulation, MEV attacks, oracle failures
-  /// Returns: true if quote is within tolerance of market, false if suspicious
-  bool verifyRate(double jupiterQuotePrice, double coinGeckoMarketPrice) {
-    if (coinGeckoMarketPrice <= 0 || jupiterQuotePrice <= 0) {
-      return false; // BLOCK transaction. No oracle = No safety.
-    }
-    
-    final deviation = (jupiterQuotePrice - coinGeckoMarketPrice).abs() / coinGeckoMarketPrice;
-    return deviation < (maxAllowedDeviationPercent / 100);
-  }
   
+  /// Verify that a quoted rate does not deviate too far from market price
+  bool verifyRate(double quotedRate, double marketPrice) {
+    if (marketPrice <= 0) return false;
+    final deviation = (quotedRate - marketPrice).abs() / marketPrice * 100;
+    return deviation <= maxAllowedDeviationPercent;
+  }
+
   /// Get User-Facing Price Summary (Transparency)
   String getPriceSummary() {
     if (_cachedPrices == null) return "Fetching prices...";
@@ -148,4 +132,3 @@ class CoinGeckoService {
   double? get cachedSolPrice => _cachedPrices?['SOL'];
   double? get cachedUsdcPrice => _cachedPrices?['USDC'];
 }
-

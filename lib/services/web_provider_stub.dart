@@ -4,7 +4,9 @@
 class WebProviderImpl {
   static bool get isSupported => false;
 
+  static Future<String?> connectWallet(String walletHint) async => null;
   static Future<String?> connectPhantom() async => null;
   static Future<String?> connectMetamask() async => null;
-  static Future<String?> signTransaction(String tx) async => null;
+  static Future<String?> signTransaction(String tx, {String? walletHint}) async =>
+      null;
 }

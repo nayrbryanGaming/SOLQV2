@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node dist/index.js",
     "build": "tsc",
-    "dev": "ts-node-dev src/index.ts"
+    "dev": "ts-node-dev src/index.ts",
+    "stress:intents": "npm run build && node dist/scripts/stress_test_payment_intents.js"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.14",

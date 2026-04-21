@@ -3,7 +3,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import { paymentRoutes } from './routes/paymentRoutes';
+import { adminRoutes } from './routes/adminRoutes';
 import solanaService from './services/solanaService';
+import { paymentIntents } from './services/store';
 import { ReconciliationWorker } from './services/reconciliation';
 
 // Autonomous Reconciliation (detect stuck TX every 60s)
@@ -25,12 +27,22 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 
 // Rate limiter (60 req/min/IP)
 const hits = new Map<string, { n: number; t: number }>();
+const RATE_LIMIT_PER_MIN = Math.max(0, Number(process.env.RATE_LIMIT_PER_MIN || '60'));
+const DISABLE_RATE_LIMIT = process.env.DISABLE_RATE_LIMIT === '1';
+
+function isLocalIp(ip: string): boolean {
+    return ip.includes('127.0.0.1') || ip.includes('::1') || ip.includes('::ffff:127.0.0.1');
+}
+
 app.use((req: Request, res: Response, next: NextFunction) => {
     const ip = req.ip || 'x';
+    if (DISABLE_RATE_LIMIT || RATE_LIMIT_PER_MIN <= 0 || isLocalIp(ip)) {
+        return next();
+    }
     const now = Date.now();
     const e = hits.get(ip);
     if (!e || now > e.t) { hits.set(ip, { n: 1, t: now + 60000 }); return next(); }
-    if (e.n >= 60) return res.status(429).json({ error: 'Rate limit' });
+    if (e.n >= RATE_LIMIT_PER_MIN) return res.status(429).json({ error: 'Rate limit' });
     e.n++;
     next();
 });
@@ -38,6 +50,8 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now >
 
 // Main Routes
 app.use('/v1', paymentRoutes);
+app.use('/v1/admin', adminRoutes);
+app.use('/admin', adminRoutes);
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {
@@ -82,9 +96,11 @@ app.post('/solana-pay/:intentId', async (req: Request, res: Response) => {
 
         const txBase64 = await solanaService.createPaymentTransaction(intentId, account, inputMint);
 
-        const { paymentIntents } = require('./services/store');
         if (paymentIntents[intentId]) {
             paymentIntents[intentId].status = 'AUTHORIZATION_REQUESTED';
+            paymentIntents[intentId].payer_account = account;
+            paymentIntents[intentId].input_mint = inputMint || paymentIntents[intentId].input_mint || 'SOL';
+            paymentIntents[intentId].updatedAt = new Date().toISOString();
         }
 
         res.status(200).json({

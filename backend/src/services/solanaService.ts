@@ -1,5 +1,5 @@
 import { paymentIntents } from './store';
-import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import fetch from 'node-fetch';
 
@@ -122,6 +122,14 @@ class SolanaService {
             await this.resolveTreasuryAta();
         }
 
+        // Persist expected verification context for deterministic confirmation.
+        intent.payer_account = userAccount;
+        intent.input_mint = resolvedMint;
+        intent.expected_output_mint = IDRX_MINT.toBase58();
+        intent.expected_atomic_amount = amountAtomic;
+        intent.expected_recipient_ata = treasuryIdrxAta?.toBase58();
+        intent.updatedAt = new Date().toISOString();
+
         // Jupiter lite-api swap fields (PROVEN WORKING from test_swap.js):
         // - feeAccount: Treasury IDRX ATA → receives platformFeeBps portion
         // - destinationTokenAccount: Treasury IDRX ATA → IDRX output goes here for off-ramp
@@ -152,10 +160,15 @@ class SolanaService {
         return swapData.swapTransaction;
     }
 
-    async verifyTransaction(txHash: string): Promise<boolean> {
+    async verifyTransaction(txHash: string, intentId?: string): Promise<boolean> {
+        const intent = intentId ? paymentIntents[intentId] : undefined;
+        const expectedMint = intent?.expected_output_mint || IDRX_MINT.toBase58();
+        const expectedAtomic = Math.max(0, Number(intent?.expected_atomic_amount || 0));
+        const expectedRecipientAta = intent?.expected_recipient_ata || treasuryIdrxAta?.toBase58();
+
         for (let attempt = 0; attempt < this.connections.length; attempt++) {
             try {
-                const tx = await this.connection.getTransaction(txHash, {
+                const tx = await this.connection.getParsedTransaction(txHash, {
                     commitment: 'finalized',
                     maxSupportedTransactionVersion: 0
                 });
@@ -163,32 +176,93 @@ class SolanaService {
                 if (!tx) { this.rotateRpc(); continue; }
                 if (tx.meta?.err) return false;
 
-                const postBalances = tx.meta?.postTokenBalances;
-                const hasTokenChanges = (postBalances?.length ?? 0) > 0;
+                const preBalances = tx.meta?.preTokenBalances || [];
+                const postBalances = tx.meta?.postTokenBalances || [];
+                const treasuryOwner = TREASURY_WALLET.toBase58();
 
-                // Check if Treasury received IDRX
-                const treasuryGotIdrx = postBalances?.some(pb =>
-                    pb.owner === TREASURY_WALLET.toBase58() &&
-                    pb.mint === IDRX_MINT.toBase58()
-                );
+                const accountKeys = tx.transaction.message.accountKeys.map((k: any) => {
+                    if (typeof k === 'string') return k;
+                    if (k?.pubkey) return k.pubkey.toString();
+                    return String(k);
+                });
 
-                if (treasuryGotIdrx) {
-                    console.log(`[VERIFY] ✅ Treasury received IDRX for ${txHash.slice(0,8)}...`);
+                const getAtomic = (raw: string | undefined) => {
+                    const parsed = Number(raw || '0');
+                    return Number.isFinite(parsed) ? parsed : 0;
+                };
+
+                const preByAccountIndex = new Map<number, number>();
+                for (const b of preBalances) {
+                    const ataAtIndex = accountKeys[b.accountIndex] || '';
+                    const ataOk = expectedRecipientAta ? ataAtIndex === expectedRecipientAta : true;
+                    if (b.mint === expectedMint && b.owner === treasuryOwner && ataOk) {
+                        preByAccountIndex.set(b.accountIndex, getAtomic(b.uiTokenAmount?.amount));
+                    }
+                }
+
+                let receivedAtomic = 0;
+                for (const b of postBalances) {
+                    const ataAtIndex = accountKeys[b.accountIndex] || '';
+                    const ataOk = expectedRecipientAta ? ataAtIndex === expectedRecipientAta : true;
+                    if (b.mint !== expectedMint || b.owner !== treasuryOwner || !ataOk) continue;
+                    const postAtomic = getAtomic(b.uiTokenAmount?.amount);
+                    const preAtomic = preByAccountIndex.get(b.accountIndex) || 0;
+                    const delta = postAtomic - preAtomic;
+                    if (delta > 0) receivedAtomic += delta;
+                }
+
+                if (expectedAtomic > 0 && receivedAtomic < expectedAtomic) {
+                    console.warn(`[VERIFY] ❌ Atomic amount mismatch: expected >= ${expectedAtomic}, got ${receivedAtomic}`);
+                    return false;
+                }
+
+                if (receivedAtomic > 0) {
+                    console.log(`[VERIFY] ✅ Treasury ATA ${expectedRecipientAta || 'N/A'} received ${receivedAtomic} atomic ${expectedMint} for ${txHash.slice(0,8)}...`);
                     return true;
                 }
 
-                // Fallback: any token movement = swap happened
-                if (hasTokenChanges) {
-                    console.log(`[VERIFY] ✅ TX finalized with token changes`);
-                    return true;
-                }
-
+                console.warn('[VERIFY] ❌ No valid treasury token inflow detected');
                 return false;
             } catch (e) {
                 this.rotateRpc();
             }
         }
         return false;
+    }
+
+    async extractPayerAccount(txHash: string): Promise<string | null> {
+        for (let attempt = 0; attempt < this.connections.length; attempt++) {
+            try {
+                const tx = await this.connection.getParsedTransaction(txHash, {
+                    commitment: 'finalized',
+                    maxSupportedTransactionVersion: 0
+                });
+
+                if (!tx || tx.meta?.err) {
+                    this.rotateRpc();
+                    continue;
+                }
+
+                const keys: any[] = (tx.transaction.message as any).accountKeys || [];
+                for (const key of keys) {
+                    // Parsed transaction account key shape: { pubkey, signer, writable }
+                    if (typeof key === 'object' && key?.signer === true && key?.pubkey) {
+                        return key.pubkey.toString();
+                    }
+                }
+
+                // Fallback: first account key if signer metadata isn't present.
+                if (keys.length > 0) {
+                    const first = keys[0];
+                    if (typeof first === 'string') return first;
+                    if (first?.pubkey) return first.pubkey.toString();
+                    return String(first);
+                }
+            } catch (_) {
+                this.rotateRpc();
+            }
+        }
+        return null;
     }
 }
 

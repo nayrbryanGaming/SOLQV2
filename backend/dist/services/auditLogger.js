@@ -16,6 +16,7 @@ var AuditEventType;
     AuditEventType["PAYMENT_INTENT_CREATED"] = "PAYMENT_INTENT_CREATED";
     AuditEventType["PAYMENT_INTENT_CONFIRMED"] = "PAYMENT_INTENT_CONFIRMED";
     AuditEventType["SETTLEMENT_INITIATED"] = "SETTLEMENT_INITIATED";
+    AuditEventType["SETTLEMENT_PENDING"] = "SETTLEMENT_PENDING";
     AuditEventType["SETTLEMENT_COMPLETED"] = "SETTLEMENT_COMPLETED";
     AuditEventType["SETTLEMENT_FAILED"] = "SETTLEMENT_FAILED";
 })(AuditEventType || (exports.AuditEventType = AuditEventType = {}));

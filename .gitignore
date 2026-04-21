@@ -56,3 +56,4 @@ backend/.env
 *.key
 *.pem
 credentials.json
+.vercel

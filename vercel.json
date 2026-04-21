@@ -1,34 +1,80 @@
 {
   "version": 2,
-  "buildCommand": "npm install",
-  "env": {
-    "IDRX_API_KEY": "@idrx_api_key",
-    "IDRX_SECRET_KEY": "@idrx_secret_key",
-    "SOLANA_RPC_URL": "@solana_rpc_url"
-  },
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 30,
-      "memory": 512,
-      "runtime": "nodejs18.x"
-    },
-    "api/**/*.js": {
-      "maxDuration": 30,
-      "memory": 512,
-      "runtime": "nodejs18.x"
-    }
-  },
-  "redirects": [
-    {
-      "source": "/api/v1/(.*)",
-      "destination": "/api/v1/$1"
-    }
-  ],
   "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/health"
+    },
     {
       "source": "/health",
       "destination": "/api/health"
+    },
+    {
+      "source": "/api/v1/payment-intents/:id/confirm",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/api/v1/payment-intents/:id",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/v1/payment-intents/:id/confirm",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/v1/payment-intents/:id",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/api/payment-intents/:id/confirm",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/api/payment-intents/:id",
+      "destination": "/api/v1/[id]?id=:id"
+    },
+    {
+      "source": "/api/payment-intents",
+      "destination": "/api/v1/payment-intents"
+    },
+    {
+      "source": "/solana-pay/:intentId",
+      "destination": "/api/solana-pay/[intentId]?intentId=:intentId"
+    },
+    {
+      "source": "/api/solana-pay/:intentId",
+      "destination": "/api/solana-pay/[intentId]?intentId=:intentId"
+    },
+    {
+      "source": "/v1/solana-pay/:intentId",
+      "destination": "/api/solana-pay/[intentId]?intentId=:intentId"
+    },
+    {
+      "source": "/v1/(.*)",
+      "destination": "/api/v1/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
     }
   ]
 }
-

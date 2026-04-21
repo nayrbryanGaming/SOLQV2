@@ -8,7 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'orchestrator_service.dart';
 
 /// Webhook Service with Military-Grade Security
-/// Sam Altman Challenge: Protect 5M Solana ecosystem users
+/// Production Guard: Protect 5M Solana ecosystem users
 /// Features:
 /// - HMAC signature verification (prevent forgery)
 /// - Replay attack prevention (nonce/timestamp validation)
@@ -107,7 +107,7 @@ class WebhookService {
         );
         _ipAddress = wifiInterface.addresses.first.address;
       } catch (e) {
-        _ipAddress = "127.0.0.1";
+        _ipAddress = "0.0.0.0";
       }
 
       _server = await shelf_io.serve(router.call, InternetAddress.anyIPv4, 8080);

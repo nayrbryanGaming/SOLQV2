@@ -24,7 +24,9 @@ dependencies:
   shelf_router: ^1.1.4
   bs58: ^1.0.2
   crypto: ^3.0.3
-  characters: 1.4.0
+  pinenacl: ^0.6.0
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
   image_picker: ^1.0.7
 
 dev_dependencies:

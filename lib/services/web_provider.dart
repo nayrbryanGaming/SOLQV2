@@ -13,7 +13,10 @@ import 'web_provider_stub.dart'
 class WebProvider {
   static bool get isSupported => kIsWeb;
 
+  static Future<String?> connectWallet(String walletHint) =>
+      platform.WebProviderImpl.connectWallet(walletHint);
   static Future<String?> connectPhantom() => platform.WebProviderImpl.connectPhantom();
   static Future<String?> connectMetamask() => platform.WebProviderImpl.connectMetamask();
-  static Future<String?> signTransaction(String base64Tx) => platform.WebProviderImpl.signTransaction(base64Tx);
+  static Future<String?> signTransaction(String base64Tx, {String? walletHint}) =>
+      platform.WebProviderImpl.signTransaction(base64Tx, walletHint: walletHint);
 }

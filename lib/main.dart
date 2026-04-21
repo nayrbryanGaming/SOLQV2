@@ -4,13 +4,17 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'services/qris_parser.dart';
 import 'services/orchestrator_service.dart';
 import 'services/webhook_service.dart';
 import 'services/solana_service.dart';
 import 'services/solq_service.dart';
 import 'services/coingecko_service.dart';
+import 'services/payment_history_service.dart';
 import 'models/payment_intent.dart';
+import 'widgets/payment_history_view.dart';
+import 'widgets/wallet_picker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,10 +34,10 @@ void main() async {
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light, 
+    statusBarIconBrightness: Brightness.light,
     systemNavigationBarColor: Colors.transparent,
   ));
-  
+
   runApp(const SOLQOrchestrator());
 }
 
@@ -63,7 +67,8 @@ class OrchestratorScreen extends StatefulWidget {
   State<OrchestratorScreen> createState() => _OrchestratorScreenState();
 }
 
-class _OrchestratorScreenState extends State<OrchestratorScreen> {
+class _OrchestratorScreenState extends State<OrchestratorScreen>
+    with WidgetsBindingObserver {
   MobileScannerController? _scannerController;
   final OrchestratorService _service = OrchestratorService();
   StreamSubscription<PaymentIntent>? _subscription;
@@ -71,72 +76,66 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
   PaymentIntent? _intent;
   String _manualAmount = "";
   String _settlementTrack = 'standard'; // 'instant', 'standard', 'economy'
+  bool _cameraPermissionGranted = true;
+  bool _isProcessingScan = false;
+  int _selectedTab = 0; // 0: Payment, 1: History
+  Timer? _statsTimer;
+  int _statsSuccessCount = 0;
+  int _statsUniqueUsers = 0;
+  String? _lastAcceptedScanPayload;
+  DateTime? _lastAcceptedScanAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _intent = _service.currentIntent;
     _subscription = _service.stream.listen((intent) {
       if (!mounted) return;
       setState(() => _intent = intent);
+      _isProcessingScan = false;
     }, onError: (error) {
-       if (!mounted) return;
-       
-       final errStr = error.toString();
-       // Handle connectivity/timeout issues by offering IP change
-       final isConnError = errStr.contains("SocketException") ||
-           errStr.contains("No route to host") ||
-           errStr.contains("TimeoutException") ||
-           errStr.contains("Future not completed") ||
-           errStr.contains("Connection refused") ||
-           errStr.contains("SERVER TIMEOUT") ||
-           errStr.contains("KONEKSI GAGAL");
-
-       if (isConnError) {
-         // Show snackbar first with the friendly message, then open IP dialog
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(
-             content: Text(errStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-             backgroundColor: Colors.redAccent,
-             duration: const Duration(seconds: 4),
-             action: SnackBarAction(
-               label: 'UBAH IP',
-               textColor: Colors.yellowAccent,
-               onPressed: () => _showIPDialog(errStr),
-             ),
-           )
-         );
-         // Auto-open IP dialog after brief delay
-         Future.delayed(const Duration(milliseconds: 300), () {
-           if (mounted) _showIPDialog(errStr);
-         });
-       } else {
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(
-             content: Text("SYSTEM ERROR: $errStr", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-             backgroundColor: Colors.redAccent,
-           )
-         );
-       }
-       
-       setState(() {
-         _intent = null;
-         _scannerController?.start();
-       });
-    });
-    // CRITICAL: Listen for wallet connection callback to refresh UI
-    _walletSub = SolanaService().signatureStream.listen((event) {
       if (!mounted) return;
-      if (event == "CONNECTED") {
-        _fetchBalance();
-        setState(() {}); // Force rebuild of the whole screen
-      } else if (event == "DISCONNECTED") {
-        setState(() {
-          _balance = 0.0;
-        });
+
+      final errStr = error.toString();
+      // Handle connectivity/timeout issues
+      final isConnError = errStr.contains("SocketException") ||
+          errStr.contains("No route to host") ||
+          errStr.contains("TimeoutException") ||
+          errStr.contains("Future not completed") ||
+          errStr.contains("Connection refused") ||
+          errStr.contains("SERVER TIMEOUT") ||
+          errStr.contains("KONEKSI GAGAL");
+
+      if (isConnError) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(errStr,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          backgroundColor: const Color(0xFFFF5252),
+          duration: const Duration(seconds: 4),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("SYSTEM ERROR: $errStr",
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          backgroundColor: const Color(0xFFFF5252),
+        ));
       }
+
+      setState(() {
+        _intent = null;
+      });
+      _isProcessingScan = false;
     });
-    // Initial fetch if already connected
+
+    _setupWalletListener();
+    _refreshStats();
+    _statsTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      _refreshStats();
+    });
+
     if (SolanaService().isConnected) {
       _fetchBalance();
     } else {
@@ -149,185 +148,403 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
     }
   }
 
-  void _showIPDialog(String error) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("NETWORK REACHABILITY ALERT", style: TextStyle(color: Colors.redAccent, fontSize: 14)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("The app cannot reach the Backend Server. This is usually due to a Windows Firewall block or IP change.", style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 10),
-            Text("Error: $error", style: const TextStyle(fontSize: 10, color: Colors.white38)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: "BACKEND IP (e.g., 192.168.1.5)",
-                hintText: "192.168.18.15",
-                labelStyle: TextStyle(fontSize: 10),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE")),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                final newUrl = "http://${controller.text}:3000/v1";
-                await SOLQService.setPersistedBaseUrl(newUrl);
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("IP UPDATED. PLEASE RESCAN.")));
-              }
-            },
-            child: const Text("UPDATE IP"),
+  void _setupWalletListener() {
+    _walletSub?.cancel();
+    _walletSub = SolanaService().signatureStream.listen((event) {
+      if (!mounted) return;
+
+      if (event == "CONNECTED") {
+        _fetchBalance();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Wallet Connected Successfully!"),
+            backgroundColor: Color(0xFF00FF94),
+            duration: Duration(seconds: 2),
           ),
-        ],
-      ),
+        );
+        setState(() {}); // Refresh UI
+      } else if (event == "CONNECT_FAILED") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Koneksi Wallet Gagal. Coba pilih wallet lain."),
+            backgroundColor: Colors.redAccent,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        WalletPicker.show(context);
+      } else if (event == "WAITING_BROWSER") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Menghubungkan ke Wallet..."),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else if (event == "DISCONNECTED") {
+        setState(() {
+          _balance = 0.0;
+        });
+      }
+    });
+  }
+
+  // Helper added for clean state management during payment transitions
+  void _clearPaymentState() {
+    setState(() {
+      _intent = null;
+      _isProcessingScan = false;
+      _manualAmount = "";
+    });
+  }
+
+  // _showIPDialog removed for production security compliance.
+  // Enforcement of zero-tolerance localhost policy.
+
+  bool _isScannerTransitioning = false;
+
+  MobileScannerController _createScannerController() {
+    return MobileScannerController(
+      autoStart: true,
+      facing: CameraFacing.back,
+      detectionSpeed: DetectionSpeed.normal,
+      formats: const [BarcodeFormat.qrCode],
     );
   }
 
+  Future<void> _ensureScannerState(bool running) async {
+    if (!mounted || _isScannerTransitioning) return;
+    
+    _isScannerTransitioning = true;
+
+    try {
+      if (_scannerController == null) {
+        if (!mounted) return;
+        setState(() => _scannerController = _createScannerController());
+      }
+      
+      if (running) {
+        try { await _scannerController?.start(); } catch (_) {}
+      } else {
+        try { await _scannerController?.stop(); } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint("Scanner hardware error: $e");
+    } finally {
+      _isScannerTransitioning = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _startScanner() async {
+    await _ensureScannerState(true);
+  }
+
+  Future<void> _stopScanner() async {
+    await _ensureScannerState(false);
+  }
+
+
+
+  Future<void> _refreshStats() async {
+    try {
+      final stats = await SOLQService().getStats();
+      final localSuccess = await PaymentHistoryService().getPaymentCount();
+      final localWallets = await SolanaService().getSeenWalletCount();
+      final serverSuccess = stats['success_count'] is int
+          ? stats['success_count'] as int
+          : int.tryParse('${stats['success_count'] ?? 0}') ?? 0;
+      final serverWallets = stats['unique_wallet_users'] is int
+          ? stats['unique_wallet_users'] as int
+          : int.tryParse('${stats['unique_wallet_users'] ?? 0}') ?? 0;
+
+      if (!mounted) return;
+      setState(() {
+        _statsSuccessCount =
+            serverSuccess > localSuccess ? serverSuccess : localSuccess;
+        _statsUniqueUsers =
+            serverWallets > localWallets ? serverWallets : localWallets;
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Aggressive recovery: small delay then force startup
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _intent == null && _selectedTab == 0) {
+          _ensureScannerState(true);
+        }
+      });
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _ensureScannerState(false);
+    }
+  }
+
+
+
+  // Redundant scanner methods removed to enforce deterministic state machine.
+
+
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
     _walletSub?.cancel();
+    _statsTimer?.cancel();
     _scannerController?.dispose();
     super.dispose();
   }
 
+  // --- RECONSTRUCTED SCANNER INTERFACE ---
   void _startScan() {
-    _service.reset();
-    setState(() {
-       _intent = null;
-       _scannerController = MobileScannerController();
-    });
+    _clearPaymentState();
+    unawaited(_resumeScannerIfNeeded(force: true));
   }
 
-  Future<void> _pickFromGallery() async {
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return; // user cancelled
+  Future<void> _resumeScannerIfNeeded({bool force = false}) async {
+    if (!mounted) return;
+    if (_intent != null && !force) return;
+    if (_selectedTab != 0) return;
 
-    // Prefer the already-running scanner controller (has active native channel).
-    // If no scanner is open (idle view), create a dedicated one.
-    final bool ownController = _scannerController == null;
-    final MobileScannerController ctrl =
-        _scannerController ?? MobileScannerController();
+    await _ensureScannerState(true);
+  }
 
+
+  Future<void> _pauseScanner() async {
     try {
-      final completer = Completer<BarcodeCapture?>();
+      await _scannerController?.stop();
+    } catch (_) {}
+  }
 
-      // Subscribe BEFORE calling analyzeImage to avoid race condition.
-      final sub = ctrl.barcodes.listen((capture) {
-        if (!completer.isCompleted && capture.barcodes.isNotEmpty) {
-          completer.complete(capture);
-        }
-      });
 
-      // mobile_scanner 3.5.x: analyzeImage sets up event channel on first call
-      // then returns bool. The barcode result fires on the same event channel.
-      final bool found = await ctrl.analyzeImage(image.path);
+  String _decodeRawBytesPayload(Uint8List rawBytes) {
+    if (rawBytes.isEmpty) return '';
 
-      BarcodeCapture? capture;
-      if (found) {
-        // Give native side up to 8s to deliver the barcode via event channel.
-        capture = await completer.future
-            .timeout(const Duration(seconds: 8), onTimeout: () => null);
+    final utf8Decoded = utf8.decode(rawBytes, allowMalformed: true).trim();
+    if (utf8Decoded.isNotEmpty) return utf8Decoded;
+
+    final latin1Decoded = latin1.decode(rawBytes, allowInvalid: true).trim();
+    return latin1Decoded;
+  }
+
+  String _barcodeCandidateValue(Barcode barcode) {
+    final raw = (barcode.rawValue ?? '').trim();
+    if (raw.isNotEmpty) return raw;
+
+    final display = (barcode.displayValue ?? '').trim();
+    if (display.isNotEmpty) return display;
+
+    final rawBytes = barcode.rawBytes;
+    if (rawBytes == null || rawBytes.isEmpty) return '';
+
+    final decoded = _decodeRawBytesPayload(rawBytes);
+    return decoded.trim();
+  }
+
+  String _extractPayloadFromCapture(BarcodeCapture capture) {
+    var fallbackPayload = '';
+    var bestQrisPayload = '';
+    var bestQrisScore = -1;
+
+    for (final barcode in capture.barcodes) {
+      final candidate = _barcodeCandidateValue(barcode);
+      if (candidate.isEmpty) {
+        continue;
       }
 
-      await sub.cancel();
-      if (ownController) ctrl.dispose();
-
-      if (capture != null && capture.barcodes.isNotEmpty) {
-        final raw = capture.barcodes.first.rawValue ?? "";
-        if (raw.isNotEmpty) {
-          _onQrisDetected(raw);
-          return;
-        }
+      if (fallbackPayload.isEmpty || candidate.length > fallbackPayload.length) {
+        fallbackPayload = candidate;
       }
 
-      if (!found) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tidak ada QR code ditemukan di gambar'),
-              backgroundColor: Colors.orangeAccent,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        // found=true but stream timed out — shouldn't happen, but handle gracefully
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('QR terdeteksi tapi gagal dibaca, coba lagi'),
-              backgroundColor: Colors.orangeAccent,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (ownController) ctrl.dispose();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal membaca gambar: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      final normalized = _sanitizeQrisPayload(candidate);
+      final score = _scoreQrisCandidate(normalized);
+      if (score > bestQrisScore) {
+        bestQrisScore = score;
+        bestQrisPayload = candidate;
       }
     }
+
+    if (bestQrisPayload.isNotEmpty) {
+      return bestQrisPayload;
+    }
+
+    return fallbackPayload;
+  }
+
+  int _scoreQrisCandidate(String normalizedPayload) {
+    if (normalizedPayload.isEmpty) return -1;
+
+    var score = normalizedPayload.length;
+    if (_looksLikeQrisPayload(normalizedPayload)) {
+      score += 5000;
+    }
+
+    final parsed = QrisParser.parse(normalizedPayload);
+    if (parsed.isValid) {
+      score += 15000;
+      if (!parsed.isStatic) {
+        score += 500;
+      }
+      final merchantName = parsed.merchantName.trim().toUpperCase();
+      if (merchantName.isNotEmpty && merchantName != 'UNKNOWN MERCHANT') {
+        score += 300;
+      }
+    }
+
+    return score;
   }
 
   void _onScanDetect(BarcodeCapture capture) {
-    if (_intent != null) return;
-    if (capture.barcodes.isNotEmpty) {
-      final raw = capture.barcodes.first.rawValue ?? "";
-      _onQrisDetected(raw);
-    }
-  }
+    if (_intent != null || _isProcessingScan) return;
+    if (capture.barcodes.isEmpty) return;
 
-  void _onQrisDetected(String rawPayload) {
-    _scannerController?.stop();
-    final result = QrisParser.parse(rawPayload);
+    final payload = _extractPayloadFromCapture(capture);
+    if (payload.isEmpty) return;
 
-    if (!result.isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('FAILURE: ${result.errorReason}'), backgroundColor: Colors.red),
-      );
-      _scannerController?.start();
+    final sanitizedPayload = _sanitizeQrisPayload(payload);
+    if (sanitizedPayload.isEmpty) return;
+
+    final now = DateTime.now();
+    final localParsed = QrisParser.parse(sanitizedPayload);
+    final isLikelyQris =
+        localParsed.isValid || _looksLikeQrisPayload(sanitizedPayload);
+
+    if (!isLikelyQris) return;
+
+    // Debounce successful scans to avoid double-processing
+    if (_lastAcceptedScanPayload == sanitizedPayload &&
+        _lastAcceptedScanAt != null &&
+        now.difference(_lastAcceptedScanAt!) < const Duration(seconds: 3)) {
       return;
     }
 
-    // Pass raw payload to backend for canonical intent creation
-    _service.createIntent(rawPayload);
+    _lastAcceptedScanPayload = sanitizedPayload;
+    _lastAcceptedScanAt = now;
+
+    unawaited(_onQrisDetected(sanitizedPayload));
+  }
+
+  String _sanitizeQrisPayload(String rawPayload) {
+    return QrisParser.normalizeScannedPayload(rawPayload);
+  }
+
+  bool _looksLikeQrisPayload(String payload) {
+    if (payload.length < 14) return false;
+    final compact = payload.replaceAll(RegExp(r'\s+'), '');
+    if (compact.isEmpty) return false;
+
+    final hasEmvHeader = compact.contains('000201');
+    if (!hasEmvHeader) return false;
+
+    final hasCrcTag = compact.contains('6304');
+    if (!hasCrcTag) return false;
+
+    final hasMerchantOrAcquirerTag =
+      RegExp(r'(26|27|51|59)\d{2}').hasMatch(compact);
+    final hasCorePaymentHint = compact.contains('54') ||
+      compact.contains('5802') ||
+      compact.contains('53');
+
+    return hasMerchantOrAcquirerTag || hasCorePaymentHint;
+  }
+
+  bool _isRecoverableLocalParseFailure(
+      ParsedQrisResult localResult, String payload) {
+    if (localResult.isValid) return false;
+    // Local parser is intentionally strict. For scan-time UX, allow backend
+    // canonical parser to decide as long as payload still looks like QRIS.
+    return _looksLikeQrisPayload(payload);
+  }
+
+  Future<void> _onQrisDetected(String rawPayload) async {
+    if (_isProcessingScan) return;
+    _isProcessingScan = true;
+
+    try {
+      try {
+        await _scannerController?.stop();
+      } catch (_) {}
+      if (!mounted) return;
+
+      final sanitizedPayload = _sanitizeQrisPayload(rawPayload);
+      if (sanitizedPayload.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("QR Status: Payload tidak terbaca atau kosong"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        await _resumeScannerIfNeeded(force: true);
+        return;
+      }
+
+      final localResult = QrisParser.parse(sanitizedPayload);
+
+      // IMMEDIATE FEEDBACK: Show local parse results to the user while backend orchestrates.
+      if (localResult.isValid) {
+        setState(() {
+          _intent = PaymentIntent(
+            intentId: "local_sync",
+            merchantName: localResult.merchantName,
+            amountIdr: localResult.amount,
+            state: PaymentState.created,
+            nmid: localResult.merchantId,
+            merchantAccount: localResult.merchantAccount,
+            qrisPayload: sanitizedPayload,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+        });
+      } else if (!_isRecoverableLocalParseFailure(localResult, sanitizedPayload)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Sistem: ${localResult.errorReason}'),
+              backgroundColor: Colors.red),
+        );
+        await _resumeScannerIfNeeded(force: true);
+        return;
+      }
+
+      if (!localResult.isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Status: Mencoba parsing canonical di backend...'),
+            backgroundColor: Colors.orangeAccent,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Pass raw payload to backend for canonical intent creation & orchestration
+      await _service.createIntent(sanitizedPayload);
+    } finally {
+      _isProcessingScan = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SOLQ', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 4, color: Color(0xFF00FF94))),
+        title: const Text('SOLQ',
+            style: TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 4,
+                color: Color(0xFF00FF94))),
         centerTitle: true,
         backgroundColor: Colors.black,
         elevation: 0,
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [const Color(0xFF00FF94).withValues(alpha: 0.1), Colors.black]
-            )
-          ),
+              gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                const Color(0xFF00FF94).withValues(alpha: 0.1),
+                Colors.black
+              ])),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(30),
@@ -337,114 +554,129 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.check_circle, size: 12, color: Color(0xFF00FF94)),
+                const Icon(Icons.check_circle,
+                    size: 12, color: Color(0xFF00FF94)),
                 const SizedBox(width: 8),
-                FutureBuilder<Map<String, dynamic>>(
-                  future: SOLQService().getStats(),
-                  builder: (context, snapshot) {
-                    final count = snapshot.data?['success_count'] ?? 0;
-                    return Text(
-                      "$count PEMBAYARAN BERHASIL HARI INI",
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF00FF94), fontWeight: FontWeight.bold),
-                    );
-                  }
+                Text(
+                  "$_statsSuccessCount SUKSES HARI INI | $_statsUniqueUsers WALLET UNIK",
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF00FF94),
+                      fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 16),
-                GestureDetector(
-                  onTap: () => _showIPDialog("MANUAL CONFIGURATION"),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white24),
-                      borderRadius: BorderRadius.circular(4)
-                    ),
-                    child: const Text("IP", style: TextStyle(fontSize: 8, color: Colors.white38)),
-                  ),
-                )
               ],
             ),
           ),
         ),
         actions: [
           StreamBuilder<String>(
-            stream: SolanaService().signatureStream,
-            initialData: SolanaService().isConnected ? "CONNECTED" : "DISCONNECTED",
-            builder: (context, snapshot) {
-              final solana = SolanaService();
-              final isConn = solana.isConnected;
-              final walletType = solana.currentWalletType?.toUpperCase() ?? "UNKNOWN";
-              final address = solana.connectedAddress ?? "";
-              final shortAddr = address.length > 8 
-                  ? "${address.substring(0, 4)}...${address.substring(address.length - 4)}" 
-                  : address;
+              stream: SolanaService().signatureStream,
+              initialData:
+                  SolanaService().isConnected ? "CONNECTED" : "DISCONNECTED",
+              builder: (context, snapshot) {
+                final solana = SolanaService();
+                final isConn = solana.isConnected;
+                final walletType =
+                    solana.currentWalletType?.toUpperCase() ?? "UNKNOWN";
+                final address = solana.connectedAddress ?? "";
+                final shortAddr = address.length > 8
+                    ? "${address.substring(0, 4)}...${address.substring(address.length - 4)}"
+                    : address;
 
-              return Center( // Use Center to align vertically in AppBar
-                child: Container(
-                  margin: const EdgeInsets.only(right: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isConn 
-                        ? const Color(0xFF00FF94).withValues(alpha: 0.15) // Bright Green BG
-                        : const Color(0xFFFF5252).withValues(alpha: 0.15), // Bright Red BG
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isConn ? const Color(0xFF00FF94) : const Color(0xFFFF5252),
-                      width: 1
+                return Center(
+                  // Use Center to align vertically in AppBar
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isConn
+                          ? const Color(0xFF00FF94)
+                              .withValues(alpha: 0.15) // Bright Green BG
+                          : const Color(0xFFFF5252)
+                              .withValues(alpha: 0.15), // Bright Red BG
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: isConn
+                              ? const Color(0xFF00FF94)
+                              : const Color(0xFFFF5252),
+                          width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isConn ? Icons.wallet : Icons.wallet_rounded,
+                            size: 16,
+                            color: isConn
+                                ? const Color(0xFF00FF94)
+                                : const Color(0xFFFF5252)),
+                        const SizedBox(width: 8),
+                        if (isConn) ...[
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(walletType,
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF00FF94),
+                                      letterSpacing: 0.5)),
+                              Text(shortAddr,
+                                  style: const TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          )
+                        ] else ...[
+                          const Text("NO WALLET",
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFFFF5252),
+                                  letterSpacing: 0.5))
+                        ]
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isConn ? Icons.wallet : Icons.wallet_rounded, 
-                        size: 16, 
-                        color: isConn ? const Color(0xFF00FF94) : const Color(0xFFFF5252)
-                      ),
-                      const SizedBox(width: 8),
-                      if (isConn) ...[
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              walletType,
-                              style: const TextStyle(
-                                fontSize: 10, 
-                                fontWeight: FontWeight.w900, 
-                                color: Color(0xFF00FF94),
-                                letterSpacing: 0.5
-                              )
-                            ),
-                            Text(
-                              shortAddr,
-                              style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)
-                            ),
-                          ],
-                        )
-                      ] else ...[
-                        const Text(
-                          "NO WALLET",
-                          style: TextStyle(
-                            fontSize: 10, 
-                            fontWeight: FontWeight.w900, 
-                            color: Color(0xFFFF5252),
-                            letterSpacing: 0.5
-                          )
-                        )
-                      ]
-                    ],
-                  ),
-                ),
-              );
-            }
-          ),
+                );
+              }),
         ],
       ),
       body: _buildBody(),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.black,
+        currentIndex: _selectedTab,
+        onTap: (index) => setState(() => _selectedTab = index),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.payment, size: 24),
+            activeIcon: Icon(Icons.payment, size: 24),
+            label: 'BAYAR',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history, size: 24),
+            activeIcon: Icon(Icons.history, size: 24),
+            label: 'RIWAYAT',
+          ),
+        ],
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF00FF94),
+        unselectedItemColor: Colors.white24,
+        selectedLabelStyle:
+            const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+        unselectedLabelStyle: const TextStyle(fontSize: 10),
+      ),
     );
   }
 
   Widget _buildBody() {
+    // Show history view if history tab is selected
+    if (_selectedTab == 1) {
+      return const PaymentHistoryView();
+    }
+
     if (_scannerController != null && _intent == null) {
       return _buildScannerView();
     }
@@ -485,10 +717,11 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            solana.isConnected ? Icons.account_balance_wallet : Icons.account_balance_wallet_outlined,
-            size: 80, 
-            color: solana.isConnected ? Colors.greenAccent : Colors.white24
-          ),
+              solana.isConnected
+                  ? Icons.account_balance_wallet
+                  : Icons.account_balance_wallet_outlined,
+              size: 80,
+              color: solana.isConnected ? Colors.greenAccent : Colors.white24),
           const SizedBox(height: 20),
           if (solana.isConnected)
             Column(
@@ -496,58 +729,63 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 const SizedBox(height: 12),
                 Text(
                   "${_balance.toStringAsFixed(4)} SOL",
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
-                const Text("Mainnet Beta", style: TextStyle(color: Colors.white24, fontSize: 10)),
+                const Text("Mainnet Beta",
+                    style: TextStyle(color: Colors.white24, fontSize: 10)),
                 const SizedBox(height: 8),
-                const Text("SOLANA → QRIS BRIDGE", style: TextStyle(color: Colors.white10, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 3)),
+                const Text("SOLANA → QRIS BRIDGE",
+                    style: TextStyle(
+                        color: Colors.white10,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 3)),
                 const SizedBox(height: 24),
                 OutlinedButton.icon(
                   onPressed: _disconnect,
-                  icon: const Icon(Icons.logout, size: 16, color: Colors.redAccent),
-                  label: const Text("DISCONNECT", style: TextStyle(color: Colors.redAccent)),
+                  icon: const Icon(Icons.logout,
+                      size: 16, color: Colors.redAccent),
+                  label: const Text("DISCONNECT",
+                      style: TextStyle(color: Colors.redAccent)),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.5)),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    side: BorderSide(
+                        color: Colors.redAccent.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
                   ),
                 ),
               ],
             )
           else
-            const Text("NO WALLET CONNECTED", style: TextStyle(color: Colors.white24)),
-          
+            const Text("NO WALLET CONNECTED",
+                style: TextStyle(color: Colors.white24)),
           const SizedBox(height: 40),
-          
-          if (!solana.isConnected)
+          if (!solana.isConnected) ...[
+            _actionButton(
+              "CONNECT WALLET",
+              Icons.account_balance_wallet,
+              const Color(0xFF00FF94),
+              () => _showWalletPicker(solana),
+              textColor: Colors.black,
+            ),
+          ] else ...[
             Column(
               children: [
                 _actionButton(
-                  "CONNECT WALLET", 
-                  Icons.account_balance_wallet, 
-                  Colors.blueAccent, 
-                  () => _showWalletPicker(solana),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Supports Phantom, Solflare, Base & more",
-                  style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold),
-                ),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _actionButton(
-                  "SCAN QRIS",
+                  "START SCAN QRIS",
                   Icons.qr_code_scanner,
-                  Colors.white,
+                  const Color(0xFF00FF94),
                   _startScan,
-                  textColor: Colors.black
+                  textColor: Colors.black,
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: _pickFromGallery,
-                  icon: const Icon(Icons.photo_library, size: 18, color: Colors.white70),
+                  icon: const Icon(Icons.photo_library,
+                      size: 18, color: Colors.white70),
                   label: const Text(
                     "PILIH DARI GALERI",
                     style: TextStyle(
@@ -559,83 +797,69 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.white24),
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 32, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
                 const SizedBox(height: 10),
                 const Text(
                   "Scan langsung atau pilih foto QR dari galeri",
-                  style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.white24,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold),
                 ),
               ],
             ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _pickFromGallery() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Menganalisa gambar..."),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      final success = await _scannerController?.analyzeImage(image.path);
+      if (success == null || !success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("QRIS tidak terdeteksi dalam gambar."),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Gagal menganalisa gambar: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   void _showWalletPicker(SolanaService solana) {
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text("Connect Wallet", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
-        backgroundColor: const Color(0xFF1A1A1A),
-        titleTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        children: [
-          _walletDialogItem("Phantom", Icons.account_balance_wallet, const Color(0xFFAB9FF2), () {
-            Navigator.pop(context);
-            solana.connectPhantom();
-          }),
-          _walletDialogItem("Solflare", Icons.wb_sunny_outlined, const Color(0xFFFFA726), () {
-            Navigator.pop(context);
-            solana.connectSolflare();
-          }),
-          _walletDialogItem("Jupiter", Icons.swap_horiz, const Color(0xFF4CAF50), () {
-            Navigator.pop(context);
-            solana.connectJupiter();
-          }),
-          _walletDialogItem("MetaMask (Snaps)", Icons.hexagon_outlined, const Color(0xFFF6851B), () {
-            Navigator.pop(context);
-            solana.connectMetamask();
-          }),
-          const Divider(height: 1, color: Colors.white12, indent: 16, endIndent: 16),
-          _walletDialogItem("Binance Web3", Icons.account_balance, const Color(0xFFF0B90B), () {
-            Navigator.pop(context);
-            solana.connectCex('Binance', 'bnc://app.binance.com/defi/wallet/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
-          }),
-          _walletDialogItem("OKX Wallet", Icons.grid_view_rounded, Colors.white70, () {
-            Navigator.pop(context);
-            solana.connectCex('OKX', 'okx://wallet/dapp/details?dappUrl=https://solq.app&redirect_link=solq://onConnect');
-          }),
-          _walletDialogItem("Trust Wallet", Icons.verified_user_outlined, const Color(0xFF3375BB), () {
-            Navigator.pop(context);
-            solana.connectCex('Trust', 'trust://solana/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
-          }),
-          _walletDialogItem("Bybit Web3", Icons.candlestick_chart, const Color(0xFFF7A600), () {
-            Navigator.pop(context);
-            solana.connectCex('Bybit', 'bybitapp://open/route?name=web3&url=https://solq.app');
-          }),
-          _walletDialogItem("Backpack", Icons.backpack_outlined, const Color(0xFFE44040), () {
-            Navigator.pop(context);
-            solana.connectCex('Backpack', 'backpack://wallet/connect?app_url=https://solq.app&redirect_link=solq://onConnect');
-          }),
-          const Divider(height: 1, color: Colors.white12, indent: 16, endIndent: 16),
-          _walletDialogItem("Browser Extension", Icons.extension_outlined, Colors.white38, () {
-            Navigator.pop(context);
-            solana.connectUniversal(wallet: 'universal');
-          }),
-          _walletDialogItem("Other Wallet", Icons.more_horiz, Colors.white24, () {
-            Navigator.pop(context);
-            solana.connectUniversal();
-          }),
-        ],
-      ),
-    );
+    WalletPicker.show(context);
   }
 
-  Widget _walletDialogItem(String name, IconData icon, Color color, VoidCallback onTap) {
+  Widget _walletDialogItem(
+      String name, IconData icon, Color color, VoidCallback onTap) {
     return SimpleDialogOption(
       onPressed: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -643,21 +867,87 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(width: 16),
-          Text(name, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+          Text(name,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-
-
-
   Widget _buildScannerView() {
+    final controller = _scannerController;
+    if (controller == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF00FF94)),
+      );
+    }
+
     return Stack(
       children: [
         MobileScanner(
-          controller: _scannerController,
+          controller: controller,
+          fit: BoxFit.cover,
           onDetect: _onScanDetect,
+          placeholderBuilder: (context, child) => Container(
+            color: Colors.black,
+            child: const Center(
+              child: CircularProgressIndicator(color: Color(0xFF00FF94)),
+            ),
+          ),
+          errorBuilder: (context, error, child) {
+            return Container(
+              color: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.videocam_off_outlined,
+                        color: Colors.redAccent, size: 48),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Kamera tidak dapat diakses.",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Pastikan izin kamera aktif dan tidak ada aplikasi lain yang menggunakan kamera.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => _startScanner(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00FF94),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 32, vertical: 12),
+                      ),
+                      child: const Text("COBA LAGI"),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 16,
+          right: 16,
+          child: IconButton(
+            onPressed: () => _scannerController?.toggleTorch(),
+            icon: const Icon(Icons.flashlight_on, color: Colors.white),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black45,
+            ),
+          ),
         ),
         // Gallery pick button overlay - bottom center
         Positioned(
@@ -672,7 +962,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 _pickFromGallery();
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(30),
@@ -704,7 +995,9 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             width: 250,
             height: 250,
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF00FF94).withValues(alpha: 0.5), width: 2),
+              border: Border.all(
+                  color: const Color(0xFF00FF94).withValues(alpha: 0.5),
+                  width: 2),
               borderRadius: BorderRadius.circular(16),
             ),
           ),
@@ -720,32 +1013,61 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // STATE-DRIVEN STATUS MESSAGES (THE BOSS PATH)
-          if (intent.state == PaymentState.created) _statusText("QRIS Validated: Ready to Swap", color: Colors.greenAccent),
-          if (intent.state == PaymentState.pendingAmount) _statusText("Manual Amount Entry", color: Colors.blueAccent),
-          if (intent.state == PaymentState.authorizationRequested) _statusText("Launching Solana Pay Request...", color: Colors.amberAccent),
-          if (intent.state == PaymentState.authorized) _statusText("Verifying On-Chain Transaction...", color: Colors.amberAccent),
-          if (intent.state == PaymentState.awaitingSettlement) _statusText("Settlement In Progress...", color: Colors.blueAccent), 
-          if (intent.state == PaymentState.completed) _statusText("SETTLEMENT COMPLETED", color: Colors.greenAccent),
-          if (intent.state == PaymentState.failed) _statusText("TRANSACTION FAILED", color: Colors.redAccent),
-          if (intent.state == PaymentState.expired) _statusText("SESSION EXPIRED", color: Colors.orangeAccent),
-          
+          // STATE-DRIVEN STATUS MESSAGES (TRANSACTION FLOW)
+          if (intent.state == PaymentState.created)
+            _statusText("QRIS Validated: Ready to Swap",
+                color: Colors.greenAccent),
+          if (intent.state == PaymentState.pendingAmount)
+            _statusText("Manual Amount Entry", color: Colors.blueAccent),
+          if (intent.state == PaymentState.authorizationRequested)
+            _statusText("Launching Solana Pay Request...",
+                color: Colors.amberAccent),
+          if (intent.state == PaymentState.authorized)
+            _statusText("Verifying On-Chain Transaction...",
+                color: Colors.amberAccent),
+          if (intent.state == PaymentState.awaitingSettlement)
+            _statusText("Settlement In Progress...", color: Colors.blueAccent),
+          if (intent.state == PaymentState.completed)
+            _statusText("SETTLEMENT COMPLETED", color: Colors.greenAccent),
+          if (intent.state == PaymentState.failed)
+            _statusText("TRANSACTION FAILED", color: Colors.redAccent),
+          if (intent.state == PaymentState.expired)
+            _statusText("SESSION EXPIRED", color: Colors.orangeAccent),
+
           const SizedBox(height: 40),
-          Text(intent.merchantName.toUpperCase(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          Text(intent.merchantName.toUpperCase(),
+              style: const TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          const Text(
+            "NAMA MERCHANT TERDETEKSI",
+            style: TextStyle(
+                fontSize: 10, color: Colors.white38, letterSpacing: 1),
+          ),
           if (intent.bankCode != null || intent.nmid != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                "${intent.bankCode ?? 'E-MONEY'} | NMID: ${intent.nmid ?? 'PENDING'}", 
-                style: const TextStyle(fontSize: 10, color: Colors.blueAccent, fontWeight: FontWeight.bold, letterSpacing: 1)
-              ),
+                  "${intent.bankCode ?? 'E-MONEY'} | NMID: ${intent.nmid ?? 'PENDING'}",
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1)),
             ),
-          if (intent.merchantAccount != null)
+          if (intent.merchantAccount != null &&
+              intent.merchantAccount!.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text("ID: ${intent.merchantAccount}", style: const TextStyle(fontSize: 11, color: Colors.white38)),
+              child: Text(
+                "NOMOR REKENING QRIS: ${intent.merchantAccount}",
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700),
+              ),
             ),
-          
+
           // DYNAMIC AMOUNT VIEW
           if (intent.state == PaymentState.pendingAmount)
             _buildAmountInput(intent)
@@ -757,59 +1079,87 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   children: [
                     const Icon(Icons.lock, size: 14, color: Colors.greenAccent),
                     const SizedBox(width: 8),
-                    Text('Rp ${intent.amountIdr}', style: const TextStyle(fontSize: 32, color: Colors.greenAccent, fontWeight: FontWeight.w900)),
+                    Text('Rp ${intent.amountIdr}',
+                        style: const TextStyle(
+                            fontSize: 32,
+                            color: Colors.greenAccent,
+                            fontWeight: FontWeight.w900)),
                   ],
                 ),
-                  if (intent.estimatedCryptoAmount != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.account_balance, size: 12, color: Colors.blueAccent),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                            child: Text(
-                              "~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0.0") ?? 0.0) / 100).toStringAsFixed(2)} IDRX",
-                              style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    ),
-                    child: Column(
+                if (intent.estimatedCryptoAmount != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _feeRow("Platform Yield (Spread)", "Rp ${intent.platformFee?.toStringAsFixed(0)}"),
-                        _feeRow("Est. Network Gas", "${intent.networkFee?.toStringAsFixed(6)} SOL"),
-                        _feeRow("Liquidity Slippage", "${intent.slippage}%"),
-                        _feeRow("Total Fee (%)", "${intent.effectiveFeePercent}%", isHighlight: true),
-                        _feeRow("YOU SAVE (vs Legacy)", "Rp ${intent.userSavingsVsQris?.toStringAsFixed(0)}", isHighlight: true),
-                        _feeRow("TOTAL DIBAYAR", "Rp ${intent.maxFee?.toStringAsFixed(0)}", isHighlight: true),
-                        const Divider(height: 20, color: Colors.white10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text("RATE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38)),
-                            Text("1 SOL ≈ ${intent.quotedRate?.toStringAsFixed(0)} IDR", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-                          ],
+                        const Icon(Icons.account_balance,
+                            size: 12, color: Colors.blueAccent),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(4)),
+                          child: Text(
+                            "~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0.0") ?? 0.0) / 100).toStringAsFixed(2)} IDRX",
+                            style: const TextStyle(
+                                color: Colors.greenAccent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
                   ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Column(
+                    children: [
+                      _feeRow("Platform Yield (Spread)",
+                          "Rp ${intent.platformFee?.toStringAsFixed(0)}"),
+                      _feeRow("Est. Network Gas",
+                          "${intent.networkFee?.toStringAsFixed(6)} SOL"),
+                      _feeRow("Liquidity Slippage", "${intent.slippage}%"),
+                      _feeRow("Total Fee (%)", "${intent.effectiveFeePercent}%",
+                          isHighlight: true),
+                      _feeRow("YOU SAVE (vs Legacy)",
+                          "Rp ${intent.userSavingsVsQris?.toStringAsFixed(0)}",
+                          isHighlight: true),
+                      _feeRow("TOTAL DIBAYAR",
+                          "Rp ${intent.maxFee?.toStringAsFixed(0)}",
+                          isHighlight: true),
+                      const Divider(height: 20, color: Colors.white10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("RATE",
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white38)),
+                          Text(
+                              "1 SOL ≈ ${intent.quotedRate?.toStringAsFixed(0)} IDR",
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.greenAccent)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-          
+
           const SizedBox(height: 24),
 
           // ═══════════════════════════════════════════════════
@@ -827,24 +1177,29 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () => _service.requestAuthorization(intent.intentId),
+                    onPressed: () =>
+                        _service.requestAuthorization(intent.intentId),
                     icon: const Icon(Icons.payment, color: Colors.black),
                     label: Text(
                       _settlementTrack == 'instant'
-                        ? "⚡ BAYAR INSTANT"
-                        : _settlementTrack == 'economy'
-                          ? "💎 BAYAR HEMAT"
-                          : "BAYAR SEKARANG",
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2),
+                          ? "⚡ BAYAR INSTANT"
+                          : _settlementTrack == 'economy'
+                              ? "💎 BAYAR HEMAT"
+                              : "BAYAR SEKARANG",
+                      style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _settlementTrack == 'instant'
-                        ? Colors.amberAccent
-                        : _settlementTrack == 'economy'
-                          ? Colors.blueAccent
-                          : const Color(0xFF00FF94),
+                          ? Colors.amberAccent
+                          : _settlementTrack == 'economy'
+                              ? Colors.blueAccent
+                              : const Color(0xFF00FF94),
                       padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ),
@@ -854,66 +1209,90 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           if (intent.state == PaymentState.authorizationRequested)
             Column(
               children: [
-                const CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
+                const CircularProgressIndicator(
+                    color: Colors.white24, strokeWidth: 2),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => _service.requestAuthorization(intent.intentId),
+                  onPressed: () =>
+                      _service.requestAuthorization(intent.intentId),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white10,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30)),
                     side: const BorderSide(color: Colors.white24),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                       Icon(Icons.double_arrow_rounded, color: Colors.white70),
-                       SizedBox(width: 10),
-                       Text("BUKA WALLET & TANDA TANGAN", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                      Icon(Icons.double_arrow_rounded, color: Colors.white70),
+                      SizedBox(width: 10),
+                      Text("BUKA WALLET & TANDA TANGAN",
+                          style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text("Menunggu Tanda Tangan Wallet...", style: TextStyle(color: Colors.white24, fontSize: 10)),
+                const Text("Menunggu Tanda Tangan Wallet...",
+                    style: TextStyle(color: Colors.white24, fontSize: 10)),
               ],
             ),
 
-          if (intent.state == PaymentState.awaitingSettlement || intent.state == PaymentState.authorized)
-            Column(
+          if (intent.state == PaymentState.awaitingSettlement ||
+              intent.state == PaymentState.authorized)
+            const Column(
               children: [
-                const SizedBox(height: 20),
-                const CircularProgressIndicator(color: Color(0xFF00FF94), strokeWidth: 2),
-                const SizedBox(height: 16),
-                const Text("Memverifikasi transaksi on-chain...", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                SizedBox(height: 20),
+                CircularProgressIndicator(
+                    color: Color(0xFF00FF94), strokeWidth: 2),
+                SizedBox(height: 16),
+                Text("Memverifikasi transaksi on-chain...",
+                    style: TextStyle(color: Colors.white38, fontSize: 12)),
               ],
             ),
 
-            if (intent.state != PaymentState.completed)
-              TextButton(
-                    onPressed: () => setState(() => _intent = null), 
-                child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontSize: 12, letterSpacing: 2))
-              ),
-          
-          const SizedBox(height: 50), // Fixed: Spacer() causes crash in SingleChildScrollView
+          if (intent.state != PaymentState.completed)
+            TextButton(
+                onPressed: _startScan,
+                child: const Text("CANCEL",
+                    style: TextStyle(
+                        color: Colors.white24,
+                        fontSize: 12,
+                        letterSpacing: 2))),
+
+          const SizedBox(
+              height:
+                  50), // Fixed: Spacer() causes crash in SingleChildScrollView
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.redAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
+              border:
+                  Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 16),
+                const Icon(Icons.warning_amber_rounded,
+                    color: Colors.redAccent, size: 16),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("UANG ASLI. BUKAN SIMULASI.", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                      const Text("UANG ASLI. BUKAN SIMULASI.",
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.redAccent)),
                       Text(
                         "Transaksi ini memotong saldo SOL di wallet Anda.",
-                        style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.5)),
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white.withValues(alpha: 0.5)),
                       ),
                     ],
                   ),
@@ -937,21 +1316,26 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
 
     // Cost calculations per track
     final instantFee = amount < 200000
-        ? 2500 + (amount * 0.012)  // flat + 1.2% for small tx
-        : amount * 0.025;          // 2.5% for larger tx
-    final standardFee = amount * 0.012;  // ~1.2% (platform + slippage)
-    final economyFee = amount * 0.005;   // ~0.5% (minimal, on-chain only)
+        ? 2500 + (amount * 0.012) // flat + 1.2% for small tx
+        : amount * 0.025; // 2.5% for larger tx
+    final standardFee = amount * 0.012; // ~1.2% (platform + slippage)
+    final economyFee = amount * 0.005; // ~0.5% (minimal, on-chain only)
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(Icons.route, size: 14, color: Colors.white.withValues(alpha: 0.5)),
+            Icon(Icons.route,
+                size: 14, color: Colors.white.withValues(alpha: 0.5)),
             const SizedBox(width: 8),
             const Text(
               "SETTLEMENT TRACK",
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white54, letterSpacing: 2),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white54,
+                  letterSpacing: 2),
             ),
           ],
         ),
@@ -967,9 +1351,9 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           fee: 'Rp ${instantFee.toStringAsFixed(0)}',
           feePercent: '${(instantFee / amount * 100).toStringAsFixed(1)}%',
           color: Colors.amberAccent,
-          description: 'Float Pool + Xendit → GoPay/OVO/BCA langsung',
-          available: false,
-          unavailableReason: 'Segera hadir (butuh Xendit API)',
+          description: 'BI-FAST Rail → GoPay/OVO/BCA langsung',
+          available: true,
+          isRecommended: false,
         ),
         const SizedBox(height: 8),
 
@@ -1012,7 +1396,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF00FF94).withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFF00FF94).withValues(alpha: 0.15)),
+            border: Border.all(
+                color: const Color(0xFF00FF94).withValues(alpha: 0.15)),
           ),
           child: Row(
             children: [
@@ -1021,7 +1406,10 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               Expanded(
                 child: Text(
                   "Semua track: dana AMAN di Treasury on-chain. 0% risiko kehilangan.",
-                  style: TextStyle(fontSize: 9, color: const Color(0xFF00FF94).withValues(alpha: 0.7), fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: const Color(0xFF00FF94).withValues(alpha: 0.7),
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1055,17 +1443,17 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected
-            ? color.withValues(alpha: 0.12)
-            : available
-              ? Colors.white.withValues(alpha: 0.03)
-              : Colors.white.withValues(alpha: 0.01),
+              ? color.withValues(alpha: 0.12)
+              : available
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.01),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-              ? color
-              : available
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.white.withValues(alpha: 0.05),
+                ? color
+                : available
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.05),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1073,7 +1461,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           children: [
             // Radio indicator
             Container(
-              width: 22, height: 22,
+              width: 22,
+              height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
@@ -1083,8 +1472,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 color: isSelected ? color : Colors.transparent,
               ),
               child: isSelected
-                ? const Icon(Icons.check, size: 14, color: Colors.black)
-                : null,
+                  ? const Icon(Icons.check, size: 14, color: Colors.black)
+                  : null,
             ),
             const SizedBox(width: 12),
 
@@ -1095,7 +1484,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 color: color.withValues(alpha: available ? 0.15 : 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: available ? color : Colors.white24, size: 20),
+              child: Icon(icon,
+                  color: available ? color : Colors.white24, size: 20),
             ),
             const SizedBox(width: 12),
 
@@ -1118,28 +1508,38 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                       if (isRecommended) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: color.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             'RECOMMENDED',
-                            style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: color, letterSpacing: 1),
+                            style: TextStyle(
+                                fontSize: 7,
+                                fontWeight: FontWeight.w900,
+                                color: color,
+                                letterSpacing: 1),
                           ),
                         ),
                       ],
                       if (!available) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             'COMING SOON',
-                            style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: Colors.white38, letterSpacing: 1),
+                            style: TextStyle(
+                                fontSize: 7,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white38,
+                                letterSpacing: 1),
                           ),
                         ),
                       ],
@@ -1162,7 +1562,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(4),
@@ -1208,7 +1609,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.redAccent, width: 2),
@@ -1217,16 +1619,29 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
               child: const Icon(Icons.close, color: Colors.redAccent, size: 44),
             ),
             const SizedBox(height: 16),
-            const Text("TRANSAKSI GAGAL", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.redAccent, letterSpacing: 2)),
+            const Text("TRANSAKSI GAGAL",
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.redAccent,
+                    letterSpacing: 2)),
             const SizedBox(height: 8),
-            Text(intent.merchantName, style: const TextStyle(color: Colors.white54)),
+            Text(intent.merchantName,
+                style: const TextStyle(color: Colors.white54)),
             const SizedBox(height: 8),
-            Text("Rp ${intent.amountIdr}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text("Rp ${intent.amountIdr}",
+                style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
             const SizedBox(height: 32),
-            const Text("Kemungkinan penyebab:", style: TextStyle(color: Colors.white38, fontSize: 12)),
+            const Text("Kemungkinan penyebab:",
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
             const SizedBox(height: 8),
-            const Text("• Wallet menolak tanda tangan\n• Saldo SOL tidak cukup\n• Token salah / amount tidak cocok\n• Jaringan timeout",
-              style: TextStyle(color: Colors.white24, fontSize: 11, height: 1.6)),
+            const Text(
+                "• Wallet menolak tanda tangan\n• Saldo SOL tidak cukup\n• Token salah / amount tidak cocok\n• Jaringan timeout",
+                style: TextStyle(
+                    color: Colors.white24, fontSize: 11, height: 1.6)),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
@@ -1236,11 +1651,14 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   _service.reset();
                 }),
                 icon: const Icon(Icons.refresh, color: Colors.black),
-                label: const Text("COBA LAGI", style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900)),
+                label: const Text("COBA LAGI",
+                    style: TextStyle(
+                        color: Colors.black, fontWeight: FontWeight.w900)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.redAccent,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
               ),
             ),
@@ -1263,18 +1681,26 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.trending_down, size: 14, color: Colors.blueAccent),
+              const Icon(Icons.trending_down,
+                  size: 14, color: Colors.blueAccent),
               const SizedBox(width: 8),
               Text(
                 "SAVING: Rp ${((double.tryParse(_manualAmount) ?? 0) * 0.0235).toStringAsFixed(0)} VS LEGACY (3%)",
-                style: const TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                style: const TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1),
               ),
             ],
           ),
         ),
         const SizedBox(height: 10),
-        Text('Rp ${_manualAmount.isEmpty ? "0" : _manualAmount}', 
-          style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold)),
+        Text('Rp ${_manualAmount.isEmpty ? "0" : _manualAmount}',
+            style: const TextStyle(
+                fontSize: 40,
+                color: Colors.white,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 20),
         GridView.count(
           shrinkWrap: true,
@@ -1307,7 +1733,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   }
                 });
               },
-              child: Text(val, style: const TextStyle(color: Colors.white, fontSize: 20)),
+              child: Text(val,
+                  style: const TextStyle(color: Colors.white, fontSize: 20)),
             );
           }),
         ),
@@ -1320,29 +1747,36 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(border: Border.all(color: Colors.white10)),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)
-      ),
+      child: Text(text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 20, fontWeight: FontWeight.bold, color: color)),
     );
   }
 
-  Widget _actionButton(String label, IconData icon, Color color, VoidCallback onPressed, {Color textColor = Colors.white, bool isPremium = false}) {
+  Widget _actionButton(
+      String label, IconData icon, Color color, VoidCallback onPressed,
+      {Color textColor = Colors.white, bool isPremium = false}) {
     return Container(
-      decoration: isPremium ? BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.3),
-            blurRadius: 30,
-            spreadRadius: 5,
-          )
-        ],
-      ) : null,
+      decoration: isPremium
+          ? BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 30,
+                  spreadRadius: 5,
+                )
+              ],
+            )
+          : null,
       child: ElevatedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, color: textColor, size: 18),
-        label: Text(label, style: TextStyle(color: textColor, fontWeight: FontWeight.w900, letterSpacing: 1)),
+        label: Text(label,
+            style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1)),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -1360,8 +1794,17 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: isHighlight ? Colors.amberAccent : Colors.white54, fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal)),
-          Text(value, style: TextStyle(fontSize: 11, color: isHighlight ? Colors.amberAccent : Colors.white, fontWeight: FontWeight.bold)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: isHighlight ? Colors.amberAccent : Colors.white54,
+                  fontWeight:
+                      isHighlight ? FontWeight.bold : FontWeight.normal)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: isHighlight ? Colors.amberAccent : Colors.white,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -1379,7 +1822,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
         children: [
           // ── ANIMATED CHECKMARK HEADER ──
           Container(
-            width: 80, height: 80,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: const Color(0xFF00FF94), width: 2),
@@ -1388,8 +1832,15 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             child: const Icon(Icons.check, color: Color(0xFF00FF94), size: 44),
           ),
           const SizedBox(height: 16),
-          const Text("PEMBAYARAN QRIS BERHASIL", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF00FF94), letterSpacing: 2)),
-          const Text("SOLANA → QRIS | ON-CHAIN VERIFIED ✓", style: TextStyle(fontSize: 9, color: Colors.white30, letterSpacing: 2)),
+          const Text("PEMBAYARAN QRIS BERHASIL",
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF00FF94),
+                  letterSpacing: 2)),
+          const Text("SOLANA → QRIS | ON-CHAIN VERIFIED ✓",
+              style: TextStyle(
+                  fontSize: 9, color: Colors.white30, letterSpacing: 2)),
           const SizedBox(height: 32),
 
           // ── RECEIPT CARD ──
@@ -1398,8 +1849,12 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.white.withValues(alpha: 0.06), Colors.white.withValues(alpha: 0.02)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.06),
+                  Colors.white.withValues(alpha: 0.02)
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white10),
@@ -1407,42 +1862,83 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.verified, color: Color(0xFF00FF94), size: 12),
-                    const SizedBox(width: 6),
-                    const Text("KWITANSI SOLQ × QRIS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF00FF94), letterSpacing: 1)),
+                    Icon(Icons.verified, color: Color(0xFF00FF94), size: 12),
+                    SizedBox(width: 6),
+                    Text("KWITANSI SOLQ × QRIS",
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF00FF94),
+                            letterSpacing: 1)),
                   ],
                 ),
                 const SizedBox(height: 16),
-                Text(intent.merchantName.toUpperCase(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                Text(intent.merchantName.toUpperCase(),
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1)),
                 if (intent.bankCode != null)
-                  Text("via ${intent.bankCode}", style: const TextStyle(fontSize: 10, color: Colors.blueAccent)),
+                  Text("via ${intent.bankCode}",
+                      style: const TextStyle(
+                          fontSize: 10, color: Colors.blueAccent)),
+                if (intent.merchantAccount != null &&
+                    intent.merchantAccount!.trim().isNotEmpty)
+                  Text(
+                    "Rekening QRIS: ${intent.merchantAccount}",
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600),
+                  ),
+                if (intent.nmid != null && intent.nmid!.trim().isNotEmpty)
+                  Text(
+                    "NMID: ${intent.nmid}",
+                    style: const TextStyle(fontSize: 9, color: Colors.white38),
+                  ),
                 const Divider(height: 30, color: Colors.white10),
 
                 // Amount
-                Text("Rp ${int.tryParse(intent.amountIdr)?.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.') ?? intent.amountIdr}",
-                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1)),
+                Text(
+                    "Rp ${int.tryParse(intent.amountIdr)?.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.') ?? intent.amountIdr}",
+                    style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1)),
                 const SizedBox(height: 8),
-                _feeRow("Exchange Rate", "1 SOL ≈ Rp ${intent.quotedRate?.toStringAsFixed(0) ?? '?'}"),
-                _feeRow("Platform Fee (1%)", "Rp ${intent.platformFee?.toStringAsFixed(0) ?? '?'}"),
-                _feeRow("Total Biaya Efektif", "${intent.effectiveFeePercent?.toStringAsFixed(2) ?? '~1.5'}%", isHighlight: true),
+                _feeRow("Exchange Rate",
+                    "1 SOL ≈ Rp ${intent.quotedRate?.toStringAsFixed(0) ?? '?'}"),
+                _feeRow("Platform Fee (1%)",
+                    "Rp ${intent.platformFee?.toStringAsFixed(0) ?? '?'}"),
+                _feeRow("Total Biaya Efektif",
+                    "${intent.effectiveFeePercent?.toStringAsFixed(2) ?? '~1.5'}%",
+                    isHighlight: true),
                 const Divider(height: 24, color: Colors.white10),
 
                 // TX HASH — Full + Copy
                 if (txHash.isNotEmpty) ...[
-                  const Text("ON-CHAIN TRANSACTION HASH", style: TextStyle(fontSize: 9, color: Colors.white38, letterSpacing: 1)),
+                  const Text("ON-CHAIN TRANSACTION HASH",
+                      style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.white38,
+                          letterSpacing: 1)),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: txHash));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("TX Hash copied!"), duration: Duration(seconds: 2)),
+                        const SnackBar(
+                            content: Text("TX Hash copied!"),
+                            duration: Duration(seconds: 2)),
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
@@ -1451,28 +1947,35 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(shortHash, style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 13, color: Color(0xFF00FF94), fontWeight: FontWeight.bold,
-                            )),
+                            child: Text(shortHash,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 13,
+                                  color: Color(0xFF00FF94),
+                                  fontWeight: FontWeight.bold,
+                                )),
                           ),
-                          const Icon(Icons.copy, size: 14, color: Colors.white38),
+                          const Icon(Icons.copy,
+                              size: 14, color: Colors.white38),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // DUAL EXPLORER LINKS (Sam Altman Proof Standard)
+                  // DUAL EXPLORER LINKS (Verification Standard)
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => launchUrl(
-                            Uri.parse("https://explorer.solana.com/tx/$txHash?cluster=mainnet-beta"),
+                            Uri.parse(
+                                "https://explorer.solana.com/tx/$txHash?cluster=mainnet-beta"),
                             mode: LaunchMode.externalApplication,
                           ),
                           icon: const Icon(Icons.open_in_new, size: 12),
-                          label: const Text("Explorer", style: TextStyle(fontSize: 11)),
+                          label: const Text("Explorer",
+                              style: TextStyle(fontSize: 11)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white70,
                             side: const BorderSide(color: Colors.white12),
@@ -1484,14 +1987,17 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => launchUrl(
-                            Uri.parse("https://solana.fm/tx/$txHash?cluster=mainnet-beta"),
+                            Uri.parse(
+                                "https://solana.fm/tx/$txHash?cluster=mainnet-beta"),
                             mode: LaunchMode.externalApplication,
                           ),
                           icon: const Icon(Icons.launch, size: 12),
-                          label: const Text("Solana.fm", style: TextStyle(fontSize: 11)),
+                          label: const Text("Solana.fm",
+                              style: TextStyle(fontSize: 11)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF00FF94),
-                            side: const BorderSide(color: Color(0xFF00FF94), width: 0.5),
+                            side: const BorderSide(
+                                color: Color(0xFF00FF94), width: 0.5),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                         ),
@@ -1499,7 +2005,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                     ],
                   ),
                 ] else ...[
-                  const Text("TX HASH PENDING SYNC", style: TextStyle(fontSize: 10, color: Colors.amber)),
+                  const Text("TX HASH PENDING SYNC",
+                      style: TextStyle(fontSize: 10, color: Colors.amber)),
                 ],
 
                 const SizedBox(height: 24),
@@ -1520,7 +2027,8 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
             decoration: BoxDecoration(
               color: Colors.blueAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+              border:
+                  Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1529,48 +2037,63 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                   children: [
                     Icon(Icons.qr_code, color: Colors.blueAccent, size: 16),
                     SizedBox(width: 8),
-                    Text("SETTLEMENT QRIS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.blueAccent, letterSpacing: 1)),
+                    Text("SETTLEMENT QRIS",
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.blueAccent,
+                            letterSpacing: 1)),
                   ],
                 ),
                 const SizedBox(height: 10),
                 // Settlement track info
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: _settlementTrack == 'instant'
-                      ? Colors.amberAccent.withValues(alpha: 0.1)
-                      : _settlementTrack == 'economy'
-                        ? Colors.blueAccent.withValues(alpha: 0.1)
-                        : const Color(0xFF00FF94).withValues(alpha: 0.1),
+                        ? Colors.amberAccent.withValues(alpha: 0.1)
+                        : _settlementTrack == 'economy'
+                            ? Colors.blueAccent.withValues(alpha: 0.1)
+                            : const Color(0xFF00FF94).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     _settlementTrack == 'instant'
-                      ? "⚡ INSTANT TRACK — 5-30 detik"
-                      : _settlementTrack == 'economy'
-                        ? "💎 ECONOMY TRACK — 1-24 jam (batch settlement)"
-                        : "🔄 STANDARD TRACK — 1-5 menit via IDRX off-ramp",
+                        ? "⚡ INSTANT TRACK — 5-30 detik"
+                        : _settlementTrack == 'economy'
+                            ? "💎 ECONOMY TRACK — 1-24 jam (batch settlement)"
+                            : "🔄 STANDARD TRACK — 1-5 menit via IDRX off-ramp",
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w900,
                       color: _settlementTrack == 'instant'
-                        ? Colors.amberAccent
-                        : _settlementTrack == 'economy'
-                          ? Colors.blueAccent
-                          : const Color(0xFF00FF94),
+                          ? Colors.amberAccent
+                          : _settlementTrack == 'economy'
+                              ? Colors.blueAccent
+                              : const Color(0xFF00FF94),
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 if (intent.bankCode != null)
-                  Text("✅ IDR dikirim ke ${intent.bankCode} merchant via IDRX off-ramp",
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent.withValues(alpha: 0.8)))
+                  Text(
+                      "✅ IDR dikirim ke ${intent.bankCode} merchant via IDRX off-ramp",
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.greenAccent.withValues(alpha: 0.8)))
                 else
                   Text("✅ IDRX settlement on-chain — verifiable di Explorer",
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent.withValues(alpha: 0.8))),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.greenAccent.withValues(alpha: 0.8))),
                 const SizedBox(height: 6),
                 Text("SOL → IDRX (on-chain) → IDR (off-ramp) → Merchant",
-                  style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.4))),
+                    style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white.withValues(alpha: 0.4))),
               ],
             ),
           ),
@@ -1584,11 +2107,16 @@ class _OrchestratorScreenState extends State<OrchestratorScreen> {
                 _service.reset();
               }),
               icon: const Icon(Icons.qr_code_scanner, color: Colors.black),
-              label: const Text("BAYAR LAGI", style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
+              label: const Text("BAYAR LAGI",
+                  style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00FF94),
                 padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ),

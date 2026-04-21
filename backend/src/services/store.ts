@@ -15,6 +15,11 @@ export interface PaymentIntent {
     nmid?: string;
     txHash?: string;
     settlement_ref?: string;
+    payer_account?: string;
+    input_mint?: string;
+    expected_output_mint?: string;
+    expected_atomic_amount?: number;
+    expected_recipient_ata?: string;
     platformFee?: number;
     networkFee?: number;
     slippage?: number;

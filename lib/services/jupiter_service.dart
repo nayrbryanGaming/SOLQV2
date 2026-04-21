@@ -9,7 +9,7 @@ class JupiterQuoteResponse {
   final String inAmount;
   final double price; // Real-time market price (IDR per SOL)
   
-  // THE ALTMAN DISCLOSURE: Full Fee Transparency
+  // FEE DISCLOSURE: Full Fee Transparency
   final double platformFeeIdr;       // SOLQ Revenue (1.0% - embedded in spread)
   final double networkFeeSol;         // Solana gas (actual blockchain cost)
   final double slippagePct;           // Liquidity protection (0.5%)
@@ -48,7 +48,7 @@ class JupiterService {
   static const String treasuryWallet = "ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m";
   static const String treasuryIdrxAta = "QVpWTCsVLDSLusuwNu3ucEQmeDUjCid1kap5qXzii38";
   
-  // THE ALTMAN FEE STRATEGY:
+  // REVENUE & SLIPPAGE STRATEGY:
   // Platform Fee: 1.0% (100 bps) - SOLQ revenue
   // Slippage: 1.0% (100 bps) - mainnet reliability (prevents failed txs)
   // Network Gas: ~0.000006 SOL (~Rp 0.15 @ 25M IDR/SOL)
