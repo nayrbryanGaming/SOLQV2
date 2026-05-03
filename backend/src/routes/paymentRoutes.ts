@@ -3,6 +3,10 @@ import { QRISDecoder } from '../services/qrisDecoder';
 import { BankPartnerService } from '../services/bankPartnerService';
 import { AuditLogger, AuditEventType } from '../services/auditLogger';
 import { SwapService } from '../services/swapService';
+import { RiskEngine } from '../services/riskEngine';
+import { SettlementQueueService, SettlementTrack } from '../services/settlementQueue';
+import solanaService from '../services/solanaService';
+import prisma from '../services/prisma';
 
 const router = Router();
 const confirmLocks = new Set<string>();
@@ -32,8 +36,28 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
             }
         }
 
-        // 1. Decode QRIS
-        const decoded = QRISDecoder.decode(qris_payload);
+        // 1. Decode QRIS — STRICT EMVCo VALIDATION (will throw if invalid)
+        let decoded;
+        try {
+            decoded = QRISDecoder.decode(qris_payload);
+        } catch (qrisError: any) {
+            // Log for compliance audit
+            AuditLogger.log(AuditEventType.QRIS_PARSE_FAILED, {
+                error: qrisError.message,
+                payload_length: qris_payload.length,
+                timestamp: new Date().toISOString(),
+            });
+
+            // Return explicit error to user
+            return res.status(400).json({
+                error: 'INVALID_QRIS',
+                message: qrisError.message,
+                details: {
+                    reason: 'The QR code is not a valid QRIS or is corrupted. Please scan again.',
+                    timestamp: new Date().toISOString(),
+                },
+            });
+        }
 
         // 2. Create Payment Intent ID
         const intentId = `pi_${Date.now()}`;
@@ -158,15 +182,44 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         i => i.txHash === tx_hash && i.id !== id
     );
     if (existingWithSameHash) {
+        AuditLogger.log(AuditEventType.SECURITY_REPLAY_BLOCKED, { intentId: id, tx_hash, conflictingIntent: existingWithSameHash.id });
         return res.status(400).json({ status: 'failed', message: 'REPLAY ATTACK BLOCKED: This tx_hash was already used for another intent.' });
+    }
+
+    // AI RISK ENGINE — evaluate before committing on-chain verification resources
+    const riskWallet = payer_account || intent.payer_account;
+    if (riskWallet) {
+        try {
+            const risk = await RiskEngine.evaluate({
+                walletAddress: riskWallet,
+                amountIdr: intent.amount_details.fiat_amount,
+                nmid: intent.nmid,
+                merchantName: intent.merchant?.name,
+                bankCode: intent.bank_code,
+                isStaticQr: !intent.qris_data?.transactionAmount,
+            });
+            if (!risk.allow) {
+                return res.status(403).json({
+                    status: 'BLOCKED',
+                    risk_score: risk.score,
+                    risk_level: risk.level,
+                    message: risk.message,
+                    reasons: risk.reasons,
+                });
+            }
+            // Attach risk metadata to intent for audit trail
+            (intent as any).risk_score = risk.score;
+            (intent as any).risk_level = risk.level;
+        } catch (riskErr: any) {
+            // Risk engine failure is non-fatal — log and continue
+            console.warn('[RISK] Engine error (non-fatal):', riskErr.message);
+        }
     }
 
     confirmLocks.add(id);
 
     try {
         // REAL ON-CHAIN VERIFICATION (Multi-RPC Failover)
-        const solanaService = require('../services/solanaService').default;
-
         // Verify transaction is finalized on Solana Mainnet
         const isValid = await solanaService.verifyTransaction(tx_hash || '', id);
 
@@ -182,6 +235,12 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         const onChainPayer = await solanaService.extractPayerAccount(tx_hash || '');
         if (onChainPayer) {
             if (intent.payer_account && intent.payer_account !== onChainPayer) {
+                AuditLogger.log(AuditEventType.SECURITY_PAYER_MISMATCH, {
+                    intentId: id,
+                    expected: intent.payer_account,
+                    onChain: onChainPayer,
+                    tx_hash,
+                });
                 return res.status(400).json({
                     status: 'failed',
                     message: 'Payer mismatch between wallet callback and on-chain signature.'
@@ -193,107 +252,115 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         // State: AUTHORIZED (on-chain verified)
         intent.status = 'AUTHORIZED';
         intent.txHash = tx_hash;
+        intent.updatedAt = new Date().toISOString();
 
         AuditLogger.log(AuditEventType.PAYMENT_INTENT_CONFIRMED, {
             intentId: id,
-            txHash: intent.txHash
+            txHash: intent.txHash,
+            payer: intent.payer_account,
         });
 
     // ═══════════════════════════════════════════════════════════
-    //  SOLANA → QRIS SETTLEMENT (IDRX OFF-RAMP TO MERCHANT)
+    //  DUAL-TRACK SETTLEMENT QUEUE (Non-blocking)
     //
-    //  Jupiter swap verified on-chain → IDRX API sends IDR to
-    //  merchant's GoPay/OVO/Bank account extracted from QRIS.
-    //  If IDRX API fails → fallback to on-chain IDRX settlement.
+    //  FAST LANE (>Rp500k):     immediate Xendit disbursement
+    //  EFFICIENT LANE (≤Rp500k): batch accumulation per merchant
+    //
+    //  Enqueue asynchronously. Don't wait for completion before
+    //  returning to user — settlement happens in background via BullMQ.
     // ═══════════════════════════════════════════════════════════
 
         intent.status = 'AWAITING_SETTLEMENT';
+        intent.updatedAt = new Date().toISOString();
 
         try {
-        // Attempt FULL PIPELINE: IDRX off-ramp to merchant bank/e-wallet
-        const settlementResult = await BankPartnerService.requestSettlement({
-            amount: intent.amount_details.fiat_amount,
-            currency: 'IDR',
-            destinationAccount: {
+            // Get settlement queue instance
+            const settlementQueue = SettlementQueueService.getInstance(
+                prisma,
+                process.env.REDIS_URL || 'redis://localhost:6379'
+            );
+
+            // Enqueue settlement (non-blocking, returns immediately)
+            await settlementQueue.enqueueSettlement({
+                paymentIntentId: id,
+                merchantNMID: intent.nmid || 'UNKNOWN',
+                merchantName: intent.merchant.name || '',
+                amountIDR: intent.amount_details.fiat_amount,
                 bankCode: intent.bank_code || 'GOPAY',
-                accountNumber: intent.merchant_account || ''
-            },
-            referenceId: intent.id
-        });
-
-        if (settlementResult.status === 'SUCCESS') {
-            intent.status = 'COMPLETED';
-            intent.settlement_ref = settlementResult.partnerRef;
-
-            AuditLogger.log(AuditEventType.SETTLEMENT_COMPLETED, {
-                intentId: id,
-                txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                mode: settlementResult.method,
-                amount_idr: intent.amount_details.fiat_amount,
-                destination: `${intent.bank_code}:${intent.merchant_account}`,
-                estimatedArrival: settlementResult.estimatedArrival,
-                message: settlementResult.message
+                accountNumber: intent.merchant_account || '',
+                accountHolderName: intent.merchant.name || '',
+                solanaTxSignature: intent.txHash || '',
+                track: intent.amount_details.fiat_amount > 500_000 ? SettlementTrack.FAST_LANE : SettlementTrack.EFFICIENT_LANE,
             });
 
+            // Mark as settlement-queued
+            intent.status = 'SETTLEMENT_QUEUED';
+            intent.updatedAt = new Date().toISOString();
+
+            // Return immediately (settlement happens in background)
             return res.json({
-                status: 'COMPLETED',
-                message: `Pembayaran berhasil! Rp ${intent.amount_details.fiat_amount.toLocaleString()} dikirim ke ${intent.bank_code || 'merchant'}.`,
+                status: 'SETTLEMENT_QUEUED',
+                message: `Pembayaran terverifikasi! Settlement sedang diproses...`,
                 txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
+                settlement_track: intent.amount_details.fiat_amount > 500_000 ? 'FAST_LANE' : 'EFFICIENT_LANE',
                 explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
-                offramp_status: settlementResult.status,
-                offramp_method: settlementResult.method,
-                offramp_eta: settlementResult.estimatedArrival,
-                offramp_message: settlementResult.message,
-                fundsSecured: settlementResult.fundsSecured,
                 payer_account: intent.payer_account,
                 treasury: 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m',
+                statusUrl: `/v1/payment-intents/${id}/status`,
+                pollingIntervalMs: 5000,
+                estimatedSettlementTime: intent.amount_details.fiat_amount > 500_000
+                    ? '< 5 minutes (FAST_LANE)'
+                    : '< 60 minutes (EFFICIENT_LANE)',
             });
-        } else {
-            // All off-ramp layers failed or are still pending.
-            // Do not mark the payment as complete without a settlement confirmation.
-            console.warn(`[SETTLEMENT] Off-ramp pending/failed: ${settlementResult.message}. Marking as awaiting settlement.`);
 
-            intent.status = 'AWAITING_SETTLEMENT';
-            intent.settlement_ref = settlementResult.partnerRef || `pending:${tx_hash}`;
-
-            AuditLogger.log(AuditEventType.SETTLEMENT_PENDING, {
+        } catch (settlementError: any) {
+            // Enqueue failed — log error response
+            const errorMsg = settlementError instanceof Error 
+                ? settlementError.message 
+                : String(settlementError);
+            
+            console.error(`[SETTLEMENT ENQUEUE] Error: ${errorMsg}`);
+            AuditLogger.log(AuditEventType.SETTLEMENT_FAILED, {
                 intentId: id,
                 txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                mode: 'AWAITING_SETTLEMENT',
-                offramp_error: settlementResult.message
+                error: errorMsg,
+                timestamp: new Date().toISOString(),
             });
 
-            return res.json({
-                status: 'AWAITING_SETTLEMENT',
-                message: 'Pembayaran on-chain terverifikasi. Settlement masih menunggu konfirmasi partner.',
-                txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
-                explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
-                offramp_status: settlementResult.status,
-                offramp_method: settlementResult.method,
-                offramp_eta: settlementResult.estimatedArrival,
-                offramp_message: settlementResult.message,
-                fundsSecured: settlementResult.fundsSecured,
-                payer_account: intent.payer_account,
-            });
-        }
-        } catch (err: any) {
-        // Total failure — keep the payment in settlement pending state.
-        intent.status = 'AWAITING_SETTLEMENT';
-        intent.settlement_ref = `pending:${tx_hash}`;
+            intent.status = 'SETTLEMENT_FAILED';
+            intent.updatedAt = new Date().toISOString();
 
-            return res.json({
-                status: 'AWAITING_SETTLEMENT',
-                message: 'Swap on-chain terverifikasi. Off-ramp masih menunggu retry atau webhook partner.',
+            return res.status(500).json({
+                status: 'SETTLEMENT_FAILED',
+                message: 'Settlement queue error. Payment verified on-chain but settlement failed.',
                 txHash: intent.txHash,
-                settlement_ref: intent.settlement_ref,
+                error: errorMsg,
                 explorer: `https://explorer.solana.com/tx/${intent.txHash}?cluster=mainnet-beta`,
                 payer_account: intent.payer_account,
+                support_url: 'https://solq.app/support',
             });
         }
+    } catch (err: any) {
+        // Total failure during payment confirmation
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[PAYMENT CONFIRM] Error: ${errorMsg}`);
+        
+        AuditLogger.log(AuditEventType.PAYMENT_INTENT_CONFIRMED, {
+            intentId: id,
+            error: errorMsg,
+            status: 'FAILED',
+            timestamp: new Date().toISOString(),
+        });
+
+        intent.status = 'FAILED';
+        intent.updatedAt = new Date().toISOString();
+
+        return res.status(400).json({
+            status: 'FAILED',
+            message: 'Payment confirmation failed. Please contact support.',
+            intentId: id,
+            error: errorMsg,
+        });
     } finally {
         confirmLocks.delete(id);
     }
@@ -367,6 +434,39 @@ router.get('/cost-analysis', (req: Request, res: Response) => {
 router.get('/idrx-diagnosis', async (req: Request, res: Response) => {
     try {
         const result = await BankPartnerService.diagnoseIdrxApi();
+        res.json(result);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// AI Risk Engine — pre-transaction evaluation
+// Call this before confirming a payment intent to get risk score and decision.
+router.post('/risk/evaluate', async (req: Request, res: Response) => {
+    try {
+        const { wallet_address, amount_idr, nmid, merchant_name, bank_code, is_static_qr } = req.body;
+
+        if (!wallet_address || typeof wallet_address !== 'string') {
+            return res.status(400).json({ error: 'Missing wallet_address' });
+        }
+        if (!wallet_address.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
+            return res.status(400).json({ error: 'Invalid wallet_address format' });
+        }
+
+        const amountIdr = parseFloat(amount_idr) || 0;
+        if (amountIdr < 0 || amountIdr > 100_000_000) {
+            return res.status(400).json({ error: 'amount_idr must be 0–100,000,000' });
+        }
+
+        const result = await RiskEngine.evaluate({
+            walletAddress: wallet_address,
+            amountIdr,
+            nmid: nmid?.toString(),
+            merchantName: merchant_name?.toString(),
+            bankCode: bank_code?.toString(),
+            isStaticQr: is_static_qr === true || is_static_qr === 'true',
+        });
+
         res.json(result);
     } catch (e: any) {
         res.status(500).json({ error: e.message });

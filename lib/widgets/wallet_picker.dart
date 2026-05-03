@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/solana_service.dart';
+import '../services/language_service.dart';
 
 class WalletPicker extends StatelessWidget {
   const WalletPicker({super.key});
@@ -7,6 +9,7 @@ class WalletPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final solana = SolanaService();
+    final lang = context.watch<LanguageService>();
 
     return Container(
       padding: const EdgeInsets.only(top: 10, bottom: 40),
@@ -30,11 +33,11 @@ class WalletPicker extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              "CONNECT WALLET",
-              style: TextStyle(
+              lang.t('connect_wallet'),
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
@@ -55,6 +58,14 @@ class WalletPicker extends StatelessWidget {
               children: [
                 _walletItem(
                   context,
+                  "Jupiter",
+                  Icons.swap_horiz,
+                  const Color(0xFF4CAF50),
+                  () => solana.connectJupiter(),
+                  isRecommended: true,
+                ),
+                _walletItem(
+                  context,
                   "Phantom",
                   Icons.account_balance_wallet,
                   const Color(0xFFAB9FF2),
@@ -66,13 +77,6 @@ class WalletPicker extends StatelessWidget {
                   Icons.wb_sunny_outlined,
                   const Color(0xFFFFA726),
                   () => solana.connectSolflare(),
-                ),
-                _walletItem(
-                  context,
-                  "Jupiter",
-                  Icons.swap_horiz,
-                  const Color(0xFF4CAF50),
-                  () => solana.connectJupiter(),
                 ),
                 _walletItem(
                   context,
@@ -134,36 +138,57 @@ class WalletPicker extends StatelessWidget {
     );
   }
 
-  Widget _walletItem(BuildContext context, String name, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: () {
-        Navigator.pop(context);
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+  Widget _walletItem(BuildContext context, String name, IconData icon, Color color, VoidCallback onTap, {bool isRecommended = false}) {
+    return Stack(
+      children: [
+        InkWell(
+          onTap: () {
+            Navigator.pop(context);
+            onTap();
+          },
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              name,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isRecommended ? color.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isRecommended ? color.withOpacity(0.3) : Colors.white12),
             ),
-          ],
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (isRecommended)
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                "BEST",
+                style: TextStyle(color: Colors.black, fontSize: 7, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

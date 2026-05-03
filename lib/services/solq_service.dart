@@ -2,21 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class SOLQService {
   String baseUrl;
 
   // Persistence Key
   static const String _prefKey = 'solq_server_ip';
-  static const String defaultBaseUrl = 'https://solq.vercel.app/api/v1';
+  static String get defaultBaseUrl => AppConfig.apiBaseUrl;
+  static const String revenueWallet = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
 
   // ── CLOUD BACKENDS (Priority: Vercel production first) ──
-  static const List<String> _cloudFallbackUrls = [
-    'https://solq.vercel.app/api/v1', // Vercel (primary)
-    'https://solq-backend.onrender.com/v1', // Render
-    'https://solq.railway.app/api/v1', // Railway
-    'https://solq.up.railway.app/api/v1',
-  ];
+  static List<String> get _cloudFallbackUrls => AppConfig.apiBaseUrlFallbacks;
 
   // Timeouts — generous to handle slow mobile/wifi connections
   static const Duration _timeout = Duration(seconds: 18);
@@ -47,7 +44,7 @@ class SOLQService {
 
   static bool isLocalOrPrivateUrl(String candidateUrl) {
     final host = Uri.tryParse(candidateUrl)?.host ?? '';
-    if (host.isEmpty) return false;
+    if (host.isEmpty) return true; // Treat empty/invalid as unsafe
     return _isLocalOrPrivateHost(host);
   }
 
@@ -160,9 +157,20 @@ class SOLQService {
   static Future<String> getWorkingBaseUrl() async {
     // 1. Try currently persisted URL if it's a valid healthy cloud URL
     final persisted = await getPersistedBaseUrl();
+    
+    // Safety check: Never allow localhost or private IPs in production
+    if (isLocalOrPrivateUrl(persisted)) {
+      await setPersistedBaseUrl(defaultBaseUrl);
+      return defaultBaseUrl;
+    }
+
     if (_isCloudUrl(persisted)) {
-      if (await _isReachableBaseUrl(persisted, timeout: _cloudTimeout)) {
-        return persisted;
+      try {
+        if (await _isReachableBaseUrl(persisted, timeout: _cloudTimeout)) {
+          return persisted;
+        }
+      } catch (_) {
+        // Fall through to discovery
       }
     }
 
@@ -174,6 +182,7 @@ class SOLQService {
     }
 
     // 3. Absolute fallback: reset to production default to avoid "localhost not found"
+    // We explicitly avoid any local network probes here.
     await setPersistedBaseUrl(defaultBaseUrl);
     return defaultBaseUrl;
   }
@@ -240,36 +249,39 @@ class SOLQService {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefKey);
     
-    // Force migration if saved is localhost or private IP
-    if (saved != null && saved.trim().isNotEmpty) {
-      final host = Uri.tryParse(saved)?.host.toLowerCase() ?? '';
-      final isLocal = host == 'localhost' || 
-                      host == '127.0.0.1' || 
-                      host.startsWith('192.168.') || 
-                      host.startsWith('10.');
-      
-      if (isLocal) {
-        await prefs.setString(_prefKey, defaultBaseUrl);
-        return defaultBaseUrl;
-      }
-
-      try {
-        final normalized = normalizeCloudBaseUrl(saved);
-        if (normalized != saved) {
-          await prefs.setString(_prefKey, normalized);
-        }
-        return normalized;
-      } catch (_) {
-        return defaultBaseUrl;
-      }
+    // Force migration if saved is localhost, private IP, or empty
+    if (saved == null || saved.trim().isEmpty) {
+      return defaultBaseUrl;
     }
 
-    return defaultBaseUrl;
+    final host = Uri.tryParse(saved)?.host.toLowerCase() ?? '';
+    final isUnsafe = host == 'localhost' || 
+                     host == '127.0.0.1' || 
+                     host.startsWith('192.168.') || 
+                     host.startsWith('10.') ||
+                     host.isEmpty;
+    
+    if (isUnsafe) {
+      await prefs.setString(_prefKey, defaultBaseUrl);
+      return defaultBaseUrl;
+    }
+
+    try {
+      final normalized = normalizeCloudBaseUrl(saved);
+      if (normalized != saved) {
+        await prefs.setString(_prefKey, normalized);
+      }
+      return normalized;
+    } catch (_) {
+      await prefs.setString(_prefKey, defaultBaseUrl);
+      return defaultBaseUrl;
+    }
   }
 
   static Future<void> setPersistedBaseUrl(String url) async {
+    // Production Guard: Prevent accidental switch to local dev nodes
     if (isLocalOrPrivateUrl(url)) {
-      throw const FormatException('Localhost/IP private tidak boleh dipakai.');
+      return; // Silently ignore unsafe URLs
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey, url);

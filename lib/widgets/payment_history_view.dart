@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/payment_history_service.dart';
+import '../services/language_service.dart';
 
 class PaymentHistoryView extends StatefulWidget {
   const PaymentHistoryView({Key? key}) : super(key: key);
@@ -25,14 +27,16 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "RIWAYAT PEMBAYARAN",
-            style: TextStyle(
+          Text(
+            lang.t('history'),
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
               color: Color(0xFF00FF94),
@@ -53,9 +57,9 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
                 return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.1),
+                    color: Colors.redAccent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                   ),
                   child: const Text(
                     "Gagal memuat riwayat",
@@ -93,9 +97,9 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00FF94).withValues(alpha: 0.1),
+                      color: const Color(0xFF00FF94).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF00FF94).withValues(alpha: 0.3)),
+                      border: Border.all(color: const Color(0xFF00FF94).withOpacity(0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,7 +181,7 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
                       return Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
+                          color: Colors.white.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.white10),
                         ),
@@ -248,9 +252,9 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
                               color: Color(0xFF00FF94),
                             ),
                             const SizedBox(width: 4),
-                            const Text(
-                              "BERHASIL",
-                              style: TextStyle(
+                            Text(
+                              lang.t('payment_success').split(' ').last, // "SUCCESS" or "BERHASIL"
+                              style: const TextStyle(
                                 fontSize: 9,
                                 color: Color(0xFF00FF94),
                                 fontWeight: FontWeight.bold,

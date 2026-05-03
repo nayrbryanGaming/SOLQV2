@@ -1,0 +1,337 @@
+// SOLQ 2.0 — Prisma Database Schema
+// Compliance: OJK APU/PPT - 5 year retention, IMMUTABLE audit trail
+// Generated: May 1, 2026
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// PAYMENT INTENT — Core Transaction Record
+// ═════════════════════════════════════════════════════════════════════
+model PaymentIntent {
+  id                String    @id @default(cuid())
+  
+  // QRIS Merchant Information
+  merchantName      String    @db.VarChar(255)
+  merchantCity      String?   @db.VarChar(100)
+  merchantNMID      String?   @db.VarChar(30)   // Nomor Merchant ID
+  merchantMCC       String?   @db.VarChar(4)    // Category Code
+  merchantAccount   String?   @db.VarChar(100)  // Bank account or e-wallet
+  
+  // Payment Details
+  amountIDR         Int       @db.Integer // Amount in IDR
+  tokenUsed         String    @db.VarChar(50)  // SOL, USDC, IDRX
+  isStaticQR        Boolean   @default(false)
+  
+  // User & Payer Information
+  payerPublicKey    String    @db.VarChar(44)   // Solana address (base58)
+  payerWalletType   String    @db.VarChar(20)   // PHANTOM, SOLFLARE, etc
+  
+  // Transaction Status State Machine
+  status            TransactionStatus @default(CREATED)
+  riskLevel         RiskLevel         @default(LOW)
+  riskScore         Int               @default(0)
+  
+  // On-chain Transaction
+  solanaTxSignature String?   @db.VarChar(88)   // Base58 transaction hash
+  blockHeight       Int?                         // Block height confirmed
+  
+  // Settlement Information
+  settlementStatus  SettlementStatus  @default(PENDING)
+  xenditDisbursalId String?  @db.VarChar(100)
+  
+  // Audit Trail
+  createdAt         DateTime  @default(now()) @db.Timestamp(3)
+  confirmedAt       DateTime?                   // When ON_CHAIN_CONFIRMED
+  settlementAt      DateTime?                   // When SETTLEMENT_COMPLETE
+  updatedAt         DateTime  @updatedAt       @db.Timestamp(3)
+  
+  // Indexes for fast queries
+  @@index([status])
+  @@index([payerPublicKey])
+  @@index([merchantNMID])
+  @@index([createdAt])
+  @@index([settlementStatus])
+}
+
+enum TransactionStatus {
+  CREATED
+  RISK_EVALUATING
+  QUOTE_PENDING
+  QUOTE_READY
+  QUOTE_EXPIRED
+  USER_CONFIRMING
+  TRANSACTION_BUILDING
+  AWAITING_WALLET_SIGNATURE
+  SIGNATURE_RECEIVED
+  BROADCASTING
+  BROADCAST_FAILED
+  CONFIRMING
+  CONFIRMATION_TIMEOUT
+  ON_CHAIN_CONFIRMED
+  SETTLEMENT_QUEUED
+  SETTLEMENT_PROCESSING
+  SETTLEMENT_COMPLETE
+  SETTLEMENT_FAILED
+  CANCELLED
+  BLOCKED
+  FAILED
+}
+
+enum RiskLevel {
+  LOW       // 0-30
+  MEDIUM    // 31-60
+  HIGH      // 61-85
+  BLOCKED   // 86+
+}
+
+enum SettlementStatus {
+  PENDING
+  FAST_LANE_PROCESSING
+  EFFICIENT_LANE_QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  MANUAL_REVIEW_REQUIRED
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// RISK EVALUATION — Immutable Compliance Audit Record
+// ═════════════════════════════════════════════════════════════════════
+model RiskEvaluation {
+  id                String    @id @default(cuid())
+  
+  // Payment Reference
+  paymentIntentId   String
+  
+  // Risk Assessment Data
+  walletAgeMinutes  Int                        // How old is wallet
+  walletRiskFlags   String    @db.Text        // JSON array of flags
+  riskScore         Int                        // Final score 0-100
+  riskDecision      RiskDecision               // APPROVED/WARNING/CHALLENGED/BLOCKED
+  
+  // Scoring Details (immutable for audit)
+  scoreWalletAge    Int                        // Points from age
+  scoreVolume       Int                        // Points from amount/velocity
+  scoreVelocity     Int                        // Points from transaction frequency
+  scoreOFAC         Boolean                    // Is wallet on OFAC list?
+  scoreBlacklist    Boolean                    // Is wallet blacklisted?
+  
+  // Data Sources Used
+  heliusUsed        Boolean   @default(false)
+  ofacCheckAt       DateTime?                  // When OFAC was checked
+  ofacLastUpdate    DateTime?                  // OFAC SDN list date
+  
+  // Compliance Fields
+  evaluatorVersion  String    @db.VarChar(10) // Algorithm version
+  evaluatedAt       DateTime  @default(now()) @db.Timestamp(3)
+  
+  // Immutable audit (no updates allowed)
+  @@index([paymentIntentId])
+  @@index([riskDecision])
+  @@index([evaluatedAt])
+}
+
+enum RiskDecision {
+  APPROVED
+  WARNING
+  CHALLENGED
+  BLOCKED
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// SETTLEMENT TRANSACTION — Off-chain Money Movement Record
+// ═════════════════════════════════════════════════════════════════════
+model Settlement {
+  id                String    @id @default(cuid())
+  
+  // Payment Reference
+  paymentIntentId   String
+  
+  // Settlement Details
+  amountIDR         Int                        // Amount to disburse
+  settlementMethod  SettlementMethod           // XENDIT, BIFAST, DIRECT, etc
+  settlementTrack   SettlementTrack            // FAST_LANE or EFFICIENT_LANE
+  
+  // Bank/E-wallet Destination
+  bankCode          String    @db.VarChar(20) // BCA, MANDIRI, GOPAY, OVO, etc
+  accountNumber     String    @db.VarChar(50)
+  accountHolderName String    @db.VarChar(255)
+  
+  // Settlement Provider Response
+  xenditId          String?   @db.VarChar(100)
+  externalId        String?   @db.VarChar(100) // Idempotency key
+  settlementStatus  SettlementStatus  @default(PENDING)
+  
+  // Retry Tracking
+  attemptCount      Int       @default(0)
+  lastAttemptAt     DateTime?
+  lastError         String?   @db.Text
+  
+  // Completion
+  completedAt       DateTime?
+  reference         String?   @db.VarChar(100) // Bank reference number
+  
+  // Audit
+  createdAt         DateTime  @default(now()) @db.Timestamp(3)
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([paymentIntentId])
+  @@index([settlementStatus])
+  @@index([createdAt])
+}
+
+enum SettlementMethod {
+  XENDIT
+  BIFAST_DIRECT
+  BANK_API_DIRECT
+  MANUAL
+}
+
+enum SettlementTrack {
+  FAST_LANE      // > Rp 500,000 (immediate)
+  EFFICIENT_LANE // <= Rp 500,000 (batch)
+}
+
+enum SettlemenProviderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  MANUAL_REVIEW
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// AUDIT LOG — Immutable Compliance Record (Append-Only)
+// ═════════════════════════════════════════════════════════════════════
+model AuditLog {
+  id                String    @id @default(cuid())
+  
+  // Event Information
+  eventType         String    @db.VarChar(50)
+  eventCategory     String    @db.VarChar(50)  // SECURITY, COMPLIANCE, OPERATIONAL
+  
+  // Related Entities
+  paymentIntentId   String?   @db.VarChar(40)
+  walletAddress     String?   @db.VarChar(44)
+  
+  // Event Data (immutable JSON)
+  payload           String    @db.Text         // JSON payload
+  severity          String    @db.VarChar(10)  // INFO, WARNING, ERROR, CRITICAL
+  
+  // Integrity Fields
+  integrityHash     String    @db.VarChar(64)  // SHA-256 for tamper detection
+  
+  // Timestamp (UTC)
+  timestamp         DateTime  @default(now()) @db.Timestamp(3)
+  
+  // Indexes for compliance reporting
+  @@index([eventType])
+  @@index([eventCategory])
+  @@index([timestamp])
+  @@index([severity])
+  @@index([walletAddress])
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// PRICE CACHE — Deterministic Oracle Pricing
+// ═════════════════════════════════════════════════════════════════════
+model PriceCache {
+  id                String    @id @default(cuid())
+  
+  tokenMint         String    @db.VarChar(50)  // SOL, USDC, etc
+  tokenSymbol       String    @db.VarChar(10)  // SOL, USDC, IDRX
+  
+  // Pricing Data
+  priceIDR          Decimal   @db.Decimal(20, 6)
+  priceUSD          Decimal   @db.Decimal(20, 6)
+  spread            Decimal   @db.Decimal(10, 6) // Platform spread (0.005 = 50bps)
+  
+  // Cache Metadata
+  source            String    @db.VarChar(50)  // COINGECKO, JUPITER, etc
+  fetchedAt         DateTime                    // When price was fetched
+  expiresAt         DateTime                    // Cache TTL expiry (60s)
+  
+  // Audit
+  createdAt         DateTime  @default(now()) @db.Timestamp(3)
+  
+  @@unique([tokenMint])
+  @@index([expiresAt])
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// HOT WALLET MONITORING — Gas Sponsorship Account Health
+// ═════════════════════════════════════════════════════════════════════
+model HotWalletStatus {
+  id                String    @id @default(cuid())
+  
+  walletAddress     String    @db.VarChar(44)  @unique
+  
+  // Balance Tracking
+  solBalance        Decimal   @db.Decimal(20, 9) // SOL amount
+  checkedAt         DateTime  @default(now()) @db.Timestamp(3)
+  
+  // Alert Thresholds
+  lastAlertLevel    String    @db.VarChar(20)  // NORMAL, WARNING, CRITICAL
+  lastAlertAt       DateTime?
+  
+  @@index([lastAlertLevel])
+  @@index([checkedAt])
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// MERCHANT REGISTRATION — Know Your Merchant (KYM)
+// ═════════════════════════════════════════════════════════════════════
+model MerchantAccount {
+  id                String    @id @default(cuid())
+  
+  // Merchant Identity
+  merchantNMID      String    @db.VarChar(30)  @unique
+  merchantName      String    @db.VarChar(255)
+  merchantCity      String    @db.VarChar(100)
+  
+  // Settlement Account
+  bankCode          String    @db.VarChar(20)
+  accountNumber     String    @db.VarChar(50)
+  accountHolderName String    @db.VarChar(255)
+  
+  // Risk Tier
+  trustLevel        String    @db.VarChar(20)  // VERIFIED, PENDING, FLAGGED
+  settlementTrack   SettlementTrack            // FAST_LANE, EFFICIENT_LANE
+  
+  // KYM Data
+  registeredAt      DateTime  @default(now()) @db.Timestamp(3)
+  verifiedAt        DateTime?
+  lastSettlementAt  DateTime?
+  totalVolume       Int       @default(0)      // Cumulative IDR settled
+  
+  @@index([merchantNMID])
+  @@index([trustLevel])
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// TRANSACTION VELOCITY — Fraud Detection & Rate Limiting
+// ═════════════════════════════════════════════════════════════════════
+model VelocityRecord {
+  id                String    @id @default(cuid())
+  
+  walletAddress     String    @db.VarChar(44)
+  
+  // Window-based Tracking
+  timeWindow        Int       @db.Integer       // Seconds (3600 = 1 hour)
+  transactionCount  Int                        // Txn count in window
+  totalVolumeIDR    Int                        // Sum of amounts in window
+  
+  // Tracking
+  recordedAt        DateTime  @default(now()) @db.Timestamp(3)
+  expiresAt         DateTime                   // Auto-cleanup after window
+  
+  @@unique([walletAddress, timeWindow])
+  @@index([expiresAt])
+}

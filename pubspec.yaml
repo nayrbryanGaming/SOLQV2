@@ -14,17 +14,16 @@ dependencies:
   mobile_scanner: ^3.5.2
   http: ^1.1.0
   provider: ^6.0.5
-  solana: ^0.32.0
+  solana: ^0.31.0
   intl: ^0.18.1
   uuid: ^4.0.0
   url_launcher: ^6.2.1
-  app_links: ^3.5.0
+  app_links: ^6.0.1
   shared_preferences: ^2.3.0
-  shelf: ^1.4.0
-  shelf_router: ^1.1.4
   bs58: ^1.0.2
   crypto: ^3.0.3
   pinenacl: ^0.6.0
+  flutter_secure_storage: ^9.2.2
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
   image_picker: ^1.0.7

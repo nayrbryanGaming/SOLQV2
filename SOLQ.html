@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOLQ — Solana × QRIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #EBE5F8; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  @keyframes solq-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+  @keyframes solq-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes solq-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  button { font-family: inherit; }
+  input::placeholder { color: #C8C6BE; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="settings.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+// Tweakable defaults
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentMode": "purple",
+  "showStatusBar": true,
+  "deviceTone": "ios"
+}/*EDITMODE-END*/;
+
+function Frame({ label, sublabel, children, height = 812 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+      <IOSDevice width={375} height={height}>
+        {children}
+      </IOSDevice>
+      <div style={{ textAlign: 'center', fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#0D0620', letterSpacing: -0.2 }}>{label}</div>
+        {sublabel && <div style={{ fontSize: 11, color: '#7B6E9A', marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{sublabel}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Direct settings sub-screen renderer (skips the index)
+function SettingsDirect({ page }) {
+  const [dark, setDark] = useState(false);
+  const t = window.themes[dark ? 'dark' : 'light'];
+  const profile = { initials: 'AR', handle: 'arif.id', displayName: 'Arif Rahman', email: 'arif@example.com' };
+  const wallet = { address: '7xKXaB3mP9Vt4uYf2hNbT6sLpW1nVtBkH9oM2yE3aZqU9PvR', sol: '4.218', usdc: '142.50' };
+  const noop = () => {};
+  const props = { onBack: noop, t, dark };
+  if (page === 'profile') return <ProfileScreen {...props} profile={profile} setProfile={noop} />;
+  if (page === 'kyc') return <KycScreen {...props} />;
+  if (page === 'limits') return <LimitsScreen {...props} />;
+  if (page === 'wallets') return <WalletsScreen {...props} wallet={wallet} />;
+  if (page === 'network') return <NetworkScreen {...props} />;
+  if (page === 'routing') return <RoutingScreen {...props} />;
+  if (page === 'qris') return <QrisScreen {...props} />;
+  if (page === 'receipts') return <ReceiptsScreen {...props} />;
+  if (page === 'lock') return <LockScreen {...props} />;
+  if (page === 'sessions') return <SessionsScreen {...props} />;
+  if (page === 'audit') return <AuditScreen {...props} />;
+  if (page === 'appearance') return <AppearanceScreen {...props} setDark={setDark} />;
+  if (page === 'language') return <LanguageScreen {...props} />;
+  if (page === 'notifs') return <NotifsScreen {...props} />;
+  if (page === 'about') return <AboutScreen {...props} />;
+  if (page === 'legal') return <LegalScreen {...props} />;
+  if (page === 'help') return <HelpScreen {...props} />;
+  return null;
+}
+
+function App() {
+  const [tweaks, setTweaks] = useTweaks(TWEAK_DEFAULTS);
+
+  return (
+    <div>
+      <DesignCanvas
+        title="SOLQ"
+        subtitle="Non-custodial Solana → QRIS payment orchestrator"
+        meta={[
+          { label: 'Platform', value: 'iOS / Android (RN)' },
+          { label: 'Type', value: 'Inter + JetBrains Mono' },
+          { label: 'Date', value: 'Apr 27, 2026' },
+        ]}
+      >
+        <DCSection id="hero" title="Hero flow" subtitle="Live, click through end-to-end">
+          <DCArtboard id="hero-flow" label="Tap → scan → pay → receipt" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="home" />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="onboard" title="01 · Onboarding" subtitle="Connect wallet — non-custodial framing front and center">
+          <DCArtboard id="connect" label="Connect wallet · empty" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="connect" />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="pay" title="02 · Pay flow" subtitle="Dynamic QR (amount locked) and Static QR (amount entered) — both EMVCo-parsed">
+          <DCArtboard id="home" label="Home — connected" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="home" />
+            </IOSDevice>
+          </DCArtboard>
+
+          <DCArtboard id="scan" label="Scan — viewfinder" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="scan" />
+            </IOSDevice>
+          </DCArtboard>
+
+          <DCArtboard id="intent-dynamic" label="Confirm — dynamic QR" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="intent" initialQrType="dynamic" />
+            </IOSDevice>
+          </DCArtboard>
+
+          <DCArtboard id="intent-static" label="Confirm — static QR (enter amount)" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="intent" initialQrType="static" />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="settle" title="03 · Settlement" subtitle="State-machine progression — UI advances on real confirmations">
+          <DCArtboard id="settling" label="Settling — multi-stage" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="settling" />
+            </IOSDevice>
+          </DCArtboard>
+
+          <DCArtboard id="receipt" label="Receipt — on-chain proof" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="receipt" />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="activity" title="04 · Activity" subtitle="Transparent fee comparison + signed history">
+          <DCArtboard id="history" label="Activity feed" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="history" />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="settings" title="05 · Settings" subtitle="Profile, KYC (coming soon), security, network, slippage, appearance, language, notifications, about, legal, help">
+          <DCArtboard id="settings-index" label="Settings · index (light)" width={375} height={812}>
+            <IOSDevice width={375} height={812}>
+              <SolqApp initialScreen="settings" />
+            </IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="settings-dark" label="Settings · index (dark)" width={375} height={812}>
+            <IOSDevice width={375} height={812} dark>
+              <SolqApp initialScreen="settings" initialDark={true} />
+            </IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="settings-detail" title="06 · Settings — sub-screens" subtitle="Tap into each row from the index. Shown here for direct review.">
+          {[
+            { id: 'profile', label: 'Profile · edit identity' },
+            { id: 'kyc', label: 'KYC · coming soon' },
+            { id: 'limits', label: 'Spending limits · with progress' },
+            { id: 'wallets', label: 'Connected wallets · MWA session' },
+            { id: 'network', label: 'Solana network · cluster + RPC' },
+            { id: 'routing', label: 'Routing & slippage · slider' },
+            { id: 'qris', label: 'QRIS preferences · default token' },
+            { id: 'receipts', label: 'Receipts & invoices · auto-export' },
+            { id: 'lock', label: 'App lock · Face ID + PIN' },
+            { id: 'sessions', label: 'Signing sessions · per device' },
+            { id: 'audit', label: 'Audit log · tamper-evident' },
+            { id: 'appearance', label: 'Appearance · light/dark' },
+            { id: 'language', label: 'Language & region' },
+            { id: 'notifs', label: 'Notifications · channels' },
+            { id: 'about', label: 'About · version + acknowledgments' },
+            { id: 'legal', label: 'Legal & compliance · BI/OJK' },
+            { id: 'help', label: 'Help & support' },
+          ].map(s => (
+            <DCArtboard key={s.id} id={`set-${s.id}`} label={s.label} width={375} height={812}>
+              <IOSDevice width={375} height={812}>
+                <SettingsDirect page={s.id} />
+              </IOSDevice>
+            </DCArtboard>
+          ))}
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Visual">
+          <TweakRadio
+            label="Accent"
+            value={tweaks.accentMode}
+            onChange={v => setTweaks({ accentMode: v })}
+            options={[
+              { value: 'purple', label: 'Purple (default)' },
+              { value: 'mono', label: 'Pure mono' },
+              { value: 'amber', label: 'Amber' },
+            ]}
+          />
+          <TweakToggle
+            label="Show iOS status bar"
+            value={tweaks.showStatusBar}
+            onChange={v => setTweaks({ showStatusBar: v })}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

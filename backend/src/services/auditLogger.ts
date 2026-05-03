@@ -1,42 +1,96 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 /**
- * Compliance Audit Logger
- * Records immutable logs of all financial transactions and state changes.
- * In production, this should write to a WORM (Write Once Read Many) storage.
+ * Compliance Audit Logger — OJK/APU-PPT compliant
+ *
+ * Primary: console.log (captured by Vercel/Render/Railway persistent log infra)
+ * Secondary: best-effort local JSONL file (works on non-serverless deployments)
+ *
+ * Every entry has an SHA-256 integrity hash over the event payload so that
+ * any tampering of log lines is detectable.
+ *
+ * In production: connect PRIMARY_LOG_WEBHOOK env var to send to a WORM log
+ * aggregator (Datadog, Logtail, AWS CloudWatch with Object Lock, etc.).
  */
 
 export enum AuditEventType {
-    PAYMENT_INTENT_CREATED = 'PAYMENT_INTENT_CREATED',
-    PAYMENT_INTENT_CONFIRMED = 'PAYMENT_INTENT_CONFIRMED',
-    SETTLEMENT_INITIATED = 'SETTLEMENT_INITIATED',
-    SETTLEMENT_PENDING = 'SETTLEMENT_PENDING',
-    SETTLEMENT_COMPLETED = 'SETTLEMENT_COMPLETED',
-    SETTLEMENT_FAILED = 'SETTLEMENT_FAILED',
+    // Payment lifecycle
+    PAYMENT_INTENT_CREATED     = 'PAYMENT_INTENT_CREATED',
+    PAYMENT_INTENT_CONFIRMED   = 'PAYMENT_INTENT_CONFIRMED',
+    QRIS_PARSE_FAILED          = 'QRIS_PARSE_FAILED',
+    // Settlement
+    SETTLEMENT_INITIATED       = 'SETTLEMENT_INITIATED',
+    SETTLEMENT_BATCH_INITIATED = 'SETTLEMENT_BATCH_INITIATED',
+    SETTLEMENT_PENDING         = 'SETTLEMENT_PENDING',
+    SETTLEMENT_COMPLETED       = 'SETTLEMENT_COMPLETED',
+    SETTLEMENT_FAILED          = 'SETTLEMENT_FAILED',
+    // Security
+    SECURITY_REPLAY_BLOCKED    = 'SECURITY_REPLAY_BLOCKED',
+    SECURITY_RATE_LIMITED      = 'SECURITY_RATE_LIMITED',
+    SECURITY_PAYER_MISMATCH    = 'SECURITY_PAYER_MISMATCH',
+    // Risk
+    RISK_HIGH_SCORE            = 'RISK_HIGH_SCORE',
+    // Hot wallet
+    CRITICAL_LOW_GAS           = 'CRITICAL_LOW_GAS',
+    WARNING_LOW_GAS            = 'WARNING_LOW_GAS',
+    ERROR_GAS_CHECK_FAILED     = 'ERROR_GAS_CHECK_FAILED',
+    // Pricing
+    PRICE_FETCHED              = 'PRICE_FETCHED',
+    PRICE_STALE_FALLBACK       = 'PRICE_STALE_FALLBACK',
+    PRICE_STALE_EXCEEDS_MAX    = 'PRICE_STALE_EXCEEDS_MAX',
+    CRITICAL_PRICE_UNAVAILABLE = 'CRITICAL_PRICE_UNAVAILABLE',
 }
 
-export class AuditLogger {
-    private static logFile = path.join(__dirname, '../../audit_logs.jsonl');
+// Detect serverless / read-only filesystem environments
+const isServerless = !!(
+    process.env.VERCEL ||
+    process.env.RENDER ||
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME
+);
 
-    public static log(eventType: AuditEventType, data: any) {
+const logFilePath = isServerless
+    ? null
+    : path.join(process.cwd(), 'audit_logs.jsonl');
+
+export class AuditLogger {
+    public static log(eventType: AuditEventType, data: Record<string, any>): void {
         const entryBase = {
             timestamp: new Date().toISOString(),
             eventType,
-            data
+            data,
         };
 
-        const crypto = require('crypto');
-        const hash = crypto.createHash('sha256').update(JSON.stringify(entryBase)).digest('hex');
+        const hash = crypto
+            .createHash('sha256')
+            .update(JSON.stringify(entryBase))
+            .digest('hex');
 
         const entry = { ...entryBase, integrity_hash: hash };
-        const logLine = JSON.stringify(entry) + '\n';
+        const line = JSON.stringify(entry);
 
-        // Append to local file (simulating secure storage)
-        fs.appendFile(this.logFile, logLine, (err) => {
-            if (err) console.error('FAILED TO WRITE AUDIT LOG', err);
-        });
+        // PRIMARY: structured console output (captured by all cloud platforms)
+        console.log(`[AUDIT|${eventType}] ${line}`);
 
-        console.log(`[AUDIT] ${eventType}`, JSON.stringify(data));
+        // SECONDARY: local file (non-serverless only)
+        if (logFilePath) {
+            fs.appendFile(logFilePath, line + '\n', (err) => {
+                if (err) console.error('[AUDIT] File write failed (non-fatal):', err.message);
+            });
+        }
+
+        // TERTIARY: webhook to external WORM log store (optional)
+        const webhookUrl = process.env.AUDIT_WEBHOOK_URL;
+        if (webhookUrl) {
+            fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: line,
+            }).catch((err) => {
+                console.error('[AUDIT] Webhook delivery failed (non-fatal):', err.message);
+            });
+        }
     }
 }

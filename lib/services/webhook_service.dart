@@ -1,11 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'package:shelf/shelf.dart';
-import 'package:shelf/shelf_io.dart' as shelf_io;
-import 'package:shelf_router/shelf_router.dart';
 import 'package:crypto/crypto.dart';
-import 'orchestrator_service.dart';
 
 /// Webhook Service with Military-Grade Security
 /// Production Guard: Protect 5M Solana ecosystem users
@@ -38,84 +34,11 @@ class WebhookService {
   String get statusMessage => _lastError ?? (_server != null ? "Active (Port ${_server!.port})" : "Stopped");
   
   Future<void> startServer() async {
-    final router = Router();
-
-    // POST /webhook/settlement (SECURED)
-    router.post('/webhook/settlement', (Request request) async {
-      final clientIp = request.headers['x-forwarded-for'] ?? 'unknown';
-      
-      // === SECURITY LAYER 1: RATE LIMITING ===
-      if (!_checkRateLimit(clientIp)) {
-        return Response(429, body: "Rate limit exceeded");
-      }
-      
-      final payload = await request.readAsString();
-      
-      try {
-        final Map<String, dynamic> data = jsonDecode(payload);
-        
-        // === SECURITY LAYER 2: SIGNATURE VERIFICATION ===
-        final signature = request.headers['x-solq-signature'];
-        if (!_verifySignature(payload, signature)) {
-          return Response.forbidden("Invalid signature");
-        }
-        
-        // === SECURITY LAYER 3: REPLAY PROTECTION ===
-        final nonce = data['nonce'] as String?;
-        final timestamp = data['timestamp'] as int?;
-        
-        if (nonce == null || timestamp == null) {
-          return Response.badRequest(body: "Missing security headers");
-        }
-        
-        if (_processedNonces.contains(nonce)) {
-          return Response.forbidden("Duplicate nonce");
-        }
-        
-        final webhookAge = DateTime.now().millisecondsSinceEpoch - timestamp;
-        if (webhookAge > webhookTimeoutWindow.inMilliseconds) {
-          return Response.forbidden("Webhook expired");
-        }
-        
-        // Mark nonce as processed
-        _processedNonces.add(nonce);
-        
-        // Cleanup old nonces (keep last 10000)
-        if (_processedNonces.length > 10000) {
-          _processedNonces.clear();
-        }
-        
-        // === BUSINESS LOGIC ===
-        final String intentId = data['intentId'];
-        final String status = data['status'];
-        final String refId = data['refId'] ?? "REF_${DateTime.now().millisecondsSinceEpoch}";
-
-        await OrchestratorService().handleAsyncWebhook(intentId, status, refId);
-
-        return Response.ok(jsonEncode({'status': 'processed', 'intentId': intentId}));
-      } catch (e) {
-        return Response.internalServerError(body: "Webhook Error: $e");
-      }
-    });
-
-    try {
-      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
-      try {
-        final wifiInterface = interfaces.firstWhere(
-          (i) => i.name.contains('wlan') || i.name.contains('ap') || i.name.contains('eth'), 
-          orElse: () => interfaces.first
-        );
-        _ipAddress = wifiInterface.addresses.first.address;
-      } catch (e) {
-        _ipAddress = "0.0.0.0";
-      }
-
-      _server = await shelf_io.serve(router.call, InternetAddress.anyIPv4, 8080);
-      _lastError = null;
-    } catch (e) {
-      _server = null;
-      _lastError = "Start Failed: $e";
-    }
+    // Zero-Localhost Policy: Local HTTP servers are disabled in production 
+    // to prevent connectivity issues and security vulnerabilities.
+    // We rely on cloud polling and decentralized state synchronization.
+    _lastError = "Local server disabled for production security.";
+    return;
   }
 
   void stopServer() {

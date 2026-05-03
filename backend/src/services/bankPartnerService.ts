@@ -108,14 +108,23 @@ export class BankPartnerService {
      * Headers: idrx-api-key, idrx-api-sig, idrx-api-ts
      */
     private static generateSignature(method: string, urlPath: string, body: string, timestamp: string): string {
+        const raw = this.idrxSecretKey;
         let secret: Buffer;
-        try {
-            secret = Buffer.from(this.idrxSecretKey, 'base64');
-            // Verify it decoded to something meaningful (at least 16 bytes)
-            if (secret.length < 16) throw new Error('too short');
-        } catch {
-            // Fallback: treat as hex
-            secret = Buffer.from(this.idrxSecretKey, 'hex');
+
+        // Hex string: all hex chars + even length (e.g. 64-char SHA-256 hex key)
+        // Must check this FIRST — hex chars are a subset of base64 chars, so base64
+        // decode would silently give wrong bytes.
+        const isHex = raw.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(raw);
+        if (isHex) {
+            secret = Buffer.from(raw, 'hex');
+        } else {
+            // Base64 or base64url encoded secret (Go SDK base64.StdEncoding)
+            try {
+                secret = Buffer.from(raw, 'base64');
+                if (secret.length < 16) throw new Error('too short');
+            } catch {
+                secret = Buffer.from(raw, 'utf8');
+            }
         }
 
         const hmac = crypto.createHmac('sha256', secret);
@@ -349,9 +358,15 @@ export class BankPartnerService {
         const results: any[] = [];
         const testPaths = [
             { method: 'GET', path: '/health' },
+            { method: 'GET', path: '/api/v1/health' },
+            { method: 'GET', path: '/api/v1/me' },
+            { method: 'GET', path: '/api/v1/user/me' },
+            { method: 'GET', path: '/api/v1/member/me' },
             { method: 'GET', path: '/api/v1/transaction/rates' },
             { method: 'GET', path: '/api/v1/transactions' },
             { method: 'GET', path: '/api/v1/bank-accounts' },
+            { method: 'GET', path: '/api/v1/wallet/balance' },
+            { method: 'GET', path: '/api/v1/balance' },
         ];
 
         for (const t of testPaths) {

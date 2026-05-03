@@ -1,0 +1,28 @@
+# HUKUM 8 — IDENTICAL MIRROR
+# Every commit to main is mirrored to nayrbryanGaming/SOLQV2 within 3 minutes.
+# Add secret SOLQV2_MIRROR_TOKEN (GitHub PAT with repo scope on SOLQV2 repo).
+name: Mirror to SOLQV2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    name: Push mirror to nayrbryanGaming/SOLQV2
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror
+        env:
+          MIRROR_TOKEN: ${{ secrets.SOLQV2_MIRROR_TOKEN }}
+        run: |
+          git remote add mirror "https://x-access-token:${MIRROR_TOKEN}@github.com/nayrbryanGaming/SOLQV2.git"
+          git push mirror --mirror

@@ -1,24 +1,32 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:app_links/app_links.dart';
 import 'package:bs58/bs58.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pinenacl/x25519.dart' as pn;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:solana/solana.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_config.dart';
 import 'web_provider.dart';
 
 class SolanaService {
   static final SolanaService _instance = SolanaService._internal();
   factory SolanaService() => _instance;
 
-  static const String _appUrl = 'https://solq.vercel.app';
-  static const String _onConnectRedirect = 'solq://onconnect';
-  static const String _onSignRedirect = 'solq://onsign';
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  static final String _appUrl = AppConfig.appUrl;
+  static const String _onConnectRedirect = 'solq://v1/phantom/connect';
+  static const String _onSignRedirect = 'solq://v1/phantom/sign';
   static const String _seenWalletsKey = 'solq_seen_wallets';
   static const String _phantomDappPrivateKeyStorageKey =
       'solq_phantom_dapp_private_key';
@@ -58,13 +66,18 @@ class SolanaService {
     'transactionSignature',
   ];
 
-  // Multi-RPC failover for read operations.
-  static const List<String> _rpcEndpoints = [
-    'https://api.mainnet-beta.solana.com',
-    'https://solana-mainnet.g.alchemy.com/v2/demo',
-    'https://rpc.ankr.com/solana',
-    'https://helius-rpc.com/',
-  ];
+  // Multi-RPC failover for read operations — devnet/mainnet switched via AppConfig.
+  static const List<String> _rpcEndpoints = AppConfig.isDevnet
+      ? [
+          'https://api.devnet.solana.com',
+          'https://devnet.helius-rpc.com/',
+        ]
+      : [
+          'https://api.mainnet-beta.solana.com',
+          'https://solana-mainnet.g.alchemy.com/v2/demo',
+          'https://rpc.ankr.com/solana',
+          'https://helius-rpc.com/',
+        ];
 
   String? _phantomDappPubKeyB58;
   pn.PrivateKey? _phantomDappPrivateKey;
@@ -132,7 +145,9 @@ class SolanaService {
     }
 
     _phantomWalletPubKeyB58 = prefs.getString(_phantomWalletPubKeyStorageKey);
-    _phantomSessionToken = prefs.getString(_phantomSessionTokenStorageKey);
+    // Session token stored in flutter_secure_storage (not SharedPreferences)
+    _phantomSessionToken =
+        await _secureStorage.read(key: _phantomSessionTokenStorageKey);
   }
 
   Future<void> _persistPhantomSessionState({SharedPreferences? prefs}) async {
@@ -158,11 +173,12 @@ class SolanaService {
       await storage.remove(_phantomWalletPubKeyStorageKey);
     }
 
+    // Session token goes to flutter_secure_storage (encrypted keystore)
     if (_phantomSessionToken != null && _phantomSessionToken!.isNotEmpty) {
-      await storage.setString(
-          _phantomSessionTokenStorageKey, _phantomSessionToken!);
+      await _secureStorage.write(
+          key: _phantomSessionTokenStorageKey, value: _phantomSessionToken!);
     } else {
-      await storage.remove(_phantomSessionTokenStorageKey);
+      await _secureStorage.delete(key: _phantomSessionTokenStorageKey);
     }
   }
 
@@ -403,6 +419,7 @@ class SolanaService {
           'app_url': _appUrl,
           'redirect_link': _onConnectRedirect,
           'cluster': 'mainnet-beta',
+          'name': 'SOLQ',
         },
       ),
       Uri.https('phantom.app', '/ul/v1/connect', {
@@ -580,57 +597,45 @@ class SolanaService {
   }
 
   String? _extractAddressFromCallback(Uri uri,
-      {bool allowDataFallback = true}) {
-    final fromPath = _extractAddressFromPathSegments(uri);
-    if (fromPath != null) {
-      return fromPath;
-    }
-
-    final candidates = <String?>[];
-    for (final key in _addressFieldKeys) {
-      candidates.add(uri.queryParameters[key]);
-    }
-
-    for (final entry in uri.queryParameters.entries) {
-      if (!entry.key.toLowerCase().contains('encryption')) {
-        candidates.add(entry.value);
-      }
-    }
-
-    // Some wallets return callback values in URL fragment, for example:
-    // solq://onconnect#public_key=<base58>
+      {bool allowDataFallback = true, List<String?>? excludeValues}) {
+    // 1. Check fragments first (common for mobile deep links)
     final fragment = uri.fragment;
     if (fragment.isNotEmpty) {
       final fragmentParams = _parseQueryLikeParams(fragment);
-      for (final key in _addressFieldKeys) {
-        candidates.add(fragmentParams[key]);
-      }
-
-      for (final entry in fragmentParams.entries) {
-        if (!entry.key.toLowerCase().contains('encryption')) {
-          candidates.add(entry.value);
-        }
-      }
-
-      if (allowDataFallback) {
-        final fromFragmentData =
-            _extractAddressFromDataParam(fragmentParams['data']);
-        if (fromFragmentData != null) {
-          return fromFragmentData;
+      
+      // Strict Priority for Fragments
+      const prioritizedKeys = ['public_key', 'publicKey', 'pubKey', 'address'];
+      for (final key in prioritizedKeys) {
+        final normalized = _normalizeAddress(fragmentParams[key]);
+        if (normalized != null && !(excludeValues?.contains(normalized) ?? false)) {
+          return normalized;
         }
       }
     }
 
-    for (final candidate in candidates) {
-      final normalized = _normalizeAddress(candidate);
-      if (normalized != null) return normalized;
+    // 2. Check Query Parameters
+    final queryParams = uri.queryParameters;
+    const prioritizedKeys = ['public_key', 'publicKey', 'pubKey', 'address'];
+    for (final key in prioritizedKeys) {
+      final normalized = _normalizeAddress(queryParams[key]);
+      if (normalized != null && !(excludeValues?.contains(normalized) ?? false)) {
+        return normalized;
+      }
     }
 
-    // Some wallets return data in JSON or encoded payload under `data`.
+    // 3. Data Fallback (JSON Payloads)
     if (allowDataFallback) {
-      final fromData =
-          _extractAddressFromDataParam(uri.queryParameters['data']);
-      if (fromData != null) return fromData;
+      final fromData = _extractAddressFromDataParam(queryParams['data']) ?? 
+                       _extractAddressFromDataParam(fragment.isNotEmpty ? _parseQueryLikeParams(fragment)['data'] : null);
+      if (fromData != null && !(excludeValues?.contains(fromData) ?? false)) {
+        return fromData;
+      }
+    }
+
+    // 4. Path Segments (As a last resort)
+    final fromPath = _extractAddressFromPathSegments(uri);
+    if (fromPath != null && !(excludeValues?.contains(fromPath) ?? false)) {
+      return fromPath;
     }
 
     return null;
@@ -722,7 +727,7 @@ class SolanaService {
     final appLinks = AppLinks();
 
     try {
-      final initialLink = await appLinks.getInitialAppLink();
+      final initialLink = await appLinks.getInitialLink();
       if (initialLink != null) {
         _handleCallback(initialLink);
       }
@@ -755,6 +760,9 @@ class SolanaService {
         hasEncryptedSession ? _decodePhantomEncryptedData(uri) : null;
 
     final hasSignHint = uriStr.contains('onsign') ||
+        uriStr.contains('phantom/sign') ||
+        uriStr.contains('sign-transaction') ||
+        uriStr.contains('sign-message') ||
         hasQuerySignatureField ||
         hasFragmentSignatureField;
 
@@ -796,9 +804,12 @@ class SolanaService {
     }
 
     final hasConnectHint = uriStr.contains('onconnect') ||
+        uriStr.contains('phantom/connect') ||
         uriStr.contains('solana-connect') ||
         uriStr.contains('jupiter-connect') ||
         uriStr.contains('backpack-connect') ||
+        uriStr.contains('phantom-connect') ||
+        uriStr.contains('wallet-connect') ||
         uri.path.contains('connect') ||
         pathAddress != null ||
         hasQueryAddressField ||
@@ -822,6 +833,12 @@ class SolanaService {
           _extractAddressFromCallback(
             uri,
             allowDataFallback: !hasEncryptedSession,
+            excludeValues: [
+              uri.queryParameters['phantom_encryption_public_key'],
+              uri.queryParameters['dapp_encryption_public_key'],
+              fragmentParams['phantom_encryption_public_key'],
+              fragmentParams['dapp_encryption_public_key'],
+            ],
           );
       if (address != null) {
         _applyConnectedAddress(address);
@@ -904,7 +921,12 @@ class SolanaService {
 
   Future<void> connectPhantom() async {
     await _beginConnect('Phantom');
-    await _resetPhantomConnectSession();
+    
+    // Recovery: Check if we already have a valid session to avoid unnecessary resets
+    if (_phantomSessionToken == null || _phantomSessionToken!.isEmpty) {
+      await _resetPhantomConnectSession();
+    }
+    
     final dappPub = _phantomDappPubKeyB58;
 
     if (kIsWeb) {
@@ -913,29 +935,34 @@ class SolanaService {
     }
 
     final launched = await _launchCandidates([
+      // phantom:// native deep link (preferred — works without browser)
+      Uri(
+        scheme: 'phantom',
+        path: 'v1/connect',
+        queryParameters: {
+          if (dappPub != null) 'dapp_encryption_public_key': dappPub,
+          'cluster': AppConfig.cluster,
+          'app_url': _appUrl,
+          'redirect_link': _onConnectRedirect,
+        },
+      ),
+      // Universal link fallback
+      Uri.https('phantom.app', '/ul/v1/connect', {
+        if (dappPub != null) 'dapp_encryption_public_key': dappPub,
+        'cluster': AppConfig.cluster,
+        'app_url': _appUrl,
+        'redirect_link': _onConnectRedirect,
+      }),
       Uri(
         scheme: 'solana',
         path: 'connect',
         queryParameters: {
           'app_url': _appUrl,
           'redirect_link': _onConnectRedirect,
-          'cluster': 'mainnet-beta',
+          'cluster': AppConfig.cluster,
           'name': 'SOLQ',
         },
       ),
-      Uri.parse('solana-pay:connect').replace(
-        queryParameters: {
-          'app_url': _appUrl,
-          'redirect_link': _onConnectRedirect,
-          'cluster': 'mainnet-beta',
-        },
-      ),
-      Uri.https('phantom.app', '/ul/v1/connect', {
-        if (dappPub != null) 'dapp_encryption_public_key': dappPub,
-        'cluster': 'mainnet-beta',
-        'app_url': _appUrl,
-        'redirect_link': _onConnectRedirect,
-      }),
     ]);
 
     if (launched) {
@@ -956,29 +983,22 @@ class SolanaService {
     }
 
     final launched = await _launchCandidates([
+      Uri.https('solflare.com', '/ul/v1/connect', {
+        if (dappPub != null) 'dapp_encryption_public_key': dappPub,
+        'cluster': AppConfig.cluster,
+        'app_url': _appUrl,
+        'redirect_link': _onConnectRedirect,
+      }),
       Uri(
         scheme: 'solana',
         path: 'connect',
         queryParameters: {
           'app_url': _appUrl,
           'redirect_link': _onConnectRedirect,
-          'cluster': 'mainnet-beta',
+          'cluster': AppConfig.cluster,
           'name': 'SOLQ',
         },
       ),
-      Uri.parse('solana-pay:connect').replace(
-        queryParameters: {
-          'app_url': _appUrl,
-          'redirect_link': _onConnectRedirect,
-          'cluster': 'mainnet-beta',
-        },
-      ),
-      Uri.https('solflare.com', '/ul/v1/connect', {
-        if (dappPub != null) 'dapp_encryption_public_key': dappPub,
-        'cluster': 'mainnet-beta',
-        'app_url': _appUrl,
-        'redirect_link': _onConnectRedirect,
-      }),
     ]);
 
     if (launched) {
@@ -1004,6 +1024,8 @@ class SolanaService {
           'app_url': _appUrl,
           'redirect_link': _onConnectRedirect,
           'cluster': 'mainnet-beta',
+          'name': 'SOLQ',
+          'icon': 'https://solq.vercel.app/logo.png',
         },
       ),
       Uri(
@@ -1115,18 +1137,24 @@ class SolanaService {
           'session': session,
         });
         if (encryptedPayload != null) {
+          // phantom:// native deep link (preferred)
+          candidates.add(
+            Uri(
+              scheme: 'phantom',
+              path: 'v1/signAndSendTransaction',
+              queryParameters: {
+                ...encryptedPayload,
+                'redirect_link': _onSignRedirect,
+                'cluster': AppConfig.cluster,
+              },
+            ),
+          );
+          // Universal link fallback
           candidates.add(
             Uri.https('phantom.app', '/ul/v1/signAndSendTransaction', {
               ...encryptedPayload,
               'redirect_link': _onSignRedirect,
-              'cluster': 'mainnet-beta',
-            }),
-          );
-          candidates.add(
-            Uri.https('phantom.app', '/ul/v1/signTransaction', {
-              ...encryptedPayload,
-              'redirect_link': _onSignRedirect,
-              'cluster': 'mainnet-beta',
+              'cluster': AppConfig.cluster,
             }),
           );
         }
@@ -1236,6 +1264,8 @@ class SolanaService {
     _preparePhantomConnectSession();
     await _persistPhantomSessionState();
     await _saveConnection(null);
+    // Wipe session token from secure storage on explicit disconnect
+    await _secureStorage.delete(key: _phantomSessionTokenStorageKey);
     _signatureController.add('DISCONNECTED');
   }
 

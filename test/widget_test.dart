@@ -4,9 +4,8 @@ import 'package:solq/main.dart';
 
 void main() {
   test('SOLQ app constructor smoke test', () {
-    const app = SOLQOrchestrator();
+    const app = SOLQApp();
     expect(app, isNotNull);
   });
 }
-
 

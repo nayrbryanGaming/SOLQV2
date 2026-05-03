@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/payment_intent.dart';
+import 'language_service.dart';
 import 'solq_service.dart';
 import 'solana_service.dart';
 import 'coingecko_service.dart';
@@ -150,7 +151,7 @@ class OrchestratorService {
       // 1. Fetch Real-Time IDR Rate
       final marketPrices = await _coingecko.getPrices();
       if (marketPrices == null || marketPrices['SOL'] == null) {
-        throw Exception("Gagal sinkronisasi harga pasar. Periksa koneksi internet Anda.");
+        throw Exception(LanguageService().t('err_price_sync'));
       }
 
       // 2. Call Backend to parse and register intent (auto-discover: local → cloud)
@@ -184,8 +185,7 @@ class OrchestratorService {
           final isValid =
               _coingecko.verifyRate(quote.price, marketPrices['SOL']!);
           if (!isValid) {
-            throw Exception(
-                "Keamanan: Terdeteksi deviasi harga yang mencurigakan (> 2.5%). Transaksi dibatalkan untuk perlindungan dana.");
+            throw Exception(LanguageService().t('err_suspicious_price'));
           }
 
           _currentIntent = _currentIntent!.copyWith(
@@ -216,16 +216,14 @@ class OrchestratorService {
       if (e is TimeoutException ||
           e.toString().contains('TimeoutException') ||
           e.toString().contains('Future not completed')) {
-        errorMsg =
-            'Server Cloud tidak merespons. Gunakan endpoint HTTPS yang valid (contoh: https://solq.vercel.app/api/v1).';
+        errorMsg = LanguageService().t('err_cloud_timeout');
       } else if (e is SocketException ||
           e.toString().contains('SocketException') ||
           e.toString().contains('No route to host') ||
           e.toString().contains('Connection refused')) {
-        errorMsg =
-            'Koneksi Gagal: Tidak dapat menjangkau server cloud. Periksa jaringan internet Anda.';
+        errorMsg = LanguageService().t('err_connection_failed');
       } else {
-        errorMsg = 'Gagal memproses: $e';
+        errorMsg = '${LanguageService().t('failed_to_analyze')}: $e';
       }
       _intentController.addError(errorMsg);
     }
@@ -276,14 +274,13 @@ class OrchestratorService {
       if (e is TimeoutException ||
           e.toString().contains('TimeoutException') ||
           e.toString().contains('Future not completed')) {
-        errorMsg =
-            'SERVER TIMEOUT: Backend cloud tidak merespons. Coba lagi beberapa saat.';
+        errorMsg = LanguageService().t('err_cloud_timeout');
       } else if (e is SocketException ||
           e.toString().contains('SocketException') ||
           e.toString().contains('Connection refused')) {
-        errorMsg = 'KONEKSI GAGAL: Tidak dapat terhubung ke backend cloud.';
+        errorMsg = LanguageService().t('err_connection_failed');
       } else {
-        errorMsg = 'Gagal menetapkan nominal: $e';
+        errorMsg = '${LanguageService().t('err_amount_set')}: $e';
       }
       _intentController.addError(errorMsg);
     }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 
 /// Jupiter Quote Response with 99.9% Fee Accuracy Guarantee
 /// This ensures SOLQ has the world's most competitive and transparent fees
@@ -39,21 +40,22 @@ class JupiterService {
   static const String _quoteUrl = "https://lite-api.jup.ag/swap/v1/quote";
   static const String _swapUrl = "https://lite-api.jup.ag/swap/v1/swap";
 
-  // REAL TOKEN MINTS (Mainnet Production)
-  static const String idrxMint = "idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur"; // IDRX Stablecoin
+  // TOKEN MINTS — devnet uses USDC as IDRX substitute (via AppConfig)
+  static const String idrxMint = AppConfig.idrxMint; // IDRX mainnet / USDC devnet
   static const String solMint = "So11111111111111111111111111111111111111112"; // Wrapped SOL
   static const String usdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC
   
   // TREASURY WALLET (All Revenue Flows Here)
-  static const String treasuryWallet = "ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m";
-  static const String treasuryIdrxAta = "QVpWTCsVLDSLusuwNu3ucEQmeDUjCid1kap5qXzii38";
+  static const String treasuryWallet = "35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr";
+  static const String revenueWallet = "35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr";
+  static const String treasuryIdrxAta = "DqjBhjX9tFzMy9zYXwepXW8GNuqfuDCJ4J7sX1C78p6g";
   
   // REVENUE & SLIPPAGE STRATEGY:
-  // Platform Fee: 1.0% (100 bps) - SOLQ revenue
+  // Platform Fee: 1.5% (150 bps) - SOLQ revenue
   // Slippage: 1.0% (100 bps) - mainnet reliability (prevents failed txs)
   // Network Gas: ~0.000006 SOL (~Rp 0.15 @ 25M IDR/SOL)
-  // TOTAL: ~2.01% (BEATS CREDIT CARD 2-3%)
-  static const int platformFeeBps = 100; // 1.0% revenue
+  // TOTAL: ~2.51% (COMPETITIVE VS TRADITIONAL QRIS/CARDS)
+  static const int platformFeeBps = 150; // 1.5% revenue
   static const int slippageBps = 100;    // 1.0% slippage (mainnet safe)
 
   Future<JupiterQuoteResponse?> getQuote(String amountIdr, {String inputCurrency = 'SOL'}) async {
@@ -75,6 +77,7 @@ class JupiterService {
         "outputMint=$idrxMint&"
         "amount=$amountAtomic&"
         "swapMode=ExactOut&"
+        "onlyDirectRoutes=false&"
         "slippageBps=$slippageBps&"
         "platformFeeBps=$platformFeeBps"
       );
@@ -155,8 +158,9 @@ class JupiterService {
           'userPublicKey': userPublicKey,
           'wrapAndUnwrapSol': true,
           'computeUnitPriceMicroLamports': 'auto',
-          'feeAccount': treasuryIdrxAta,                // Platform fee → Treasury ATA
-          'destinationTokenAccount': treasuryIdrxAta,   // IDRX output → Treasury ATA for off-ramp
+          'prioritizationFeeLamports': 'auto',
+          'feeAccount': treasuryIdrxAta,                // Revenue collector
+          'destinationTokenAccount': treasuryIdrxAta,   // Settlement collector (Escrow)
           'dynamicComputeUnitLimit': true,
         }),
       ).timeout(const Duration(seconds: 10));

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.nayrbryan.nusaharvest"
+    namespace = "com.solq.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nayrbryan.nusaharvest" // Matched with AndroidManifest.xml
+        applicationId = "com.solq.app" // Matched with AndroidManifest.xml
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

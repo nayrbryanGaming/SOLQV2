@@ -12,28 +12,43 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.SOLANA_CLUSTER = void 0;
 const store_1 = require("./store");
 const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const node_fetch_1 = __importDefault(require("node-fetch"));
-const JUPITER_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
-const JUPITER_SWAP_API = 'https://lite-api.jup.ag/swap/v1/swap';
+// Cluster: 'devnet' for testing, 'mainnet-beta' for production
+exports.SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || 'mainnet-beta';
+const IS_DEVNET = exports.SOLANA_CLUSTER === 'devnet';
+// Jupiter API — devnet uses v6 public, mainnet uses lite-api
+const JUPITER_QUOTE_API = IS_DEVNET
+    ? 'https://quote-api.jup.ag/v6/quote'
+    : 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_SWAP_API = IS_DEVNET
+    ? 'https://quote-api.jup.ag/v6/swap'
+    : 'https://lite-api.jup.ag/swap/v1/swap';
 // TREASURY WALLET (All Revenue & Settlement Flow)
 const TREASURY_WALLET = new web3_js_1.PublicKey('ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m');
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-// IDRX Stablecoin (Mainnet)
-const IDRX_MINT = new web3_js_1.PublicKey('idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur');
+// IDRX Stablecoin — mainnet mint; devnet uses USDC as substitute
+const IDRX_MINT = new web3_js_1.PublicKey(IS_DEVNET
+    ? (process.env.DEVNET_OUTPUT_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') // USDC devnet
+    : (process.env.IDRX_MINT_ADDRESS || 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur'));
 // Treasury ATA for IDRX (platform fee collection)
 let treasuryIdrxAta = null;
-// Multi-RPC Failover (Mainnet Reliability)
-// Added Helius.dev as free 24/7 alternative to paid RPC providers
-const RPC_ENDPOINTS = [
-    process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
-    "https://solana-mainnet.g.alchemy.com/v2/demo",
-    "https://rpc.ankr.com/solana",
-    "https://helius-rpc.com/", // Helius.dev - Free tier, 24/7, high uptime ✅
-];
+// Multi-RPC Failover — Helius primary (set HELIUS_RPC_URL env), public fallbacks
+const RPC_ENDPOINTS = IS_DEVNET
+    ? [
+        process.env.HELIUS_DEVNET_RPC_URL || 'https://api.devnet.solana.com',
+        'https://rpc.ankr.com/solana_devnet',
+    ]
+    : [
+        process.env.HELIUS_RPC_URL || process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+        process.env.QUICKNODE_RPC_URL || 'https://solana-mainnet.g.alchemy.com/v2/demo',
+        'https://rpc.ankr.com/solana',
+        'https://mainnet.helius-rpc.com/?api-key=public',
+    ];
 class SolanaService {
     constructor() {
         this.currentRpcIndex = 0;

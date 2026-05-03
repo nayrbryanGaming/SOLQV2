@@ -9,12 +9,20 @@ exports.QRISDecoder = void 0;
 class QRISDecoder {
     /**
      * Decodes a raw QRIS string into a structured object
-     * CRC is checked but non-fatal — real-world QR scans may have slight issues.
+     * CRC VALIDATION IS STRICT PER EMVCo §2.9
+     * If CRC fails: payload is corrupted or tampered. REJECT IMMEDIATELY.
+     * This is a CRITICAL SECURITY and COMPLIANCE control.
      */
     static decode(rawPayload) {
         const crcOk = this.verifyCRC(rawPayload);
         if (!crcOk) {
-            console.warn("[QRIS] CRC mismatch — proceeding with parse (camera scan tolerance)");
+            const crcTagIdx = rawPayload.lastIndexOf('6304');
+            const providedCrc = crcTagIdx >= 0
+                ? rawPayload.substring(crcTagIdx + 4, crcTagIdx + 8).toUpperCase()
+                : 'N/A';
+            throw new Error(`[QRIS] CRC-16/CCITT-FALSE validation FAILED. ` +
+                `Payload is corrupted or tampered. Rejecting for safety. ` +
+                `(Provided CRC: ${providedCrc})`);
         }
         const data = { merchantAccountInfo: {}, crc_valid: crcOk };
         let index = 0;
@@ -52,6 +60,8 @@ class QRISDecoder {
             index += 4 + length;
         }
         data.merchantName = this.normalizeMerchantName(data.merchantName);
+        // STRICT EMVCo VALIDATION - All mandatory tags must be present and valid
+        this.validateEMVCoSchema(data);
         return data;
     }
     static parseNestedTLV(payload) {
@@ -74,10 +84,16 @@ class QRISDecoder {
      * EMVCo Rule: CRC is over all data including "6304" but excluding the 4-char CRC itself.
      */
     static verifyCRC(payload) {
-        if (payload.length < 4)
+        if (payload.length < 8)
             return false;
-        const data = payload.substring(0, payload.length - 4);
-        const expectedCrc = payload.substring(payload.length - 4).toUpperCase();
+        // EMVCo QRCPS §2.9: CRC is computed over the entire QR payload
+        // from the first byte up to and INCLUDING the tag identifier "6304".
+        // The 4-char CRC value that follows is NOT included.
+        const crcTagIdx = payload.lastIndexOf('6304');
+        if (crcTagIdx < 0 || crcTagIdx + 8 > payload.length)
+            return false;
+        const data = payload.substring(0, crcTagIdx + 4); // includes "6304"
+        const expectedCrc = payload.substring(crcTagIdx + 4, crcTagIdx + 8).toUpperCase();
         let crc = 0xFFFF;
         for (let i = 0; i < data.length; i++) {
             crc ^= (data.charCodeAt(i) << 8);
@@ -193,6 +209,53 @@ class QRISDecoder {
         if (!name)
             return 'UNKNOWN MERCHANT';
         return name.replace(/\s+/g, ' ');
+    }
+    /**
+     * STRICT EMVCo VALIDATION (MANDATORY)
+     * Per EMVCo QRCPS specification, these tags MUST be present and valid.
+     * Throws exception if ANY mandatory tag is missing or invalid.
+     * This is a CRITICAL COMPLIANCE CONTROL per "HUKUM 2 — ZERO MOCK"
+     */
+    static validateEMVCoSchema(data) {
+        const errors = [];
+        // Tag 00: Payload Format Indicator — MUST be "01"
+        if (data.payloadFormatIndicator !== '01') {
+            errors.push(`Tag 00 (Payload Format Indicator) INVALID. Expected "01", got "${data.payloadFormatIndicator}". ` +
+                `Only EMVCo QRCPS v1 is supported.`);
+        }
+        // Tag 53: Transaction Currency — MUST be "360" (IDR)
+        if (data.transactionCurrency !== '360') {
+            errors.push(`Tag 53 (Transaction Currency) INVALID. Expected "360" (IDR), ` +
+                `got "${data.transactionCurrency}". SOLQ only supports IDR payments.`);
+        }
+        // Tag 58: Country Code — MUST be "ID"
+        if (data.countryCode !== 'ID') {
+            errors.push(`Tag 58 (Country Code) INVALID. Expected "ID", got "${data.countryCode}". ` +
+                `SOLQ only processes Indonesian QRIS.`);
+        }
+        // Tag 59: Merchant Name — MUST NOT be empty
+        if (!data.merchantName || data.merchantName.length === 0) {
+            errors.push(`Tag 59 (Merchant Name) is empty or missing. ` +
+                `Cannot identify merchant. Payload is incomplete.`);
+        }
+        // Tag 63: CRC Checksum — MUST be exactly 4 hex characters
+        if (!data.crc || data.crc.length !== 4) {
+            errors.push(`Tag 63 (CRC) is missing or malformed. Expected 4 hex chars, ` +
+                `got "${data.crc || 'MISSING'}".`);
+        }
+        // Merchant Account Info (Tags 26-51) — At least one SHOULD exist
+        // (Some QRIS implementations may omit this; allow but warn in logs)
+        const hasAnyMerchantInfo = Object.keys(data.merchantAccountInfo).length > 0;
+        if (!hasAnyMerchantInfo) {
+            // Not an error, but log warning for compliance audit
+            console.warn(`[QRIS-VALIDATION] No Merchant Account Information (Tags 26-51) found. ` +
+                `This is unusual but not forbidden by spec. Will attempt settlement without NMID.`);
+        }
+        // If any critical errors: REJECT IMMEDIATELY
+        if (errors.length > 0) {
+            throw new Error(`[QRIS-VALIDATION] EMVCo Schema Validation FAILED:\n${errors.join('\n')}\n\n` +
+                `The QR code does not conform to EMVCo QRCPS specification.`);
+        }
     }
 }
 exports.QRISDecoder = QRISDecoder;

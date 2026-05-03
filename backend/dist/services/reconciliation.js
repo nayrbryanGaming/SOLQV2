@@ -20,20 +20,32 @@ class ReconciliationWorker {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[Reconciliation] Starting autonomous audit...');
             const now = Date.now();
-            const STUCK_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+            // Authorization must complete within 10 minutes — wallet sign takes seconds
+            const AUTH_STUCK_MS = 10 * 60 * 1000;
+            // AWAITING_SETTLEMENT is legitimate — IDRX partner can take hours; give 4 hours before alerting
+            const SETTLEMENT_ALERT_MS = 4 * 60 * 60 * 1000;
             for (const id in store_1.paymentIntents) {
                 const intent = store_1.paymentIntents[id];
-                // Detecting stuck "AUTHORIZATION_REQUESTED", "AUTHORIZED", or "AWAITING_SETTLEMENT" transactions
-                if (intent.status === 'AUTHORIZATION_REQUESTED' || intent.status === 'AUTHORIZED' || intent.status === 'AWAITING_SETTLEMENT') {
-                    const age = now - (intent.createdAt ? new Date(intent.createdAt).getTime() : now);
-                    if (age > STUCK_THRESHOLD) {
-                        console.warn(`[Reconciliation] 🚨 STUCK DETECTED: Intent ${id} | State: ${intent.status}`);
-                        // Force Fail stuck intents to allow user retry or cleanup
+                const lastUpdated = intent.updatedAt
+                    ? new Date(intent.updatedAt).getTime()
+                    : new Date(intent.createdAt).getTime();
+                if (intent.status === 'AUTHORIZATION_REQUESTED' || intent.status === 'AUTHORIZED') {
+                    const age = now - lastUpdated;
+                    if (age > AUTH_STUCK_MS) {
+                        console.warn(`[Reconciliation] 🚨 STUCK AUTH: Intent ${id} | State: ${intent.status} | Age: ${Math.round(age / 60000)}m`);
                         intent.status = 'FAILED';
+                        intent.updatedAt = new Date().toISOString();
                         auditLogger_1.AuditLogger.log(auditLogger_1.AuditEventType.SETTLEMENT_FAILED, {
                             intentId: id,
-                            reason: `Reconciliation Timeout (${STUCK_THRESHOLD}ms)`
+                            reason: `Auth timeout after ${Math.round(age / 60000)} minutes`
                         });
+                    }
+                }
+                else if (intent.status === 'AWAITING_SETTLEMENT') {
+                    const age = now - lastUpdated;
+                    if (age > SETTLEMENT_ALERT_MS) {
+                        // Log alert but do NOT auto-fail — IDRX funds are safe in treasury
+                        console.warn(`[Reconciliation] ⚠️ SETTLEMENT DELAYED: Intent ${id} | Age: ${Math.round(age / 3600000)}h | Funds secured in treasury`);
                     }
                 }
             }

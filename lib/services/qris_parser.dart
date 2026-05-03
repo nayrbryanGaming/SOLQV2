@@ -148,7 +148,11 @@ class QrisParser {
     }
 
     // Extract Data
-    final merchant = data['59']!.trim().replaceAll(RegExp(r'\s+'), ' ');
+    // Merchant Name (Clean and normalize)
+    final merchant = data['59']!.trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'[^\x20-\x7E]'), ''); // Remove non-printable noise
+    
     final String? amountStr = data['54']?.replaceAll(',', '.');
     final parsedAmount = double.tryParse(amountStr ?? '');
     if (amountStr != null && amountStr.isNotEmpty &&
@@ -163,11 +167,15 @@ class QrisParser {
     for (int i = 26; i <= 51; i++) {
       final tagData = data[i.toString()];
       if (tagData != null) {
-        // QRIS Merchant Info is usually a nested TLV string.
         final nested = _parseNested(tagData);
-        account = _pickBestMerchantAccount(nested);
-        merchantId ??= _pickBestMerchantId(nested);
-        if (account != null) break;
+        
+        // Priority for NMID extraction (Tag 02 or 03 in nested)
+        merchantId ??= nested['02'] ?? nested['03'];
+        
+        // Pick best merchant account/PAN
+        account ??= _pickBestMerchantAccount(nested);
+        
+        if (account != null && merchantId != null) break;
       }
     }
 

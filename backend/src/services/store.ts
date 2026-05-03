@@ -1,6 +1,6 @@
 export interface PaymentIntent {
     id: string;
-    status: 'CREATED' | 'AUTHORIZATION_REQUESTED' | 'AUTHORIZED' | 'AWAITING_SETTLEMENT' | 'COMPLETED' | 'FAILED';
+    status: 'CREATED' | 'AUTHORIZATION_REQUESTED' | 'AUTHORIZED' | 'AWAITING_SETTLEMENT' | 'SETTLEMENT_QUEUED' | 'SETTLEMENT_FAILED' | 'COMPLETED' | 'FAILED';
     merchant: any;
     amount_details: {
         fiat_amount: number;
