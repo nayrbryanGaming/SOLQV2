@@ -15,8 +15,16 @@ const JUPITER_SWAP_API = IS_DEVNET
     ? 'https://quote-api.jup.ag/v6/swap'
     : 'https://lite-api.jup.ag/swap/v1/swap';
 
-// TREASURY WALLET (All Revenue & Settlement Flow)
-const TREASURY_WALLET = new PublicKey('ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m');
+// ── LOCKED REVENUE WALLETS — PERMANENT, NO ENV OVERRIDE ──────────────────────
+// These are consensus-level constants. Changing them requires a full redeploy.
+const PLATFORM_WALLET = new PublicKey('ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m');
+const DEV_WALLET     = new PublicKey('35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr');
+// TREASURY_WALLET kept as alias for PLATFORM_WALLET (backwards compatibility)
+const TREASURY_WALLET = PLATFORM_WALLET;
+// Fee split: 70% → PLATFORM_WALLET, 30% → DEV_WALLET
+const FEE_SPLIT_PLATFORM_PCT = 70;
+const FEE_SPLIT_DEV_PCT      = 30;
+// ─────────────────────────────────────────────────────────────────────────────
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -104,7 +112,7 @@ class SolanaService {
             amount: amountAtomic.toString(),
             swapMode: 'ExactOut',
             slippageBps: '100',         // 1% slippage for mainnet reliability
-            platformFeeBps: '100',      // 1% platform fee → Treasury
+            platformFeeBps: '50',       // 0.5% platform fee (PLATFORM_SPREAD_BPS=50)
         });
 
         const quoteRes = await fetch(`${JUPITER_QUOTE_API}?${quoteParams}`);

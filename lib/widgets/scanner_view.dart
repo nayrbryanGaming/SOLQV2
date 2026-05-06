@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/language_service.dart';
+import '../services/scanner_service.dart';
 
 class ScannerView extends StatefulWidget {
   final Function(String) onDetect;
@@ -21,18 +22,17 @@ class ScannerView extends StatefulWidget {
 }
 
 class _ScannerViewState extends State<ScannerView> {
-  MobileScannerController? _controller;
-  int _scannerKeyVersion = 0;
-  bool _isRecreating = false;
+  // Use singleton — never disposes controller between screen visits (zero black screen)
+  final _scanner     = ScannerService.instance;
   Timer? _frameWatchdog;
-  bool _hasDetectedFrame = false;
-  bool _hasScanned = false;
+  bool  _hasDetectedFrame = false;
+  bool  _hasScanned       = false;
 
   @override
   void initState() {
     super.initState();
-    _startScanner();
-    // Delay watchdog start to allow camera hardware to init (typically 2-4s on Android)
+    _scanner.initialize();
+    _scanner.start();
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted) _initWatchdog();
     });
@@ -40,51 +40,23 @@ class _ScannerViewState extends State<ScannerView> {
 
   void _initWatchdog() {
     _frameWatchdog?.cancel();
-    _frameWatchdog = Timer.periodic(const Duration(seconds: 8), (timer) {
-      if (!_hasDetectedFrame && !_isRecreating && mounted) {
-        debugPrint("SCANNER_WATCHDOG: No frame in 8s, force-resetting...");
-        _recreateController();
+    _frameWatchdog = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (!_hasDetectedFrame && mounted) {
+        debugPrint('SCANNER_WATCHDOG: no frame in 8s, stop/start...');
+        _scanner.stop();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) { _scanner.start(); setState(() { _hasDetectedFrame = false; }); }
+        });
       }
     });
   }
 
-  void _startScanner() {
-    _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
-      facing: CameraFacing.back,
-      torchEnabled: false,
-      autoStart: true,
-    );
-  }
-
-  Future<void> _recreateController() async {
-    if (_isRecreating || !mounted) return;
-    
-    // Stop the old controller first to release the hardware lock
-    try {
-      await _controller?.stop();
-      _controller?.dispose();
-    } catch (e) {
-      debugPrint("Error disposing controller: $e");
-    }
-
-    if (!mounted) return;
-    setState(() {
-       _isRecreating = true;
-       _controller = null;
-    });
-    
-    // Grace period for hardware release
+  Future<void> _softReset() async {
+    _scanner.stop();
     await Future.delayed(const Duration(milliseconds: 300));
-
     if (mounted) {
-      setState(() {
-        _startScanner();
-        _scannerKeyVersion++;
-        _isRecreating = false;
-        _hasDetectedFrame = false;
-      });
-      // Re-initialize watchdog for the new instance
+      _scanner.start();
+      setState(() { _hasDetectedFrame = false; _hasScanned = false; });
       _initWatchdog();
     }
   }
@@ -101,7 +73,7 @@ class _ScannerViewState extends State<ScannerView> {
     );
 
     try {
-      final success = await _controller?.analyzeImage(image.path);
+      final success = await _scanner.controller.analyzeImage(image.path);
       if (!mounted) return;
       if (success == null || !success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -125,7 +97,7 @@ class _ScannerViewState extends State<ScannerView> {
   @override
   void dispose() {
     _frameWatchdog?.cancel();
-    _controller?.dispose();
+    _scanner.stop(); // stop (NOT dispose) — singleton stays alive for next visit
     super.dispose();
   }
 
@@ -133,29 +105,20 @@ class _ScannerViewState extends State<ScannerView> {
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageService>();
 
-    if (_isRecreating || _controller == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00FF94)),
-      );
-    }
-
     return Stack(
       children: [
         MobileScanner(
-          key: ValueKey('scanner_$_scannerKeyVersion'),
-          controller: _controller!,
-          fit: BoxFit.cover,
+          controller: _scanner.controller,
+          fit:        BoxFit.cover,
           onDetect: (capture) {
             if (!_hasDetectedFrame) {
               setState(() => _hasDetectedFrame = true);
               _frameWatchdog?.cancel();
             }
             if (_hasScanned) return;
-            final List<Barcode> barcodes = capture.barcodes;
-            for (final barcode in barcodes) {
+            for (final barcode in capture.barcodes) {
               if (barcode.rawValue != null) {
                 _hasScanned = true;
-                // Haptic + visual pulse — instant feedback before network call
                 HapticFeedback.mediumImpact();
                 widget.onDetect(barcode.rawValue!);
                 break;
@@ -188,7 +151,7 @@ class _ScannerViewState extends State<ScannerView> {
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
-                      onPressed: _recreateController,
+                      onPressed: _softReset,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF00FF94),
                         foregroundColor: Colors.black,
@@ -221,7 +184,7 @@ class _ScannerViewState extends State<ScannerView> {
                 child: Column(
                   children: [
                     IconButton(
-                      onPressed: _recreateController,
+                      onPressed: _softReset,
                       icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
                     ),
                     Padding(

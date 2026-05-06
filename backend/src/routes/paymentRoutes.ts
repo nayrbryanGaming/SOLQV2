@@ -7,6 +7,7 @@ import { RiskEngine } from '../services/riskEngine';
 import { SettlementQueueService, SettlementTrack } from '../services/settlementQueue';
 import solanaService from '../services/solanaService';
 import prisma from '../services/prisma';
+import { logFeeSplit, LOCKED_PLATFORM_WALLET, LOCKED_DEV_WALLET } from '../services/feeDistributor';
 
 const router = Router();
 const confirmLocks = new Set<string>();
@@ -79,9 +80,12 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
         const nmid = extractedAccount || undefined;
         const bankCode = QRISDecoder.detectBank(decoded);
 
-        const platformFee = quote.targetAmount * 0.01;
-        const estNetworkFee = 0.000005; // Standard Solana gas
-        const savingsVsLegacy = quote.targetAmount * 0.02; // Assuming legacy is 3% and we are 1%
+        // 0.5% platform fee split: 70% → Platform wallet, 30% → Dev wallet
+        const platformFee = Math.max(2500, Math.round(quote.targetAmount * 0.005));
+        const platformFeeWallet70 = Math.round(platformFee * 0.70);
+        const platformFeeWallet30 = platformFee - platformFeeWallet70;
+        const estNetworkFee = 0.000005; // Standard Solana gas (sponsored by hot wallet)
+        const savingsVsLegacy = quote.targetAmount * 0.025; // User saves vs 3% legacy fee
 
         const paymentIntent: PaymentIntent = {
             id: intentId,
@@ -103,10 +107,17 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
             nmid: nmid,
             bank_code: bankCode,
             platformFee: platformFee,
+            platformFeeBreakdown: {
+                platformWallet: 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m',
+                platformWalletShare: platformFeeWallet70,
+                devWallet: '35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr',
+                devWalletShare: platformFeeWallet30,
+                splitPct: '70/30',
+            },
             networkFee: estNetworkFee,
-            slippage: 0.5, // 0.5% default
+            slippage: 0.5,
             maxFee: quote.targetAmount + platformFee,
-            effectiveFeePercent: 1.0,
+            effectiveFeePercent: 0.5,
             userSavingsVsQris: savingsVsLegacy,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -254,10 +265,18 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         intent.txHash = tx_hash;
         intent.updatedAt = new Date().toISOString();
 
+        // Log 70/30 fee split to immutable audit trail
+        const platformFeeIdr = Math.max(2500, Math.round(intent.amount_details.fiat_amount * 0.005));
+        const feeSplit = logFeeSplit(id, tx_hash, platformFeeIdr);
+        (intent as any).feeSplit = feeSplit;
+
         AuditLogger.log(AuditEventType.PAYMENT_INTENT_CONFIRMED, {
-            intentId: id,
-            txHash: intent.txHash,
-            payer: intent.payer_account,
+            intentId:       id,
+            txHash:         intent.txHash,
+            payer:          intent.payer_account,
+            platformWallet: LOCKED_PLATFORM_WALLET,
+            devWallet:      LOCKED_DEV_WALLET,
+            feeSplitIdr:    feeSplit,
         });
 
     // ═══════════════════════════════════════════════════════════

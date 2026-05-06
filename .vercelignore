@@ -1,4 +1,5 @@
 # Large/generated directories
+node_modules/
 build/
 android/build/
 ios/Flutter/ephemeral/

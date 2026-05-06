@@ -4,6 +4,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { paymentRoutes } from './routes/paymentRoutes';
 import { adminRoutes } from './routes/adminRoutes';
+import { simulationRoutes } from './routes/simulationRoutes';
 import solanaService from './services/solanaService';
 import prisma from './services/prisma';
 import { paymentIntents } from './services/store';
@@ -95,6 +96,8 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now >
 app.use('/v1', paymentRoutes);
 app.use('/v1/admin', adminRoutes);
 app.use('/admin', adminRoutes);
+// Simulation Mode (full simulation, no real funds)
+app.use('/v1/simulation', simulationRoutes);
 
 // Health Check
 app.get('/health', (_req: Request, res: Response) => {

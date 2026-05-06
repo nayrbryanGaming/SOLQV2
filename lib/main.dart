@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'services/solana_service.dart';
 import 'services/orchestrator_service.dart';
 import 'services/language_service.dart';
+import 'services/scanner_service.dart';
 import 'models/payment_intent.dart';
 import 'widgets/scanner_view.dart';
 import 'widgets/payment_status_view.dart';
@@ -19,7 +20,10 @@ void main() async {
   
   final lang = LanguageService();
   await lang.init();
-  
+
+  // Pre-warm singleton scanner (eliminates first-open black screen)
+  ScannerService.instance.initialize();
+
   final solana = SolanaService();
   final orchestrator = OrchestratorService();
   await orchestrator.init();
