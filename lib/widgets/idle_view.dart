@@ -26,14 +26,14 @@ class IdleView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Logo
+          // SOLQ Wordmark Logo
           Image.asset(
-            'assets/logo.png',
-            height: 140,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-              Icons.account_balance_wallet,
-              size: 100,
-              color: Color(0xFF00FF94),
+            'assets/logos/solq_logo_wordmark_transparent.png',
+            height: 100,
+            errorBuilder: (_, __, ___) => Image.asset(
+              'assets/logos/solq_logo_icon_transparent.png',
+              height: 100,
+              errorBuilder: (_, __, ___) => _SolqLogoFallback(size: 100),
             ),
           ).animate().scale(duration: 800.ms, curve: Curves.easeOutBack),
           
@@ -107,4 +107,87 @@ class IdleView extends StatelessWidget {
       ),
     );
   }
+}
+
+// Fallback SVG-style Q logo rendered via CustomPaint
+class _SolqLogoFallback extends StatelessWidget {
+  final double size;
+  const _SolqLogoFallback({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size * 2.2,
+      height: size,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CustomPaint(size: Size(size, size), painter: _QMarkPainter()),
+          const SizedBox(width: 12),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Color(0xFFC050FF), Color(0xFF14F195)],
+                ).createShader(bounds),
+                child: Text('SOLQ', style: TextStyle(
+                  fontSize: size * 0.38, fontWeight: FontWeight.w900,
+                  color: Colors.white, letterSpacing: 3,
+                )),
+              ),
+              Text('SOLANA-BASED PAYMENTS', style: TextStyle(
+                fontSize: size * 0.1, fontWeight: FontWeight.w600,
+                color: Colors.white54, letterSpacing: 1.5,
+              )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QMarkPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width * 0.44;
+    final cy = size.height * 0.44;
+    final r = size.width * 0.30;
+
+    final purplePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+        colors: [Color(0xFFC050FF), Color(0xFF4A1A99)],
+      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.14
+      ..strokeCap = StrokeCap.round;
+
+    final tealPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.bottomLeft, end: Alignment.topRight,
+        colors: [Color(0xFF00C4CC), Color(0xFF14F195)],
+      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.14
+      ..strokeCap = StrokeCap.round;
+
+    // Full circle in purple
+    canvas.drawCircle(Offset(cx, cy), r, purplePaint);
+
+    // Teal arc (bottom-right quarter)
+    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
+    canvas.drawArc(rect, 0.3, 1.1, false, tealPaint);
+
+    // Q tail
+    final tailPath = Path()
+      ..moveTo(cx + r * 0.7, cy + r * 0.7)
+      ..quadraticBezierTo(cx + r * 1.1, cy + r * 1.2, cx + r * 1.4, cy + r * 1.5);
+    canvas.drawPath(tailPath, tealPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="none">
+  <defs>
+    <linearGradient id="qOuter" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C050FF"/>
+      <stop offset="50%" stop-color="#7B2FBE"/>
+      <stop offset="100%" stop-color="#4A1A99"/>
+    </linearGradient>
+    <linearGradient id="qInner" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00C4CC"/>
+      <stop offset="50%" stop-color="#00D4B8"/>
+      <stop offset="100%" stop-color="#14F195"/>
+    </linearGradient>
+    <linearGradient id="qTail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C4CC"/>
+      <stop offset="100%" stop-color="#14F195"/>
+    </linearGradient>
+    <linearGradient id="qShadow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B0F8C"/>
+      <stop offset="100%" stop-color="#1A0A50"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shadow/depth layer -->
+  <path d="M250 60 C150 60 80 140 80 240 C80 340 150 420 250 420 C290 420 325 407 353 383 L390 430 C395 436 403 438 410 434 C440 418 460 395 468 373 C470 367 468 360 463 356 L420 318 C438 295 448 266 448 240 C448 140 350 60 250 60Z" fill="url(#qShadow)" opacity="0.5" transform="translate(8,10)"/>
+
+  <!-- Outer Q ring - purple -->
+  <circle cx="240" cy="240" r="155" stroke="url(#qOuter)" stroke-width="58" fill="none" stroke-linecap="round"/>
+
+  <!-- Inner arc highlight - teal/cyan (partial arc, bottom-right) -->
+  <circle cx="240" cy="240" r="155" stroke="url(#qInner)" stroke-width="58" fill="none"
+    stroke-dasharray="160 815" stroke-dashoffset="-300" stroke-linecap="round"/>
+
+  <!-- Q tail - teal swoosh going lower-right -->
+  <path d="M340 310 Q370 340 390 370 Q410 400 440 420 Q460 433 475 428 C478 425 475 418 470 413 Q445 393 420 365 Q395 340 375 308"
+    stroke="url(#qTail)" stroke-width="52" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Teal inner swirl overlapping -->
+  <path d="M260 175 Q310 175 340 220 Q360 250 350 285"
+    stroke="url(#qInner)" stroke-width="30" fill="none" stroke-linecap="round" opacity="0.9"/>
+</svg>

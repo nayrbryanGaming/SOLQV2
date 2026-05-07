@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080514">
 <meta name="description" content="SOLQ Demo — Simulasi pembayaran QRIS dengan Solana. Scan QRIS merchant manapun.">
 <title>SOLQ Demo — Solana × QRIS Simulator</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23A855F7'/><stop offset='1' stop-color='%2300D4FF'/></linearGradient></defs><circle cx='42' cy='42' r='30' fill='none' stroke='url(%23g)' stroke-width='12'/><line x1='62' y1='62' x2='80' y2='80' stroke='url(%23g)' stroke-width='12' stroke-linecap='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='a' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23C050FF'/><stop offset='1' stop-color='%234A1A99'/></linearGradient><linearGradient id='b' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%2300C4CC'/><stop offset='1' stop-color='%2314F195'/></linearGradient></defs><circle cx='46' cy='46' r='28' stroke='url(%23a)' stroke-width='13' fill='none'/><circle cx='46' cy='46' r='28' stroke='url(%23b)' stroke-width='13' fill='none' stroke-dasharray='30 200' stroke-dashoffset='-55'/><path d='M64 64 Q72 74 82 82' stroke='url(%23b)' stroke-width='12' fill='none' stroke-linecap='round'/></svg>">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -386,20 +386,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div class="di-logo">
     <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="dg1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#A855F7"/>
-          <stop offset="60%" stop-color="#7B2FBE"/>
-          <stop offset="100%" stop-color="#5B21B6"/>
-        </linearGradient>
-        <linearGradient id="dg2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#06B6D4"/>
-          <stop offset="100%" stop-color="#14F195"/>
-        </linearGradient>
+        <linearGradient id="dg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
+        <linearGradient id="dg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
       </defs>
-      <circle cx="42" cy="42" r="30" fill="none" stroke="url(#dg1)" stroke-width="13" stroke-linecap="round"/>
-      <circle cx="42" cy="42" r="30" fill="none" stroke="url(#dg2)" stroke-width="13" stroke-linecap="round"
-        stroke-dasharray="50 200" stroke-dashoffset="20"/>
-      <line x1="62" y1="62" x2="82" y2="82" stroke="url(#dg2)" stroke-width="13" stroke-linecap="round"/>
+      <circle cx="44" cy="44" r="26" stroke="url(#dg1)" stroke-width="13" fill="none"/>
+      <circle cx="44" cy="44" r="26" stroke="url(#dg2)" stroke-width="13" fill="none" stroke-dasharray="32 200" stroke-dashoffset="-58"/>
+      <path d="M62 62 Q72 74 82 82" stroke="url(#dg2)" stroke-width="12" fill="none" stroke-linecap="round"/>
+      <path d="M54 34 Q70 34 72 52" stroke="url(#dg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.85"/>
     </svg>
     <div class="di-brand">SOL<em>Q</em></div>
   </div>
@@ -454,19 +447,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="splash-logo-wrap">
       <svg width="90" height="90" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <linearGradient id="sg1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#A855F7"/>
-            <stop offset="100%" stop-color="#7B2FBE"/>
-          </linearGradient>
-          <linearGradient id="sg2" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#06B6D4"/>
-            <stop offset="100%" stop-color="#14F195"/>
-          </linearGradient>
+          <linearGradient id="sg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
+          <linearGradient id="sg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
         </defs>
-        <circle cx="42" cy="42" r="30" fill="none" stroke="url(#sg1)" stroke-width="13" stroke-linecap="round"/>
-        <circle cx="42" cy="42" r="30" fill="none" stroke="url(#sg2)" stroke-width="13" stroke-linecap="round"
-          stroke-dasharray="44 200" stroke-dashoffset="28"/>
-        <line x1="62" y1="62" x2="83" y2="83" stroke="url(#sg2)" stroke-width="13" stroke-linecap="round"/>
+        <!-- Q outer ring purple -->
+        <circle cx="44" cy="44" r="26" stroke="url(#sg1)" stroke-width="14" fill="none"/>
+        <!-- Q inner teal arc -->
+        <circle cx="44" cy="44" r="26" stroke="url(#sg2)" stroke-width="14" fill="none" stroke-dasharray="34 200" stroke-dashoffset="-58"/>
+        <!-- Q tail swoosh -->
+        <path d="M62 62 Q74 76 84 84" stroke="url(#sg2)" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <!-- Inner swirl detail -->
+        <path d="M55 33 Q73 33 74 53" stroke="url(#sg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.8"/>
       </svg>
       <div class="splash-title">SOL<em style="color:var(--purple2);font-style:normal">Q</em></div>
       <div class="splash-sub">Solana × QRIS Payment</div>
@@ -661,19 +652,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div class="proc-content">
     <svg class="proc-logo" width="80" height="80" viewBox="0 0 100 100" fill="none">
       <defs>
-        <linearGradient id="pg1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#A855F7"/>
-          <stop offset="100%" stop-color="#7B2FBE"/>
-        </linearGradient>
-        <linearGradient id="pg2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#06B6D4"/>
-          <stop offset="100%" stop-color="#14F195"/>
-        </linearGradient>
+        <linearGradient id="pg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
+        <linearGradient id="pg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
       </defs>
-      <circle cx="42" cy="42" r="30" fill="none" stroke="url(#pg1)" stroke-width="13"/>
-      <circle cx="42" cy="42" r="30" fill="none" stroke="url(#pg2)" stroke-width="13"
-        stroke-dasharray="44 200" stroke-dashoffset="28"/>
-      <line x1="62" y1="62" x2="83" y2="83" stroke="url(#pg2)" stroke-width="13" stroke-linecap="round"/>
+      <circle cx="44" cy="44" r="26" stroke="url(#pg1)" stroke-width="14" fill="none"/>
+      <circle cx="44" cy="44" r="26" stroke="url(#pg2)" stroke-width="14" fill="none" stroke-dasharray="34 200" stroke-dashoffset="-58"/>
+      <path d="M62 62 Q74 76 84 84" stroke="url(#pg2)" stroke-width="13" fill="none" stroke-linecap="round"/>
+      <path d="M55 33 Q73 33 74 53" stroke="url(#pg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.8"/>
     </svg>
     <div class="proc-title" id="proc-title">Memproses Simulasi</div>
     <div class="proc-sub" id="proc-sub">Mohon tunggu sebentar...</div>
