@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080514">
 <meta name="description" content="SOLQ Demo — Simulasi pembayaran QRIS dengan Solana. Scan QRIS merchant manapun.">
 <title>SOLQ Demo — Solana × QRIS Simulator</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='a' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23C050FF'/><stop offset='1' stop-color='%234A1A99'/></linearGradient><linearGradient id='b' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%2300C4CC'/><stop offset='1' stop-color='%2314F195'/></linearGradient></defs><circle cx='46' cy='46' r='28' stroke='url(%23a)' stroke-width='13' fill='none'/><circle cx='46' cy='46' r='28' stroke='url(%23b)' stroke-width='13' fill='none' stroke-dasharray='30 200' stroke-dashoffset='-55'/><path d='M64 64 Q72 74 82 82' stroke='url(%23b)' stroke-width='12' fill='none' stroke-linecap='round'/></svg>">
+<link rel="icon" type="image/png" href="/logo_full.png">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -384,17 +384,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div class="desktop-info">
   <div class="di-badge">🎮 DEMO / SIMULASI</div>
   <div class="di-logo">
-    <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="dg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
-        <linearGradient id="dg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
-      </defs>
-      <circle cx="44" cy="44" r="26" stroke="url(#dg1)" stroke-width="13" fill="none"/>
-      <circle cx="44" cy="44" r="26" stroke="url(#dg2)" stroke-width="13" fill="none" stroke-dasharray="32 200" stroke-dashoffset="-58"/>
-      <path d="M62 62 Q72 74 82 82" stroke="url(#dg2)" stroke-width="12" fill="none" stroke-linecap="round"/>
-      <path d="M54 34 Q70 34 72 52" stroke="url(#dg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.85"/>
-    </svg>
-    <div class="di-brand">SOL<em>Q</em></div>
+    <img src="/logo_q.png" alt="SOLQ" style="height:52px;object-fit:contain;display:block;filter:drop-shadow(0 2px 12px rgba(139,46,232,.4))">
   </div>
   <p class="di-desc">Simulasi pembayaran QRIS dengan aset Solana.<br>
     Scan QRIS merchant mana pun — merchant name dan NMID otomatis terbaca.</p>
@@ -445,23 +435,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
     background:linear-gradient(160deg,#0A0320 0%,#1A0640 60%,#0A0320 100%)">
     <div class="splash-logo-wrap">
-      <svg width="90" height="90" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="sg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
-          <linearGradient id="sg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
-        </defs>
-        <!-- Q outer ring purple -->
-        <circle cx="44" cy="44" r="26" stroke="url(#sg1)" stroke-width="14" fill="none"/>
-        <!-- Q inner teal arc -->
-        <circle cx="44" cy="44" r="26" stroke="url(#sg2)" stroke-width="14" fill="none" stroke-dasharray="34 200" stroke-dashoffset="-58"/>
-        <!-- Q tail swoosh -->
-        <path d="M62 62 Q74 76 84 84" stroke="url(#sg2)" stroke-width="13" fill="none" stroke-linecap="round"/>
-        <!-- Inner swirl detail -->
-        <path d="M55 33 Q73 33 74 53" stroke="url(#sg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.8"/>
-      </svg>
-      <div class="splash-title">SOL<em style="color:var(--purple2);font-style:normal">Q</em></div>
-      <div class="splash-sub">Solana × QRIS Payment</div>
-      <div class="splash-demo-pill">⚡ MODE SIMULASI</div>
+      <img src="/logo_q.png" alt="SOLQ"
+        style="width:260px;max-width:80vw;object-fit:contain;filter:drop-shadow(0 4px 24px rgba(139,46,232,.6))">
+      <div class="splash-demo-pill" style="margin-top:20px">⚡ MODE SIMULASI</div>
     </div>
   </div>
 </div>
@@ -470,7 +446,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="s-home" class="screen">
   <div class="topbar">
     <div class="topbar-logo">
-      SOL<em>Q</em>
+      <img src="/logo_full.png" alt="SOLQ" style="height:32px;object-fit:contain">
       <span class="sim-tag">DEMO</span>
     </div>
     <button class="btn-connect" id="btn-wallet-top" onclick="openWalletModal()">Connect Wallet</button>
@@ -650,16 +626,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- PROCESSING -->
 <div id="s-processing" class="screen">
   <div class="proc-content">
-    <svg class="proc-logo" width="80" height="80" viewBox="0 0 100 100" fill="none">
-      <defs>
-        <linearGradient id="pg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#C050FF"/><stop offset="50%" stop-color="#7B2FBE"/><stop offset="100%" stop-color="#4A1A99"/></linearGradient>
-        <linearGradient id="pg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00C4CC"/><stop offset="100%" stop-color="#14F195"/></linearGradient>
-      </defs>
-      <circle cx="44" cy="44" r="26" stroke="url(#pg1)" stroke-width="14" fill="none"/>
-      <circle cx="44" cy="44" r="26" stroke="url(#pg2)" stroke-width="14" fill="none" stroke-dasharray="34 200" stroke-dashoffset="-58"/>
-      <path d="M62 62 Q74 76 84 84" stroke="url(#pg2)" stroke-width="13" fill="none" stroke-linecap="round"/>
-      <path d="M55 33 Q73 33 74 53" stroke="url(#pg2)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.8"/>
-    </svg>
+    <img src="/logo_full.png" alt="SOLQ" class="proc-logo"
+      style="width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 16px rgba(139,46,232,.6))">
     <div class="proc-title" id="proc-title">Memproses Simulasi</div>
     <div class="proc-sub" id="proc-sub">Mohon tunggu sebentar...</div>
     <div class="step-list" id="step-list"></div>
