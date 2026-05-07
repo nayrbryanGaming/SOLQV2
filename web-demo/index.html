@@ -776,7 +776,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 // ═══════════════════════════════════════════════════════════════════
 const API_BASE = (() => {
   const h = window.location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3000';
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3002';
   if (h.includes('solq-demo')) return 'https://solq.vercel.app';
   return window.location.origin;
 })();
@@ -969,22 +969,120 @@ function parseTLV(data, start = 0, end = null) {
   return result;
 }
 
-function parseQRISLocal(payload) {
-  payload = payload.trim();
-  if (payload.length < 20) throw new Error('Terlalu pendek untuk QRIS');
-  const crcIdx = payload.lastIndexOf('6304');
-  if (crcIdx < 0) throw new Error('Tag CRC (6304) tidak ditemukan — bukan QRIS valid');
-  const dataForCRC = payload.substring(0, crcIdx + 4);
-  const expectedCRC = payload.substring(crcIdx + 4, crcIdx + 8).toUpperCase();
-  const calculatedCRC = calcCRC16(dataForCRC);
-  if (calculatedCRC !== expectedCRC) {
-    console.warn(`CRC mismatch: expected ${expectedCRC}, got ${calculatedCRC} — trying anyway`);
+// ── Universal QR detector — handles QRIS, GoPay, OVO, Dana, URL, anything ──
+function parseAnyQR(payload) {
+  payload = (payload || '').trim();
+  if (payload.length < 4) throw new Error('QR code kosong');
+
+  // ── 1. Standard QRIS (EMVCo) ──────────────────────────────────────
+  if (payload.startsWith('000201') || payload.includes('6304')) {
+    try { return parseQRISStrict(payload); } catch(e) {
+      // CRC mismatch or minor issue — still try permissive parse
+      return parseQRISPermissive(payload);
+    }
   }
+
+  // ── 2. GoPay / Gojek ─────────────────────────────────────────────
+  if (/gopay|gojek|go-jek/i.test(payload)) {
+    const name = payload.match(/merchant[_\-\s]*name[=:"\s]*([^&"'\s]+)/i)?.[1] || 'GoPay Merchant';
+    const amt  = payload.match(/amount[=:](\d+)/i)?.[1] || null;
+    return { valid:true, qrFormat:'GOPAY', merchantName: decodeURIComponent(name),
+      merchantCity:'Indonesia', amount: amt ? parseInt(amt)/100 : null,
+      nmid: payload.match(/mid=([^&]+)/i)?.[1] || 'N/A', account:'GoPay',
+      mcc:'5999', bank:'GoPay', isDynamic: !!amt, rawPayload: payload };
+  }
+
+  // ── 3. OVO ───────────────────────────────────────────────────────
+  if (/ovo\.id|ovo:\/\/|OVOQR/i.test(payload)) {
+    const amt = payload.match(/amount=(\d+)/i)?.[1] || null;
+    const name = payload.match(/name=([^&]+)/i)?.[1] || 'OVO Merchant';
+    return { valid:true, qrFormat:'OVO', merchantName: decodeURIComponent(name),
+      merchantCity:'Indonesia', amount: amt ? parseInt(amt) : null,
+      nmid:'N/A', account:'OVO', mcc:'5999', bank:'OVO', isDynamic:!!amt, rawPayload:payload };
+  }
+
+  // ── 4. Dana ──────────────────────────────────────────────────────
+  if (/dana\.id|DANA:\/\//i.test(payload)) {
+    const amt = payload.match(/amount=(\d+)/i)?.[1] || null;
+    const name = payload.match(/name=([^&]+)/i)?.[1] || 'Dana Merchant';
+    return { valid:true, qrFormat:'DANA', merchantName: decodeURIComponent(name),
+      merchantCity:'Indonesia', amount: amt ? parseInt(amt) : null,
+      nmid:'N/A', account:'Dana', mcc:'5999', bank:'Dana', isDynamic:!!amt, rawPayload:payload };
+  }
+
+  // ── 5. ShopeePay / SeaPay ────────────────────────────────────────
+  if (/shopee|shopeepay|sea\.money/i.test(payload)) {
+    const name = payload.match(/name=([^&]+)/i)?.[1] || 'ShopeePay Merchant';
+    return { valid:true, qrFormat:'SHOPEEPAY', merchantName: decodeURIComponent(name),
+      merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'ShopeePay',
+      mcc:'5999', bank:'ShopeePay', isDynamic:false, rawPayload:payload };
+  }
+
+  // ── 6. BRImo / BRI ───────────────────────────────────────────────
+  if (/bri\.co\.id|brimo|BRIVA/i.test(payload)) {
+    const name = payload.match(/name=([^&]+)/i)?.[1] || 'BRI Merchant';
+    return { valid:true, qrFormat:'BRI', merchantName: decodeURIComponent(name),
+      merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'BRI',
+      mcc:'5999', bank:'BRI', isDynamic:false, rawPayload:payload };
+  }
+
+  // ── 7. Generic URL QR ─────────────────────────────────────────────
+  if (/^https?:\/\//i.test(payload)) {
+    try {
+      const url = new URL(payload);
+      const domain = url.hostname.replace('www.','');
+      const name = (url.searchParams.get('merchant') || url.searchParams.get('name') ||
+                    url.searchParams.get('store') || domain.split('.')[0]).replace(/-/g,' ');
+      const amt = url.searchParams.get('amount') || url.searchParams.get('amt') || null;
+      const brand = domain.includes('tokopedia') ? 'Tokopedia'
+                  : domain.includes('bukalapak') ? 'Bukalapak'
+                  : domain.includes('blibli') ? 'Blibli'
+                  : domain.includes('traveloka') ? 'Traveloka'
+                  : name.charAt(0).toUpperCase() + name.slice(1);
+      return { valid:true, qrFormat:'URL', merchantName: brand,
+        merchantCity:'Indonesia', amount: amt ? parseFloat(amt) : null,
+        nmid:'N/A', account: domain, mcc:'5999', bank:'Online', isDynamic:!!amt, rawPayload:payload };
+    } catch(_) {}
+  }
+
+  // ── 8. Solana Pay ────────────────────────────────────────────────
+  if (/^solana:/i.test(payload)) {
+    const url = new URL(payload.replace('solana:','solana://x/?recipient='));
+    const amt = url.searchParams.get('amount');
+    return { valid:true, qrFormat:'SOLANA_PAY', merchantName:'Solana Pay Merchant',
+      merchantCity:'Indonesia', amount: amt ? parseFloat(amt) * 16000000 : null,
+      nmid:'N/A', account:'Solana', mcc:'5999', bank:'Solana', isDynamic:!!amt, rawPayload:payload };
+  }
+
+  // ── 9. Unknown / plain text — accept anyway, ask for amount ──────
+  const shortLabel = payload.length > 30 ? payload.substring(0,28)+'…' : payload;
+  return { valid:true, qrFormat:'UNKNOWN', merchantName: shortLabel,
+    merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'N/A',
+    mcc:'5999', bank:'Unknown', isDynamic:false, rawPayload:payload,
+    _warning:'Format QR tidak dikenal — masukkan nominal secara manual' };
+}
+
+function parseQRISStrict(payload) {
+  payload = payload.trim();
+  const crcIdx = payload.lastIndexOf('6304');
+  if (crcIdx < 0) throw new Error('Bukan QRIS');
   const tags = parseTLV(payload, 0, crcIdx);
-  if (tags['00'] !== '01') throw new Error('Bukan format EMVCo QRIS yang valid (tag 00 != 01)');
+  if (tags['00'] !== '01') throw new Error('Bukan QRIS');
+  return _buildQrisResult(payload, tags);
+}
+
+function parseQRISPermissive(payload) {
+  // Try parse even without valid CRC / tag 00
+  const crcIdx = payload.lastIndexOf('6304');
+  const parseEnd = crcIdx > 0 ? crcIdx : payload.length;
+  const tags = parseTLV(payload, 0, parseEnd);
+  return _buildQrisResult(payload, tags);
+}
+
+function _buildQrisResult(payload, tags) {
   let nmid = null, account = null;
   for (let i = 26; i <= 51; i++) {
-    const tid = i.toString().padStart(2, '0');
+    const tid = i.toString().padStart(2,'0');
     if (tags[tid]) {
       const sub = parseTLV(tags[tid]);
       if (sub['04']) nmid = sub['04'];
@@ -993,26 +1091,38 @@ function parseQRISLocal(payload) {
       if (!nmid && sub['03']) nmid = sub['03'];
     }
   }
-  const isDynamic = tags['01'] === '12';
-  const rawAmount = tags['54'];
-  // Title-case merchant name
-  const rawName = (tags['59'] || 'Merchant').trim();
-  const merchantName = rawName.length > 0 && rawName === rawName.toUpperCase()
-    ? rawName.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+  // Regex fallback for tag 59 (handles nested-packed QRIS)
+  const t59match = payload.match(/59(\d{2})/);
+  let rawName = tags['59'];
+  if (!rawName && t59match) {
+    const len = parseInt(t59match[1],10);
+    const idx = payload.indexOf(t59match[0]) + 4;
+    rawName = payload.substring(idx, idx+len);
+  }
+  rawName = (rawName || 'Merchant').trim();
+  const merchantName = rawName === rawName.toUpperCase()
+    ? rawName.split(' ').map(w => w.charAt(0)+w.slice(1).toLowerCase()).join(' ')
     : rawName;
+  const rawCity = tags['60'] || (() => {
+    const m = payload.match(/60(\d{2})/);
+    if (!m) return 'Indonesia';
+    const l = parseInt(m[1],10);
+    return payload.substring(payload.indexOf(m[0])+4, payload.indexOf(m[0])+4+l);
+  })();
   return {
-    valid: true,
-    isDynamic,
+    valid:true, qrFormat:'QRIS',
+    isDynamic: tags['01'] === '12',
     merchantName,
-    merchantCity: (tags['60'] || 'Indonesia').trim(),
-    amount: rawAmount ? parseFloat(rawAmount) : null,
+    merchantCity: rawCity.trim() || 'Indonesia',
+    amount: tags['54'] ? parseFloat(tags['54']) : null,
     currency: tags['53'] || '360',
-    nmid: nmid || 'N/A',
-    account: account || 'N/A',
-    mcc: tags['52'] || '0000',
-    rawPayload: payload,
+    nmid: nmid || 'N/A', account: account || 'N/A',
+    mcc: tags['52'] || '5999', bank:'QRIS', rawPayload: payload,
   };
 }
+
+// Keep old name as alias
+function parseQRISLocal(payload) { return parseAnyQR(payload); }
 
 // ═══════════════════════════════════════════════════════════════════
 //  CAMERA & SCANNING
@@ -1232,11 +1342,24 @@ function showConfirmScreen(qris) {
   document.getElementById('mcc-chip').textContent = 'MCC: ' + (qris.mcc || '0000');
 
   const badge = document.getElementById('qr-type-badge');
-  if (qris.isDynamic) {
+  const fmtLabels = { QRIS:'QRIS', GOPAY:'GoPay', OVO:'OVO', DANA:'Dana',
+    SHOPEEPAY:'ShopeePay', BRI:'BRI', URL:'Link', SOLANA_PAY:'Solana Pay', UNKNOWN:'QR Code' };
+  const fmt = qris.qrFormat || 'QRIS';
+  if (fmt !== 'QRIS') {
+    badge.textContent = '📱 ' + (fmtLabels[fmt] || fmt);
+    badge.className = 'badge badge-static';
+    badge.style.background = 'rgba(0,212,255,0.15)';
+    badge.style.color = 'var(--cyan)';
+    badge.style.border = '1px solid rgba(0,212,255,0.3)';
+  } else if (qris.isDynamic) {
     badge.textContent = '⚡ QR Dinamis'; badge.className = 'badge badge-dynamic';
+    badge.style = '';
   } else {
     badge.textContent = '📌 QR Statis'; badge.className = 'badge badge-static';
+    badge.style = '';
   }
+
+  if (qris._warning) toast('ℹ️ ' + qris._warning, 'info', 4000);
 
   if (qris.isDynamic && qris.amount) {
     document.getElementById('amount-wrap-input').classList.add('hidden');
@@ -1248,7 +1371,8 @@ function showConfirmScreen(qris) {
     document.getElementById('amount-wrap-input').classList.remove('hidden');
     document.getElementById('amount-fixed-wrap').classList.add('hidden');
     document.getElementById('amount-input').value = '';
-    document.getElementById('amount-hint').textContent = 'Masukkan nominal yang tertera di struk. Min Rp 1.000';
+    const hintFmt = fmt !== 'QRIS' ? `QR ${fmtLabels[fmt]||fmt} terdeteksi — masukkan nominal pembayaran` : 'Masukkan nominal yang tertera di struk. Min Rp 1.000';
+    document.getElementById('amount-hint').textContent = hintFmt;
     state.payment.amountIDR = 0;
   }
   navigate('confirm');
