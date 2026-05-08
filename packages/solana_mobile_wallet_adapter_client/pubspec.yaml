@@ -1,0 +1,7 @@
+name: solana_mobile_wallet_adapter_client
+description: Local MWA client stub — API-compatible with espressocash MWA SDK.
+version: 0.2.1
+publish_to: none
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"

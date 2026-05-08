@@ -22,7 +22,8 @@ dependencies:
   bs58: ^1.0.2
   crypto: ^3.0.3
   flutter_secure_storage: ^9.2.2
-  solana_mobile_wallet_adapter_client: ^0.2.1
+  solana_mobile_wallet_adapter_client:
+    path: packages/solana_mobile_wallet_adapter_client
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.0
   image_picker: ^1.0.7
