@@ -17,6 +17,7 @@ import { Redis } from 'ioredis';
 import { PrismaClient } from '@prisma/client';
 import { AuditLogger, AuditEventType } from './auditLogger';
 import { XenditDisbursementService } from './xenditDisbursement';
+import { encryptField, decryptField } from './fieldEncryption';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -160,7 +161,7 @@ export class SettlementQueueService {
                     settlementMethod: 'XENDIT',
                     settlementTrack: track,
                     bankCode: intent.bankCode,
-                    accountNumber: intent.accountNumber,
+                    accountNumber: encryptField(intent.accountNumber), // BUG-061: encrypt PII at rest
                     accountHolderName: intent.accountHolderName,
                     xenditId: null,
                     externalId: intent.paymentIntentId,
@@ -204,7 +205,7 @@ export class SettlementQueueService {
 
             const xenditResponse = await this.callXenditDisbursement(
                 settlement.bankCode,
-                settlement.accountNumber,
+                decryptField(settlement.accountNumber), // BUG-061: decrypt PII before use
                 settlement.accountHolderName,
                 amountIDR,
                 paymentIntentId,
@@ -305,6 +306,35 @@ export class SettlementQueueService {
         }
     }
 
+    // BUG-058 FIX: Daily withdrawal limit — 100M IDR/day hard cap, alert at 50M.
+    // Redis counter with 24-hour TTL tracks cumulative outflow.
+    private async checkDailyWithdrawalLimit(amountIDR: number): Promise<void> {
+        const DAILY_LIMIT_IDR = 100_000_000;
+        const ALERT_THRESHOLD_IDR = 50_000_000;
+        const dayKey = `solq:daily_outflow:${new Date().toISOString().slice(0, 10)}`;
+
+        const current = parseInt(await this.redis.get(dayKey) || '0', 10);
+        if (current + amountIDR > DAILY_LIMIT_IDR) {
+            AuditLogger.log(AuditEventType.SECURITY_REPLAY_BLOCKED, {
+                event: 'DAILY_WITHDRAWAL_LIMIT_EXCEEDED',
+                currentOutflow: current,
+                attempted: amountIDR,
+                limit: DAILY_LIMIT_IDR,
+            });
+            throw new Error(`Daily withdrawal limit exceeded (${DAILY_LIMIT_IDR.toLocaleString()} IDR/day)`);
+        }
+        if (current + amountIDR >= ALERT_THRESHOLD_IDR) {
+            console.warn(`[Settlement] ALERT: Daily outflow at ${(current + amountIDR).toLocaleString()} IDR (threshold ${ALERT_THRESHOLD_IDR.toLocaleString()})`);
+        }
+        // Increment counter, set TTL = seconds until midnight
+        await this.redis.incrby(dayKey, amountIDR);
+        const now = new Date();
+        const midnight = new Date(now.toISOString().slice(0, 10));
+        midnight.setDate(midnight.getDate() + 1);
+        const secondsUntilMidnight = Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+        await this.redis.expire(dayKey, secondsUntilMidnight);
+    }
+
     private async callXenditDisbursement(
         bankCode: string,
         accountNumber: string,
@@ -322,6 +352,7 @@ export class SettlementQueueService {
         if (!XenditDisbursementService.isValidAmount(amountIDR)) {
             throw new Error(`Invalid amount: ${amountIDR}`);
         }
+        await this.checkDailyWithdrawalLimit(amountIDR);
 
         try {
             const xenditService = new XenditDisbursementService();

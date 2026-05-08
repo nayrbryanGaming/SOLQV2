@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── FLUTTER ───────────────────────────────────────────────────────────────
+  flutter:
+    name: Flutter Lint + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze (lint)
+        run: flutter analyze --no-pub
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Verify debug build
+        run: flutter build apk --debug --no-pub
+
+  # ── RELEASE APK (signed) ─────────────────────────────────────────────────
+  # BUG-NEW-010 FIX: Release APK requires signed keystore.
+  # Secrets required: KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD, STORE_PASSWORD
+  release-apk:
+    name: Release APK (Signed + Obfuscated)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # BUG-NEW-010 FIX: Decode keystore from GitHub Secret
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/key.jks
+          cat <<EOF > android/key.properties
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=key.jks
+          EOF
+
+      # BUG-NEW-023 FIX: Ensure debug-info directory exists before build
+      - name: Create debug-info directory
+        run: mkdir -p build/debug-info
+
+      # BUG-033: Production APK always obfuscated to protect IP
+      - name: Build release APK (signed + obfuscated)
+        run: flutter build apk --release --obfuscate --split-debug-info=build/debug-info/ --no-pub
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solq-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Upload debug symbols (private — for symbolication only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: solq-debug-symbols
+          path: build/debug-info/
+          retention-days: 90
+
+  # ── BACKEND ───────────────────────────────────────────────────────────────
+  backend:
+    name: Backend Lint + Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test --if-present
+
+  # ── WEB DEMO ──────────────────────────────────────────────────────────────
+  web-demo:
+    name: Web Demo Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HTML
+        run: |
+          if [ -f "web-demo/index.html" ]; then
+            echo "web-demo/index.html exists — OK"
+          else
+            echo "web-demo/index.html MISSING" && exit 1
+          fi

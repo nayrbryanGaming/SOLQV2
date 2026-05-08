@@ -76,6 +76,12 @@ class LanguageService extends ChangeNotifier {
       'err_cloud_timeout': 'Cloud server did not respond. Check your internet.',
       'err_connection_failed': 'Connection Failed: Could not reach cloud server.',
       'err_amount_set': 'Failed to set amount',
+      'confirm_payment': 'Confirm Payment',
+      'merchant': 'Merchant',
+      'amount': 'Amount',
+      'quote_expires_in': 'Quote expires in',
+      'refreshing_quote': 'Refreshing quote...',
+      'price_changed_abort': 'Price changed more than 2%. Quote refreshed — please review before paying.',
     },
     AppLanguage.id: {
       'app_title': 'SOLQ',
@@ -118,6 +124,12 @@ class LanguageService extends ChangeNotifier {
       'err_cloud_timeout': 'Server Cloud tidak merespons. Periksa jaringan internet Anda.',
       'err_connection_failed': 'Koneksi Gagal: Tidak dapat menjangkau server cloud.',
       'err_amount_set': 'Gagal menetapkan nominal',
+      'confirm_payment': 'Konfirmasi Pembayaran',
+      'merchant': 'Merchant',
+      'amount': 'Nominal',
+      'quote_expires_in': 'Harga berakhir dalam',
+      'refreshing_quote': 'Memperbarui harga...',
+      'price_changed_abort': 'Harga berubah lebih dari 2%. Harga diperbarui — silakan cek sebelum membayar.',
     }
   };
 }

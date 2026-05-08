@@ -45,6 +45,29 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>phantom</string>
+		<string>solflare</string>
+		<string>solana</string>
+		<string>backpack</string>
+		<string>jupiter</string>
+		<string>trust</string>
+		<string>okx</string>
+		<string>metamask</string>
+		<string>bnc</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>solq.callback</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>solq</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
 

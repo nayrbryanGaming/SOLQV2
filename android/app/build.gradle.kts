@@ -1,8 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// BUG-NEW-010 FIX: Load signing config from key.properties (populated by CI from GitHub Secrets).
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -20,18 +28,34 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.solq.app" // Matched with AndroidManifest.xml
+        applicationId = "com.solq.app"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePropertiesFile.exists())
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug") // local dev fallback
+            // Dart obfuscation handled by flutter --obfuscate flag at the Dart AOT level.
+            // Disable R8 shrink to avoid conflict with flutter-gradle-plugin's isShrinkResources.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
@@ -39,10 +63,3 @@ android {
 flutter {
     source = "../.."
 }
-
-// ═══════════════════════════════════════════════
-// TAHAPAN RELEASE APK WAJIB HAPUS APP DEBUG LAMA 
-// Fixed: Removed embedded adb commands that suspended build.
-// Use clean_run.ps1 instead.
-// ═══════════════════════════════════════════════
-

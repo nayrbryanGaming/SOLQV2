@@ -77,7 +77,9 @@ class QrisParser {
           break;
         }
         String value = payload.substring(index, index + length);
-        data[id] = value;
+        // First-wins: duplicate TLV tags (e.g. tag 29 in Tokopedia/Gojek QRIS)
+        // must NOT overwrite the first occurrence or merchant name will be corrupted.
+        if (!data.containsKey(id)) data[id] = value;
         index += length;
       }
     } catch (e) {

@@ -980,9 +980,19 @@ function parseAnyQR(payload) {
   }
 
   // ── 7. Generic URL QR ─────────────────────────────────────────────
+  // BUG-066 FIX: Some acquirers (e.g. Gojek/GoPay) wrap QRIS data inside a URL
+  // like https://qr.gojek.com/000201... — try parsing the URL fragment as QRIS first.
   if (/^https?:\/\//i.test(payload)) {
     try {
       const url = new URL(payload);
+      // Try to extract QRIS payload embedded in URL path or hash
+      const candidates = [url.pathname.slice(1), url.hash.slice(1), url.searchParams.get('data') || ''];
+      for (const candidate of candidates) {
+        if (candidate && candidate.startsWith('000201')) {
+          const embedded = parseAnyQR(candidate);
+          if (embedded && embedded.valid && embedded.qrFormat === 'QRIS') return embedded;
+        }
+      }
       const domain = url.hostname.replace('www.','');
       const name = (url.searchParams.get('merchant') || url.searchParams.get('name') ||
                     url.searchParams.get('store') || domain.split('.')[0]).replace(/-/g,' ');
@@ -993,7 +1003,7 @@ function parseAnyQR(payload) {
                   : domain.includes('traveloka') ? 'Traveloka'
                   : name.charAt(0).toUpperCase() + name.slice(1);
       return { valid:true, qrFormat:'URL', merchantName: brand,
-        merchantCity:'Indonesia', amount: amt ? parseFloat(amt) : null,
+        merchantCity:'Indonesia', amount: amt ? Math.round(parseFloat(amt)) || null : null,
         nmid:'N/A', account: domain, mcc:'5999', bank:'Online', isDynamic:!!amt, rawPayload:payload };
     } catch(_) {}
   }
@@ -1008,8 +1018,12 @@ function parseAnyQR(payload) {
   }
 
   // ── 9. Unknown / plain text — accept anyway, ask for amount ──────
+  // BUG-068 FIX: Default to "Merchant Tidak Dikenal" when name cannot be extracted.
   const shortLabel = payload.length > 30 ? payload.substring(0,28)+'…' : payload;
-  return { valid:true, qrFormat:'UNKNOWN', merchantName: shortLabel,
+  const unknownName = (shortLabel && shortLabel.trim().length > 3)
+    ? shortLabel
+    : 'Merchant Tidak Dikenal';
+  return { valid:true, qrFormat:'UNKNOWN', merchantName: unknownName,
     merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'N/A',
     mcc:'5999', bank:'Unknown', isDynamic:false, rawPayload:payload,
     _warning:'Format QR tidak dikenal — masukkan nominal secara manual' };
@@ -1067,7 +1081,9 @@ function _buildQrisResult(payload, tags) {
     isDynamic: tags['01'] === '12',
     merchantName,
     merchantCity: rawCity.trim() || 'Indonesia',
-    amount: tags['54'] ? parseFloat(tags['54']) : null,
+    // BUG-067 FIX: Normalize all amount formats to integer IDR.
+    // Tag 54 can be "50000", "50000.00", or "50,000" — strip commas, parse float.
+    amount: tags['54'] ? Math.round(parseFloat(tags['54'].replace(/,/g, '.'))) || null : null,
     currency: tags['53'] || '360',
     nmid: nmid || 'N/A', account: account || 'N/A',
     mcc: tags['52'] || '5999', bank:'QRIS', rawPayload: payload,
@@ -1080,7 +1096,8 @@ function parseQRISLocal(payload) { return parseAnyQR(payload); }
 // ═══════════════════════════════════════════════════════════════════
 //  CAMERA & SCANNING
 // ═══════════════════════════════════════════════════════════════════
-function startCamera() {
+// BUG-070 FIX: Show explanation toast before browser native camera permission prompt.
+async function startCamera() {
   const video = document.getElementById('video');
   document.getElementById('cam-error').classList.add('hidden');
   document.getElementById('manual-overlay').classList.add('hidden');
@@ -1088,6 +1105,26 @@ function startCamera() {
     document.getElementById('cam-error').classList.remove('hidden');
     return;
   }
+
+  // Check current permission state before prompting
+  let permState = 'prompt';
+  try {
+    const result = await navigator.permissions.query({ name: 'camera' });
+    permState = result.state; // 'granted' | 'denied' | 'prompt'
+  } catch (_) { /* permissions API not supported — proceed */ }
+
+  if (permState === 'denied') {
+    document.getElementById('cam-error').classList.remove('hidden');
+    toast('Akses kamera ditolak. Izinkan kamera di pengaturan browser.', 'warn');
+    return;
+  }
+
+  // Show explanation toast only when asking for the first time
+  if (permState === 'prompt') {
+    toast('📷 SOLQ butuh akses kamera untuk scan QRIS. Izinkan ketika browser meminta.', 'info', 4000);
+    await new Promise(r => setTimeout(r, 800)); // brief pause so toast is visible
+  }
+
   const constraints = {
     video: {
       facingMode: { ideal: 'environment' },
@@ -1105,6 +1142,7 @@ function startCamera() {
     })
     .catch(() => {
       document.getElementById('cam-error').classList.remove('hidden');
+      toast('Gagal mengakses kamera. Pastikan tidak ada aplikasi lain yang menggunakannya.', 'warn');
     });
 }
 
@@ -1132,8 +1170,15 @@ function scanFrame() {
     if (typeof jsQR !== 'undefined') {
       const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
       if (code && code.data) {
+        state._scanFailCount = 0;
         handleQRDetected(code.data);
         return;
+      }
+      // BUG-069 FIX: Show hint after 5 consecutive decode failures
+      state._scanFailCount = (state._scanFailCount || 0) + 1;
+      if (state._scanFailCount === 60) { // ~2 seconds at 30fps
+        const hint = document.getElementById('scan-hint');
+        if (hint) { hint.textContent = 'Dekatkan kamera ke kode QR'; hint.style.display = 'block'; }
       }
     }
   }
@@ -1336,7 +1381,14 @@ function showConfirmScreen(qris) {
 //  TOKEN & AMOUNT
 // ═══════════════════════════════════════════════════════════════════
 function onAmountChange() {
-  const val = parseFloat(document.getElementById('amount-input').value) || 0;
+  const raw = parseFloat(document.getElementById('amount-input').value) || 0;
+  // BUG-028 FIX: Enforce min Rp 1.000 and max Rp 100.000.000
+  const MAX_IDR = 100_000_000;
+  if (raw > MAX_IDR) {
+    document.getElementById('amount-input').value = MAX_IDR;
+    toast('Maksimum Rp 100.000.000 per transaksi', 'warn');
+  }
+  const val = Math.min(raw, MAX_IDR);
   state.payment.amountIDR = val;
   if (val >= 1000) fetchQuote();
   else {
@@ -1376,8 +1428,15 @@ async function fetchQuote() {
     if (r.ok) {
       const d = await r.json();
       if (!d.error) q = d;
+      else toast(`Error quote: ${d.error}`, 'error');
+    } else {
+      toast(`Server error ${r.status} saat ambil harga`, 'error');
     }
-  } catch {}
+  } catch (e) {
+    // BUG-073 FIX: Show error to user instead of silently swallowing it.
+    // Falls through to local fallback below.
+    if (!navigator.onLine) toast('Tidak ada koneksi internet — menggunakan harga lokal', 'warn');
+  }
 
   if (!q) {
     // Local fallback
@@ -1430,16 +1489,18 @@ async function fetchQuote() {
 // ═══════════════════════════════════════════════════════════════════
 function startQuoteTimer() {
   clearInterval(state.quoteTimer);
-  state.quoteSeconds = 30;
+  // BUG-075 FIX: Use Date.now() reference so browser tab throttling doesn't
+  // cause expired quotes to remain active when user switches tabs.
+  const expiresAt = Date.now() + 30000;
   document.getElementById('quote-timer').textContent = '⏱ 30s';
   state.quoteTimer = setInterval(() => {
-    state.quoteSeconds--;
+    const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
     const t = document.getElementById('quote-timer');
     if (t) {
-      t.textContent = `⏱ ${state.quoteSeconds}s`;
-      t.style.color = state.quoteSeconds <= 5 ? 'var(--danger)' : state.quoteSeconds <= 10 ? 'var(--warn)' : '';
+      t.textContent = `⏱ ${remaining}s`;
+      t.style.color = remaining <= 5 ? 'var(--danger)' : remaining <= 10 ? 'var(--warn)' : '';
     }
-    if (state.quoteSeconds <= 0) {
+    if (remaining <= 0) {
       clearInterval(state.quoteTimer);
       if (t) t.textContent = '🔄 Memperbarui...';
       if (state.payment.amountIDR >= 1000) fetchQuote().then(startQuoteTimer);
@@ -1454,12 +1515,23 @@ function startPayment() {
   if (!state.payment.amountIDR || state.payment.amountIDR < 1000) {
     toast('Nominal tidak valid (min Rp 1.000)', 'error'); return;
   }
+  // BUG-072 FIX: Disable pay button immediately to prevent double-submit
+  const btn = document.getElementById('btn-pay');
+  if (btn) btn.disabled = true;
   clearInterval(state.quoteTimer);
   document.getElementById('sign-wallet-name').textContent = state.wallet.type || 'Wallet';
   document.getElementById('sign-wallet-icon').textContent = state.wallet.icon || '🔑';
   const addr = state.wallet.address || genAddress();
   document.getElementById('sign-from').textContent = addr.slice(0,6) + '...' + addr.slice(-6);
   document.getElementById('modal-sign').classList.add('show');
+}
+
+function cancelPayment() {
+  closeModal('modal-sign');
+  // Re-enable pay button if user cancels the sign modal
+  const btn = document.getElementById('btn-pay');
+  if (btn && state.payment.quote) btn.disabled = false;
+  startQuoteTimer();
 }
 
 async function approveSign() {
@@ -1610,6 +1682,17 @@ window.addEventListener('resize', () => {});
 // Handle back button on mobile
 window.addEventListener('popstate', () => {
   if (state.screen !== 'home' && state.screen !== 'splash') goHome();
+});
+
+// BUG-082 FIX: Offline/online detection with user feedback
+window.addEventListener('offline', () => {
+  toast('Koneksi internet terputus. Harga mungkin tidak akurat.', 'error');
+  const btn = document.getElementById('btn-pay');
+  if (btn) btn.disabled = true;
+});
+window.addEventListener('online', () => {
+  toast('Koneksi internet kembali.', 'success');
+  if (state.payment.amountIDR >= 1000) fetchQuote();
 });
 </script>
 </body>

@@ -51,13 +51,17 @@ model PaymentIntent {
   confirmedAt       DateTime?                   // When ON_CHAIN_CONFIRMED
   settlementAt      DateTime?                   // When SETTLEMENT_COMPLETE
   updatedAt         DateTime  @updatedAt       @db.Timestamp(3)
-  
+  // BUG-064 FIX: Soft delete — OJK APU/PPT mandates 5-year retention.
+  // NEVER hard-delete financial records. Use deletedAt to filter in queries.
+  deletedAt         DateTime?                   // NULL = active; set to mark as deleted
+
   // Indexes for fast queries
   @@index([status])
   @@index([payerPublicKey])
   @@index([merchantNMID])
   @@index([createdAt])
   @@index([settlementStatus])
+  @@index([deletedAt])
 }
 
 enum TransactionStatus {
@@ -177,14 +181,18 @@ model Settlement {
   // Completion
   completedAt       DateTime?
   reference         String?   @db.VarChar(100) // Bank reference number
-  
+
+  // BUG-064 FIX: Soft delete only — OJK 5-year retention requirement.
+  deletedAt         DateTime?
+
   // Audit
   createdAt         DateTime  @default(now()) @db.Timestamp(3)
   updatedAt         DateTime  @updatedAt
-  
+
   @@index([paymentIntentId])
   @@index([settlementStatus])
   @@index([createdAt])
+  @@index([deletedAt])
 }
 
 enum SettlementMethod {

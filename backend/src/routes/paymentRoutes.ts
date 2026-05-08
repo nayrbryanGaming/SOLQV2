@@ -7,10 +7,19 @@ import { RiskEngine } from '../services/riskEngine';
 import { SettlementQueueService, SettlementTrack } from '../services/settlementQueue';
 import solanaService from '../services/solanaService';
 import prisma from '../services/prisma';
+import { PrismaPaymentStore } from '../services/prismaPaymentStore';
 import { logFeeSplit, LOCKED_PLATFORM_WALLET, LOCKED_DEV_WALLET } from '../services/feeDistributor';
 
 const router = Router();
 const confirmLocks = new Set<string>();
+
+// BUG-OLD-005 FIX: Idempotency key store — prevents double-payment from double-tap/retry.
+// Map<idempotencyKey, { intentId, expiresAt }>
+const idempotencyStore = new Map<string, { intentId: string; expiresAt: number }>();
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of idempotencyStore) if (now > v.expiresAt) idempotencyStore.delete(k);
+}, 60_000);
 
 // In-memory store for MVP (Typed for better structure)
 import { paymentIntents, PaymentIntent } from '../services/store';
@@ -22,6 +31,16 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
 
         if (!qris_payload || typeof qris_payload !== 'string') {
             return res.status(400).json({ error: 'Missing qris_payload' });
+        }
+
+        // BUG-OLD-005 FIX: Idempotency — if same key exists (within 10min), return existing intent.
+        const idempotencyKey = req.headers['x-idempotency-key'] as string | undefined;
+        if (idempotencyKey) {
+            const existing = idempotencyStore.get(idempotencyKey);
+            if (existing && existing.expiresAt > Date.now()) {
+                const existingIntent = paymentIntents[existing.intentId];
+                if (existingIntent) return res.json(existingIntent);
+            }
         }
 
         // SECURITY: Validate QRIS payload length (EMVCo max ~512 chars)
@@ -123,8 +142,14 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
             updatedAt: new Date().toISOString()
         };
 
-        // Store it
+        // Store it (in-memory + Prisma)
         paymentIntents[intentId] = paymentIntent;
+        await PrismaPaymentStore.sync(intentId);
+
+        // Register idempotency key (10-minute window)
+        if (idempotencyKey) {
+            idempotencyStore.set(idempotencyKey, { intentId, expiresAt: Date.now() + 10 * 60_000 });
+        }
 
         // AUDIT LOG
         AuditLogger.log(AuditEventType.PAYMENT_INTENT_CREATED, {
@@ -264,6 +289,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
         intent.status = 'AUTHORIZED';
         intent.txHash = tx_hash;
         intent.updatedAt = new Date().toISOString();
+        await PrismaPaymentStore.sync(id);
 
         // Log 70/30 fee split to immutable audit trail
         const platformFeeIdr = Math.max(2500, Math.round(intent.amount_details.fiat_amount * 0.005));
@@ -315,6 +341,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
             // Mark as settlement-queued
             intent.status = 'SETTLEMENT_QUEUED';
             intent.updatedAt = new Date().toISOString();
+            await PrismaPaymentStore.sync(id);
 
             // Return immediately (settlement happens in background)
             return res.json({
@@ -348,6 +375,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
 
             intent.status = 'SETTLEMENT_FAILED';
             intent.updatedAt = new Date().toISOString();
+            await PrismaPaymentStore.sync(id);
 
             return res.status(500).json({
                 status: 'SETTLEMENT_FAILED',
@@ -373,6 +401,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
 
         intent.status = 'FAILED';
         intent.updatedAt = new Date().toISOString();
+        await PrismaPaymentStore.sync(id);
 
         return res.status(400).json({
             status: 'FAILED',
@@ -386,7 +415,7 @@ router.post('/payment-intents/:id/confirm', async (req: Request, res: Response) 
 });
 
 // Webhook Receiver from Off-Ramp Partner
-router.post('/webhooks/settlement', (req: Request, res: Response) => {
+router.post('/webhooks/settlement', async (req: Request, res: Response) => {
     const { referenceId, status, partnerRef } = req.body;
 
     const intent = paymentIntents[referenceId];
@@ -398,9 +427,11 @@ router.post('/webhooks/settlement', (req: Request, res: Response) => {
         intent.status = 'COMPLETED';
         intent.settlement_ref = partnerRef;
         AuditLogger.log(AuditEventType.SETTLEMENT_COMPLETED, { intentId: referenceId, partnerRef });
+        await PrismaPaymentStore.sync(referenceId);
     } else if (status === 'FAILED') {
         intent.status = 'FAILED';
         AuditLogger.log(AuditEventType.SETTLEMENT_FAILED, { intentId: referenceId, reason: 'Webhook Reported Failure' });
+        await PrismaPaymentStore.sync(referenceId);
     }
 
     res.status(200).send('OK');

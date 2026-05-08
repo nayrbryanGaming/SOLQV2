@@ -3,7 +3,7 @@
 
 import { createHmac } from 'crypto';
 import { getIntent, updateIntent } from '../../store.js';
-import { createDisbursement, mapBankCode } from '../../utils/xendit.js';
+import { createDisbursement, mapBankCode } from '../../utils/idrx.js';
 
 const IDRX_MINT = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
 const TREASURY_ITA = 'DqjBhjX9tFzMy9zYXwepXW8GNuqfuDCJ4J7sX1C78p6g';
@@ -90,8 +90,8 @@ export default async (req, res) => {
         await updateIntent(intentId, {
           status: 'COMPLETED',
           settlement_status: 'DISBURSED',
-          xendit_disbursement_id: disbursement.id,
-          xendit_disbursement_status: disbursement.status,
+          idrx_disbursement_id: disbursement.id ?? disbursement.external_id,
+          idrx_disbursement_status: disbursement.status ?? 'PENDING',
         });
       }
     } catch (_) {

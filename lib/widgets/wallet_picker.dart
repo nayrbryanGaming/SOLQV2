@@ -8,7 +8,6 @@ class WalletPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final solana = SolanaService();
     final lang = context.watch<LanguageService>();
 
     return Container(
@@ -23,7 +22,6 @@ class WalletPicker extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
           Container(
             width: 40,
             height: 4,
@@ -45,150 +43,46 @@ class WalletPicker extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          
-          // Wallet Grid
-          Flexible(
-            child: GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              children: [
-                _walletItem(
-                  context,
-                  "Jupiter",
-                  Icons.swap_horiz,
-                  const Color(0xFF4CAF50),
-                  () => solana.connectJupiter(),
-                  isRecommended: true,
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await SolanaService().connect();
+              },
+              icon: const Icon(Icons.account_balance_wallet),
+              label: const Text('Connect Wallet'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                backgroundColor: const Color(0xFF9945FF),
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-                _walletItem(
-                  context,
-                  "Phantom",
-                  Icons.account_balance_wallet,
-                  const Color(0xFFAB9FF2),
-                  () => solana.connectPhantom(),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                _walletItem(
-                  context,
-                  "Solflare",
-                  Icons.wb_sunny_outlined,
-                  const Color(0xFFFFA726),
-                  () => solana.connectSolflare(),
-                ),
-                _walletItem(
-                  context,
-                  "MetaMask",
-                  Icons.hexagon_outlined,
-                  const Color(0xFFF6851B),
-                  () => solana.connectMetamask(),
-                ),
-                _walletItem(
-                  context,
-                  "Binance",
-                  Icons.account_balance,
-                  const Color(0xFFF0B90B),
-                  () => solana.connectCex('Binance', 
-                      'bnc://app.binance.com/defi/wallet/connect?app_url=https://solq.vercel.app&redirect_link=solq://onconnect'),
-                ),
-                _walletItem(
-                  context,
-                  "OKX",
-                  Icons.grid_view_rounded,
-                  Colors.white70,
-                  () => solana.connectCex('OKX', 
-                      'okx://wallet/dapp/details?dappUrl=https://solq.vercel.app&redirect_link=solq://onconnect'),
-                ),
-                _walletItem(
-                  context,
-                  "Trust",
-                  Icons.verified_user_outlined,
-                  const Color(0xFF3375BB),
-                  () => solana.connectCex('Trust', 
-                      'trust://solana/connect?app_url=https://solq.vercel.app&redirect_link=solq://onconnect'),
-                ),
-                _walletItem(
-                  context,
-                  "Backpack",
-                  Icons.backpack_outlined,
-                  const Color(0xFFE44040),
-                  () => solana.connectCex('Backpack', 
-                      'backpack://wallet/connect?app_url=https://solq.vercel.app&redirect_link=solq://onconnect'),
-                ),
-                _walletItem(
-                  context,
-                  "Universal",
-                  Icons.more_horiz,
-                  Colors.white24,
-                  () => solana.connectUniversal(),
-                ),
-              ],
+              ),
             ),
           ),
-          
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const Text(
-            "Solana Mainnet Only • Non-Custodial",
-            style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
+            'Solana Mainnet Only  •  Non-Custodial',
+            style: TextStyle(
+              color: Colors.white24,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Requires Phantom, Solflare, or any MWA-compatible wallet',
+            style: TextStyle(color: Colors.white24, fontSize: 10),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _walletItem(BuildContext context, String name, IconData icon, Color color, VoidCallback onTap, {bool isRecommended = false}) {
-    return Stack(
-      children: [
-        InkWell(
-          onTap: () {
-            Navigator.pop(context);
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isRecommended ? color.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isRecommended ? color.withOpacity(0.3) : Colors.white12),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 28),
-                const SizedBox(height: 8),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (isRecommended)
-          Positioned(
-            top: 6,
-            right: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                "BEST",
-                style: TextStyle(color: Colors.black, fontSize: 7, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-      ],
     );
   }
 

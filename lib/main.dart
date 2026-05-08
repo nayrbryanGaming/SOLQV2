@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 
 import 'services/solana_service.dart';
 import 'services/orchestrator_service.dart';
@@ -17,14 +17,27 @@ import 'widgets/wallet_picker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // BUG-034 FIX: Block rooted/jailbroken devices in production builds.
+  if (!kDebugMode) {
+    try {
+      final isJailbroken = await FlutterJailbreakDetection.jailbroken;
+      final isDeveloperMode = await FlutterJailbreakDetection.developerMode;
+      if (isJailbroken || isDeveloperMode) {
+        runApp(const _BlockedDeviceApp());
+        return;
+      }
+    } catch (_) {
+      // Detection failure is non-fatal — proceed normally.
+    }
+  }
+
   final lang = LanguageService();
   await lang.init();
 
   // Pre-warm singleton scanner (eliminates first-open black screen)
   ScannerService.instance.initialize();
 
-  final solana = SolanaService();
   final orchestrator = OrchestratorService();
   await orchestrator.init();
 
@@ -57,6 +70,35 @@ class SOLQApp extends StatelessWidget {
   }
 }
 
+// BUG-034: Shown when app detects rooted/jailbroken device
+class _BlockedDeviceApp extends StatelessWidget {
+  const _BlockedDeviceApp();
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0D0D0D),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.security, color: Colors.redAccent, size: 64),
+                SizedBox(height: 24),
+                Text('DEVICE NOT SUPPORTED', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                SizedBox(height: 16),
+                Text('SOLQ cannot run on rooted or jailbroken devices for security reasons.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class MainOrchestrator extends StatefulWidget {
   const MainOrchestrator({super.key});
 
@@ -64,12 +106,13 @@ class MainOrchestrator extends StatefulWidget {
   State<MainOrchestrator> createState() => _MainOrchestratorState();
 }
 
-class _MainOrchestratorState extends State<MainOrchestrator> {
+class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBindingObserver {
   final _solana = SolanaService();
   final _orchestrator = OrchestratorService();
-  
+
   int _selectedIndex = 0;
   bool _isScanning = false;
+  bool _isCreatingIntent = false; // BUG-027: Loading overlay while fetching quote
   PaymentIntent? _activeIntent;
   String _settlementTrack = 'standard';
   double _solBalance = 0.0;
@@ -78,8 +121,19 @@ class _MainOrchestratorState extends State<MainOrchestrator> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initListeners();
     _refreshBalance();
+  }
+
+  // BUG-NEW-002 FIX: Pause/resume session timeout timer with app lifecycle.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _solana.pauseSessionTimeout();
+    } else if (state == AppLifecycleState.resumed) {
+      _solana.resumeSessionTimeout();
+    }
   }
 
   void _initListeners() {
@@ -99,6 +153,16 @@ class _MainOrchestratorState extends State<MainOrchestrator> {
         _refreshBalance();
       } else if (event == 'DISCONNECTED' || event == 'DISCONNECT') {
         if (mounted) setState(() => _solBalance = 0.0);
+      } else if (event == 'CONNECT_FAILED') {
+        _showError('Wallet tidak dapat terhubung. Pastikan Phantom/Solflare sudah terpasang dan coba lagi.');
+      } else if (event == 'WAITING_BROWSER') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Menunggu konfirmasi di wallet...'),
+            duration: Duration(seconds: 3),
+            backgroundColor: Color(0xFF1A1A2E),
+          ),
+        );
       }
     });
   }
@@ -118,6 +182,7 @@ class _MainOrchestratorState extends State<MainOrchestrator> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _intentSub?.cancel();
     super.dispose();
   }
@@ -139,8 +204,27 @@ class _MainOrchestratorState extends State<MainOrchestrator> {
           ),
           if (_isScanning)
             ScannerView(
-              onDetect: (code) => _orchestrator.createIntent(code),
-              onCancel: () => setState(() => _isScanning = false),
+              onDetect: (code) async {
+                setState(() { _isScanning = false; _isCreatingIntent = true; });
+                await _orchestrator.createIntent(code);
+                if (mounted) setState(() => _isCreatingIntent = false);
+              },
+              onCancel: () => setState(() { _isScanning = false; _isCreatingIntent = false; }),
+            ),
+          // BUG-027 FIX: Loading overlay while backend fetches quote after scan
+          if (_isCreatingIntent)
+            Container(
+              color: Colors.black87,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF00FF94), strokeWidth: 2),
+                    SizedBox(height: 20),
+                    Text('Fetching quote...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  ],
+                ),
+              ),
             ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,70 @@ class PaymentStatusView extends StatefulWidget {
 
 class _PaymentStatusViewState extends State<PaymentStatusView> {
   String _manualAmount = "";
+
+  // BUG-023: Quote countdown
+  static const int _quoteLifetimeSeconds = 30;
+  Timer? _quoteTimer;
+  int _quoteSecondsLeft = _quoteLifetimeSeconds;
+  bool _isRefreshingQuote = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startQuoteCountdown();
+  }
+
+  @override
+  void didUpdateWidget(PaymentStatusView old) {
+    super.didUpdateWidget(old);
+    if (widget.intent.state == PaymentState.created &&
+        widget.intent.updatedAt != old.intent.updatedAt) {
+      _resetQuoteCountdown();
+    }
+  }
+
+  void _startQuoteCountdown() {
+    if (widget.intent.state != PaymentState.created) return;
+    if (widget.intent.amountIdr == '0' || widget.intent.amountIdr == '0.0') return;
+    _quoteTimer?.cancel();
+    _quoteTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_quoteSecondsLeft > 0) {
+        setState(() => _quoteSecondsLeft--);
+      } else {
+        _quoteTimer?.cancel();
+        _doRefreshQuote();
+      }
+    });
+  }
+
+  void _resetQuoteCountdown() {
+    _quoteTimer?.cancel();
+    setState(() {
+      _isRefreshingQuote = false;
+      _quoteSecondsLeft = _quoteLifetimeSeconds;
+    });
+    _startQuoteCountdown();
+  }
+
+  Future<void> _doRefreshQuote() async {
+    if (!mounted || _isRefreshingQuote) return;
+    setState(() => _isRefreshingQuote = true);
+    await OrchestratorService().refreshQuote();
+    if (mounted && _isRefreshingQuote) {
+      setState(() {
+        _isRefreshingQuote = false;
+        _quoteSecondsLeft = _quoteLifetimeSeconds;
+      });
+      _startQuoteCountdown();
+    }
+  }
+
+  @override
+  void dispose() {
+    _quoteTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +188,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
   }
 
   Widget _buildAmountDisplay(PaymentIntent intent) {
+    final lang = context.read<LanguageService>();
     return Column(
       children: [
         Row(
@@ -139,6 +205,34 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
             padding: const EdgeInsets.only(top: 8),
             child: Text("~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0) / 100).toStringAsFixed(2)} IDRX",
                 style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        // BUG-023 FIX: Quote expiry countdown
+        if (intent.state == PaymentState.created && (intent.amountIdr != '0'))
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _isRefreshingQuote
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(width: 12, height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber)),
+                      const SizedBox(width: 8),
+                      Text(lang.t('refreshing_quote'),
+                          style: const TextStyle(color: Colors.amber, fontSize: 11)),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.timer_outlined, size: 12, color: Colors.white38),
+                      const SizedBox(width: 4),
+                      Text('${lang.t('quote_expires_in')} ${_quoteSecondsLeft}s',
+                          style: TextStyle(
+                            color: _quoteSecondsLeft <= 5 ? Colors.redAccent : Colors.white38,
+                            fontSize: 11,
+                          )),
+                    ],
+                  ),
           ),
       ],
     );
@@ -230,15 +324,98 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     );
   }
 
+  // BUG-029 FIX: Show confirmation dialog before opening Phantom for signing.
+  Future<void> _confirmAndPay(PaymentIntent intent, LanguageService lang) async {
+    final idrxAmount = intent.estimatedCryptoAmount != null
+        ? ((double.tryParse(intent.estimatedCryptoAmount!) ?? 0) / 100).toStringAsFixed(2)
+        : null;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(lang.t('confirm_payment'),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _confirmRow(lang.t('merchant'), intent.merchantName),
+            const SizedBox(height: 8),
+            _confirmRow(lang.t('amount'), 'Rp ${intent.amountIdr}',
+                valueColor: const Color(0xFF00FF94)),
+            if (idrxAmount != null) ...[
+              const SizedBox(height: 8),
+              _confirmRow('IDRX', '≈ $idrxAmount IDRX'),
+            ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+              ),
+              child: Text(lang.t('warning_real_money'),
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 11,
+                      fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(lang.t('cancel'),
+                style: const TextStyle(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00FF94),
+              foregroundColor: Colors.black,
+            ),
+            child: Text(lang.t('pay_now'),
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      OrchestratorService().requestAuthorization(intent.intentId);
+    }
+  }
+
+  Widget _confirmRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Flexible(
+          child: Text(value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: valueColor ?? Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              )),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActionButtons(PaymentIntent intent, LanguageService lang) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () => OrchestratorService().requestAuthorization(intent.intentId),
+        onPressed: _isRefreshingQuote ? null : () => _confirmAndPay(intent, lang),
         icon: const Icon(Icons.payment, color: Colors.black),
         label: Text(lang.t('pay_now'), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF00FF94),
+          disabledBackgroundColor: Colors.white12,
           padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),

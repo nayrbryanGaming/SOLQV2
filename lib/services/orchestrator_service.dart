@@ -286,9 +286,61 @@ class OrchestratorService {
     }
   }
 
+  // BUG-023 FIX: Refresh Jupiter quote for current intent (called by countdown timer).
+  Future<void> refreshQuote() async {
+    if (_currentIntent == null) return;
+    if (_currentIntent!.amountIdr == '0' || _currentIntent!.amountIdr == '0.0') return;
+    try {
+      final quote = await _jupiter.getQuote(_currentIntent!.amountIdr);
+      if (quote == null) return;
+      _currentIntent = _currentIntent!.copyWith(
+        quotedRate: quote.price,
+        estimatedCryptoAmount: quote.outAmount,
+        platformFee: quote.platformFeeIdr,
+        networkFee: quote.networkFeeSol,
+        slippage: quote.slippagePct * 100,
+        maxFee: quote.maxTotalFeeIdr + double.parse(_currentIntent!.amountIdr),
+        effectiveFeePercent: quote.effectiveFeePercent,
+        userSavingsVsQris: quote.userSavingsVsQris,
+      );
+      _intentController.add(_currentIntent!);
+    } catch (_) {}
+  }
+
   // STEP 2: REQUEST AUTHORIZATION (LAUNCH WALLET)
   Future<void> requestAuthorization(String intentId) async {
     if (_currentIntent == null) return;
+
+    // BUG-024 FIX: Verify price hasn't moved >2% since quote before authorizing.
+    if (_currentIntent!.quotedRate != null && _currentIntent!.quotedRate! > 0) {
+      try {
+        final freshQuote = await _jupiter.getQuote(_currentIntent!.amountIdr)
+            .timeout(const Duration(seconds: 5));
+        if (freshQuote != null) {
+          final oldRate = _currentIntent!.quotedRate!;
+          final newRate = freshQuote.price;
+          final changePct = ((newRate - oldRate) / oldRate).abs() * 100;
+          if (changePct > 2.0) {
+            // Price moved too much — refresh quote and abort authorization
+            _currentIntent = _currentIntent!.copyWith(
+              quotedRate: freshQuote.price,
+              estimatedCryptoAmount: freshQuote.outAmount,
+              platformFee: freshQuote.platformFeeIdr,
+              networkFee: freshQuote.networkFeeSol,
+              slippage: freshQuote.slippagePct * 100,
+              maxFee: freshQuote.maxTotalFeeIdr + double.parse(_currentIntent!.amountIdr),
+              effectiveFeePercent: freshQuote.effectiveFeePercent,
+              userSavingsVsQris: freshQuote.userSavingsVsQris,
+            );
+            _intentController.add(_currentIntent!);
+            _intentController.addError(LanguageService().t('price_changed_abort'));
+            return;
+          }
+        }
+      } catch (_) {
+        // If fresh price check times out, proceed — backend will re-verify on-chain.
+      }
+    }
 
     // Update state for UI
     _currentIntent =
@@ -318,7 +370,7 @@ class OrchestratorService {
           final txBase64 = txData['transaction'];
 
           if (txBase64 is String && txBase64.trim().isNotEmpty) {
-            await solana.signSwapTransaction(txBase64.trim());
+            await solana.signSwapTransaction(txBase64.trim(), id);
             return;
           }
 

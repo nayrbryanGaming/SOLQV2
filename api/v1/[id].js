@@ -10,7 +10,7 @@ import {
   isValidSolanaSignature,
   verifyFinalizedSignature,
 } from '../utils/solana.js';
-import { createDisbursement, mapBankCode } from '../utils/xendit.js';
+import { createDisbursement, mapBankCode } from '../utils/idrx.js';
 
 function normalizeStringField(value, fallback = null) {
   if (typeof value !== 'string') {
@@ -423,8 +423,8 @@ export default async (req, res) => {
           });
           await updateIntent(intentId, {
             settlement_status: 'DISBURSED',
-            xendit_disbursement_id: disbursement.id,
-            xendit_disbursement_status: disbursement.status,
+            idrx_disbursement_id: disbursement.id ?? disbursement.external_id,
+            idrx_disbursement_status: disbursement.status ?? 'PENDING',
           });
         } catch (err) {
           disbursementError = String(err.message || err);
@@ -452,7 +452,7 @@ export default async (req, res) => {
           token_deltas: facts.tokenDeltas,
         },
         payer_warning: payerMismatchWarning,
-        disbursement: disbursement ?? undefined,
+        idrx_disbursement: disbursement ?? undefined,
         disbursement_error: disbursementError ?? undefined,
       });
     } catch (error) {

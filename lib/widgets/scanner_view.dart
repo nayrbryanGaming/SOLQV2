@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/language_service.dart';
 import '../services/scanner_service.dart';
+import '../services/app_logger.dart';
 
 class ScannerView extends StatefulWidget {
   final Function(String) onDetect;
@@ -21,7 +23,7 @@ class ScannerView extends StatefulWidget {
   State<ScannerView> createState() => _ScannerViewState();
 }
 
-class _ScannerViewState extends State<ScannerView> {
+class _ScannerViewState extends State<ScannerView> with WidgetsBindingObserver {
   // Use singleton — never disposes controller between screen visits (zero black screen)
   final _scanner     = ScannerService.instance;
   Timer? _frameWatchdog;
@@ -31,18 +33,46 @@ class _ScannerViewState extends State<ScannerView> {
   @override
   void initState() {
     super.initState();
-    _scanner.initialize();
-    _scanner.start();
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) _initWatchdog();
-    });
+    WidgetsBinding.instance.addObserver(this);
+    _requestCameraPermissionThenStart();
+  }
+
+  // BUG-014 FIX: Request camera permission before starting scanner (Android 13+).
+  Future<void> _requestCameraPermissionThenStart() async {
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (status.isGranted) {
+      _scanner.initialize();
+      _scanner.start();
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) _initWatchdog();
+      });
+    } else if (status.isPermanentlyDenied) {
+      // User permanently denied — open app settings
+      await openAppSettings();
+    }
+    // If denied (not permanently), MobileScanner errorBuilder will show the error UI
+  }
+
+  // BUG-016 FIX: Pause camera when app goes to background (battery + privacy).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      _frameWatchdog?.cancel();
+      _scanner.stop();
+    } else if (state == AppLifecycleState.resumed && mounted) {
+      _scanner.start();
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) _initWatchdog();
+      });
+    }
   }
 
   void _initWatchdog() {
     _frameWatchdog?.cancel();
     _frameWatchdog = Timer.periodic(const Duration(seconds: 8), (_) {
       if (!_hasDetectedFrame && mounted) {
-        debugPrint('SCANNER_WATCHDOG: no frame in 8s, stop/start...');
+        AppLogger.warn('Scanner watchdog: no frame in 8s, restarting camera');
         _scanner.stop();
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) { _scanner.start(); setState(() { _hasDetectedFrame = false; }); }
@@ -75,7 +105,7 @@ class _ScannerViewState extends State<ScannerView> {
     try {
       final success = await _scanner.controller.analyzeImage(image.path);
       if (!mounted) return;
-      if (success == null || !success) {
+      if (!success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(lang.t('no_qris_found')),
@@ -96,6 +126,7 @@ class _ScannerViewState extends State<ScannerView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _frameWatchdog?.cancel();
     _scanner.stop(); // stop (NOT dispose) — singleton stays alive for next visit
     super.dispose();
@@ -120,7 +151,11 @@ class _ScannerViewState extends State<ScannerView> {
               if (barcode.rawValue != null) {
                 _hasScanned = true;
                 HapticFeedback.mediumImpact();
-                widget.onDetect(barcode.rawValue!);
+                // BUG-013 FIX: Short delay before callback so widget tree is ready
+                // for navigation, preventing "no Navigator in context" race condition.
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted) widget.onDetect(barcode.rawValue!);
+                });
                 break;
               }
             }
@@ -171,7 +206,10 @@ class _ScannerViewState extends State<ScannerView> {
           child: Column(
             children: [
               IconButton(
-                onPressed: () => _controller?.toggleTorch(),
+                // BUG-015 FIX: Guard torch toggle — only call when controller is ready.
+                onPressed: () {
+                  try { _scanner.controller.toggleTorch(); } catch (_) {}
+                },
                 icon: const Icon(Icons.flashlight_on, color: Colors.white),
                 style: IconButton.styleFrom(backgroundColor: Colors.black45),
               ),

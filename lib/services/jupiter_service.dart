@@ -11,10 +11,10 @@ class JupiterQuoteResponse {
   final double price; // Real-time market price (IDR per SOL)
   
   // FEE DISCLOSURE: Full Fee Transparency
-  final double platformFeeIdr;       // SOLQ Revenue (1.0% - embedded in spread)
+  final double platformFeeIdr;       // SOLQ Revenue (0.5% - embedded in spread)
   final double networkFeeSol;         // Solana gas (actual blockchain cost)
   final double slippagePct;           // Liquidity protection (0.5%)
-  final double maxTotalFeeIdr;        // GUARANTEED MAX (1.6% total)
+  final double maxTotalFeeIdr;        // GUARANTEED MAX (~1.1% total)
   final double effectiveFeePercent;   // User-facing fee % (for transparency)
   final double userSavingsVsQris;     // How much user saves vs traditional QRIS
 
@@ -51,12 +51,12 @@ class JupiterService {
   static const String treasuryIdrxAta = "DqjBhjX9tFzMy9zYXwepXW8GNuqfuDCJ4J7sX1C78p6g";
   
   // REVENUE & SLIPPAGE STRATEGY:
-  // Platform Fee: 1.5% (150 bps) - SOLQ revenue
-  // Slippage: 1.0% (100 bps) - mainnet reliability (prevents failed txs)
+  // Platform Fee: 0.5% (50 bps) - SOLQ revenue (70% Platform / 30% Dev)
+  // Slippage: 0.5% (50 bps) - mainnet reliability (prevents failed txs)
   // Network Gas: ~0.000006 SOL (~Rp 0.15 @ 25M IDR/SOL)
-  // TOTAL: ~2.51% (COMPETITIVE VS TRADITIONAL QRIS/CARDS)
-  static const int platformFeeBps = 150; // 1.5% revenue
-  static const int slippageBps = 100;    // 1.0% slippage (mainnet safe)
+  // TOTAL: ~1.01% (MOST COMPETITIVE VS TRADITIONAL QRIS/CARDS at 3%)
+  static const int platformFeeBps = 50;  // 0.5% revenue — LOCKED, do not change
+  static const int slippageBps = 50;     // 0.5% slippage
 
   Future<JupiterQuoteResponse?> getQuote(String amountIdr, {String inputCurrency = 'SOL'}) async {
     try {
@@ -104,7 +104,7 @@ class JupiterService {
 
         // === FEE CALCULATION (99.9% Accuracy) ===
 
-        // 1. Platform Fee (1.0%)
+        // 1. Platform Fee (0.5%)
         final platformFee = amountIdrNum * (platformFeeBps / 10000);
         
         // 2. Network Fee (Solana gas ~ 5000 lamports base + priority)
@@ -121,8 +121,8 @@ class JupiterService {
             ? (totalFeeIdr / amountIdrNum) * 100
             : 0.0;
 
-        // 5. Max Guaranteed Fee (capped at 1.6%)
-        final maxGuaranteedFee = amountIdrNum * 0.016;
+        // 5. Max Guaranteed Fee (capped at 1.1%: 0.5% platform + 0.5% slippage + ~0.1% gas)
+        final maxGuaranteedFee = amountIdrNum * 0.011;
         final actualMaxFee = totalFeeIdr < maxGuaranteedFee ? totalFeeIdr : maxGuaranteedFee;
         
         // 6. User Savings vs Legacy (2.5% benchmark)

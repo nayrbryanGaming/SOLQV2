@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Dev-first policy:
-  - Allows HTTP during local Android testing (LAN / emulator IPs).
-  - HTTPS remains preferred for production endpoints.
+  BUG-032 / BUG-OLD-003 FIX: TLS hardening without certificate pinning.
+  Pinning REMOVED — placeholder hashes would block all production traffic.
+  To add pinning later: extract real hash with:
+    openssl s_client -connect solq-backend.onrender.com:443 2>/dev/null | \
+    openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | \
+    openssl dgst -sha256 -binary | base64
+  Then add <pin-set> block to the domain-config below.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Local dev: allow cleartext for localhost/emulator/LAN -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- LAN IP range for physical device dev (BUG-NEW-016) -->
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+    </domain-config>
+
+    <!-- Production: HTTPS only, system CAs trusted -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

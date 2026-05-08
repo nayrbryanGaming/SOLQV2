@@ -8,12 +8,32 @@
  * Per HUKUM 2: simulation mode is explicitly flagged, not a silent mock.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { QRISDecoder } from '../services/qrisDecoder';
 import { AuditLogger, AuditEventType } from '../services/auditLogger';
 import { calculateFeeSplit, LOCKED_PLATFORM_WALLET, LOCKED_DEV_WALLET } from '../services/feeDistributor';
 
 const router = Router();
+
+// BUG-042 FIX: Tighter rate limits for simulation endpoints (10 req/min for /pay, 30 for others).
+// Simulation routes are public and must not be abusable as a free computation source.
+const simHits = new Map<string, { n: number; t: number }>();
+
+function simRateLimit(maxPerMin: number) {
+    return (req: Request, res: Response, next: NextFunction) => {
+        if (process.env.DISABLE_RATE_LIMIT === '1') return next();
+        const ip = (req.ip || 'x') + ':' + req.path;
+        const now = Date.now();
+        const e = simHits.get(ip);
+        if (!e || now > e.t) { simHits.set(ip, { n: 1, t: now + 60000 }); return next(); }
+        if (e.n >= maxPerMin) {
+            return res.status(429).json({ simulation: true, error: `Rate limit: max ${maxPerMin} requests/minute for this endpoint` });
+        }
+        e.n++;
+        next();
+    };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of simHits) if (now > v.t) simHits.delete(k); }, 300000);
 
 // Simulated token prices (updated on each request to look live)
 function getSimulatedPrices() {
@@ -38,7 +58,7 @@ function fakeSignature(): string {
 // POST /v1/simulation/parse-qris
 // Parses a real QRIS payload and returns merchant info.
 // Input: { qris_payload: string }
-router.post('/parse-qris', async (req: Request, res: Response) => {
+router.post('/parse-qris', simRateLimit(30), async (req: Request, res: Response) => {
     try {
         const { qris_payload } = req.body;
         if (!qris_payload || typeof qris_payload !== 'string') {
@@ -94,7 +114,7 @@ router.post('/parse-qris', async (req: Request, res: Response) => {
 // POST /v1/simulation/quote
 // Returns a simulated Jupiter swap quote (no real API call).
 // Input: { amount_idr, token (SOL|USDC|IDRX) }
-router.post('/quote', (req: Request, res: Response) => {
+router.post('/quote', simRateLimit(30), (req: Request, res: Response) => {
     const { amount_idr, token = 'SOL' } = req.body;
     const amountIdr = Number(amount_idr);
     if (!amountIdr || amountIdr <= 0 || amountIdr > 100_000_000) {
@@ -135,11 +155,17 @@ router.post('/quote', (req: Request, res: Response) => {
 // POST /v1/simulation/pay
 // Simulates a complete payment: fake TX build → fake sign → fake confirm → fake IDRX settle.
 // Input: { amount_idr, token, merchant, nmid }
-router.post('/pay', async (req: Request, res: Response) => {
+router.post('/pay', simRateLimit(10), async (req: Request, res: Response) => {
     const { amount_idr, token = 'SOL', merchant, nmid } = req.body;
     const amountIdr = Number(amount_idr);
-    if (!amountIdr || amountIdr <= 0) {
-        return res.status(400).json({ error: 'amount_idr required' });
+    if (!amountIdr || amountIdr < 1000) {
+        return res.status(400).json({ error: 'amount_idr must be at least 1000 (Rp 1.000)' });
+    }
+    if (amountIdr > 100_000_000) {
+        return res.status(400).json({ error: 'amount_idr must not exceed 100,000,000 (Rp 100 juta)' });
+    }
+    if (token && !['SOL', 'USDC', 'IDRX'].includes(String(token).toUpperCase())) {
+        return res.status(400).json({ error: 'token must be SOL, USDC, or IDRX' });
     }
 
     const prices      = getSimulatedPrices();

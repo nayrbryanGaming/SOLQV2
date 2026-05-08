@@ -32,21 +32,19 @@ export interface PaymentIntent {
 
 export const paymentIntents: Record<string, PaymentIntent> = {};
 
-// MILITARY-GRADE SCALE OPTIMIZATION: Garbage Collector
-// Automatically cleans up old intents every 60 minutes to prevent memory leaks in 30k/day traffic
+// In-memory GC: evict intents older than 24h from the runtime map.
+// BUG-064: This only removes from memory — persistent records live in Prisma (DB).
+// OJK APU/PPT requires 5-year retention; NEVER delete from DB. Prisma.sync() wrote them already.
 setInterval(() => {
-    const now = new Date();
-    const oneDayAgo = now.getTime() - (24 * 60 * 60 * 1000);
-
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     let count = 0;
     for (const id in paymentIntents) {
-        const createdAt = new Date(paymentIntents[id].createdAt).getTime();
-        if (createdAt < oneDayAgo) {
+        if (new Date(paymentIntents[id].createdAt).getTime() < oneDayAgo) {
             delete paymentIntents[id];
             count++;
         }
     }
     if (count > 0) {
-        console.log(`[GC] Cleaned up ${count} expired payment intents. Memory optimized for high-volume 24h cycle.`);
+        console.log(`[GC] Evicted ${count} intents from memory (persisted in DB per OJK 5-year retention).`);
     }
-}, 3600000); // Every hour
+}, 3600000);
