@@ -24,19 +24,19 @@
  * │ Solana gas             │ < Rp 2       │ User       │
  * │ Jupiter swap fee       │ Rp 0 (free)  │ -          │
  * │ Jupiter slippage       │ ~0.1-0.3%    │ User       │
- * │ Platform fee (1%)      │ Rp 1,000     │ User       │
+ * │ Platform fee (0.5%)    │ Rp 500       │ User       │
  * │ IDRX off-ramp          │ ~0.1%        │ Platform   │
  * ├────────────────────────┼──────────────┼────────────┤
- * │ TOTAL USER COST        │ ~1.1-1.3%    │            │
- * │ PLATFORM REVENUE       │ ~0.9%        │ Net profit │
+ * │ TOTAL USER COST        │ ~0.6-0.8%    │            │
+ * │ PLATFORM REVENUE       │ ~0.4%        │ Net profit │
  * │ PLATFORM IS PROFITABLE │ ✅ YES       │            │
  * └────────────────────────┴──────────────┴────────────┘
  *
  * WHY NOT BONCOS:
  * - No Xendit flat fee (Rp 2,500-5,000) → we use IDRX direct off-ramp
  * - No bank transfer fee → IDRX redeems to partner bank directly
- * - Platform fee (1%) covers all operational costs with ~0.9% margin
- * - Even Rp 10,000 transaction: Rp 100 revenue vs Rp 12 cost = PROFITABLE
+ * - Platform fee LOCKED at 50 bps (0.5%) — hardcoded, never changes
+ * - Even Rp 10,000 transaction: Rp 50 revenue vs Rp 12 cost = PROFITABLE
  */
 
 import crypto from 'crypto';

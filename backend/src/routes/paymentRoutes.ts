@@ -9,6 +9,7 @@ import solanaService from '../services/solanaService';
 import prisma from '../services/prisma';
 import { PrismaPaymentStore } from '../services/prismaPaymentStore';
 import { logFeeSplit, LOCKED_PLATFORM_WALLET, LOCKED_DEV_WALLET } from '../services/feeDistributor';
+import { HotWalletMonitor } from '../services/hotWalletMonitor';
 
 const router = Router();
 const confirmLocks = new Set<string>();
@@ -41,6 +42,16 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
                 const existingIntent = paymentIntents[existing.intentId];
                 if (existingIntent) return res.json(existingIntent);
             }
+        }
+
+        // BUG-NEW-014 FIX: Block new transactions when hot wallet is critically low on gas.
+        // HotWalletMonitor.isCritical() returns true if balance < 0.1 SOL.
+        const hwMonitor = HotWalletMonitor.getInstance();
+        if (hwMonitor.isCritical()) {
+            return res.status(503).json({
+                error: 'SERVICE_UNAVAILABLE',
+                message: 'Sistem sedang dalam pemeliharaan. Silakan coba beberapa menit lagi.',
+            });
         }
 
         // SECURITY: Validate QRIS payload length (EMVCo max ~512 chars)
@@ -85,8 +96,28 @@ router.post('/payment-intents', async (req: Request, res: Response) => {
         // 3. Construct Response Object
         // Calculate Rates
         let transactionAmount = decoded.transactionAmount ? parseFloat(decoded.transactionAmount) : 0;
-        if (transactionAmount === 0 && input_amount) {
-            transactionAmount = parseFloat(input_amount);
+
+        // BUG-NEW-005 FIX: Amount validation rules differ by QRIS type.
+        // Dynamic QRIS (Tag 54 present): user-supplied amount MUST match exactly.
+        // Static QRIS (Tag 54 absent): user-supplied amount required, min Rp 1,000 max Rp 20,000,000.
+        if (transactionAmount > 0) {
+            // Dynamic QRIS — amount is fixed by merchant
+            if (input_amount !== undefined && Math.abs(parseFloat(input_amount) - transactionAmount) > 0.01) {
+                return res.status(400).json({
+                    error: 'AMOUNT_MISMATCH',
+                    message: `Amount must be exactly Rp ${transactionAmount.toLocaleString('id-ID')} for this QRIS`,
+                });
+            }
+        } else {
+            // Static QRIS — validate user-supplied amount
+            const userAmt = input_amount ? parseFloat(input_amount) : 0;
+            if (userAmt < 1000) {
+                return res.status(400).json({ error: 'Minimum payment amount is Rp 1.000' });
+            }
+            if (userAmt > 20000000) {
+                return res.status(400).json({ error: 'Maximum payment amount is Rp 20.000.000' });
+            }
+            transactionAmount = userAmt;
         }
 
         const quote = await SwapService.getQuote(
