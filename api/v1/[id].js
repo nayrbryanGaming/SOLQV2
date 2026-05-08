@@ -4,13 +4,14 @@ import {
   confirmIntent,
   updateIntent,
   paymentIntents,
+  getMerchant,
 } from '../store.js';
 import {
   fetchTransactionFacts,
   isValidSolanaSignature,
   verifyFinalizedSignature,
 } from '../utils/solana.js';
-import { createDisbursement, mapBankCode } from '../utils/idrx.js';
+import { submitRedeemRequest, mapBankCode } from '../utils/idrx.js';
 
 function normalizeStringField(value, fallback = null) {
   if (typeof value !== 'string') {
@@ -403,36 +404,51 @@ export default async (req, res) => {
       const canonicalPayer = onChainPayer || payerAccount || existing.payer_account || null;
       const intent = await confirmIntent(intentId, txHash, canonicalPayer);
 
-      // IDRX → IDR offramp: disburse to merchant bank account / e-wallet via Xendit
+      // IDRX → IDR offramp via IDRX redeem API (requires client to burn IDRX on-chain first)
       let disbursement = null;
       let disbursementError = null;
-      const merchantAccount = existing.merchant_account ?? existing.merchant?.pan ?? null;
-      const bankCode = existing.bank_code ?? null;
+      const burnTxHash = normalizeStringField(req.body?.burn_tx_hash, null);
       const amountIdr = Number(existing.amount_details?.fiat_amount ?? existing.platformFee ?? 0);
-      const merchantName = existing.merchant?.name ?? 'QRIS Merchant';
 
-      if (merchantAccount && mapBankCode(bankCode) && amountIdr >= 1000) {
+      // Merchant bank details: registered registry > intent fields > manual settlement
+      const intentNmid = existing.nmid ?? existing.merchant_id ?? existing.merchant?.id ?? null;
+      const registeredMerchant = intentNmid ? await getMerchant(intentNmid) : null;
+
+      const merchantAccount =
+        registeredMerchant?.bank_account ?? existing.merchant_account ?? existing.merchant?.pan ?? null;
+      const bankCode = registeredMerchant?.bank_code ?? existing.bank_code ?? null;
+      const bankName = registeredMerchant?.bank_name ?? bankCode ?? null;
+      const bankAccountName =
+        registeredMerchant?.account_name ?? existing.merchant?.name ?? 'QRIS Merchant';
+
+      if (burnTxHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= 1000) {
         try {
-          disbursement = await createDisbursement({
-            externalId: intentId,
-            bankCode,
-            accountNumber: merchantAccount,
+          disbursement = await submitRedeemRequest({
+            burnTxHash,
+            networkChainId: 'solana',
             amountIdr,
-            beneficiaryName: merchantName,
-            description: `SOLQ QRIS ${intentId.slice(0, 20)}`,
+            bankAccount: merchantAccount,
+            bankCode,
+            bankName,
+            bankAccountName,
+            walletAddress: canonicalPayer ?? '',
           });
           await updateIntent(intentId, {
             settlement_status: 'DISBURSED',
-            idrx_disbursement_id: disbursement.id ?? disbursement.external_id,
-            idrx_disbursement_status: disbursement.status ?? 'PENDING',
+            idrx_redeem_id: disbursement?.id ?? disbursement?.transactionId ?? null,
+            idrx_redeem_status: disbursement?.status ?? 'PROCESSING',
+            burn_tx_hash: burnTxHash,
           });
         } catch (err) {
           disbursementError = String(err.message || err);
           await updateIntent(intentId, {
             settlement_status: 'SETTLEMENT_PENDING',
             settlement_error: disbursementError,
+            burn_tx_hash: burnTxHash,
           });
         }
+      } else if (!burnTxHash) {
+        await updateIntent(intentId, { settlement_status: 'AWAITING_BURN_TX' });
       } else {
         await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
       }
@@ -452,7 +468,8 @@ export default async (req, res) => {
           token_deltas: facts.tokenDeltas,
         },
         payer_warning: payerMismatchWarning,
-        idrx_disbursement: disbursement ?? undefined,
+        burn_tx_hash: burnTxHash ?? undefined,
+        idrx_redeem: disbursement ?? undefined,
         disbursement_error: disbursementError ?? undefined,
       });
     } catch (error) {

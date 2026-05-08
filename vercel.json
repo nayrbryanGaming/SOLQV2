@@ -20,6 +20,10 @@
     { "source": "/v1/simulation/parse-qris", "destination": "/api/v1/simulation/parse-qris" },
     { "source": "/v1/simulation/quote", "destination": "/api/v1/simulation/quote" },
     { "source": "/v1/simulation/pay", "destination": "/api/v1/simulation/pay" },
+    { "source": "/v1/merchants/:nmid", "destination": "/api/v1/merchants?nmid=:nmid" },
+    { "source": "/api/v1/merchants/:nmid", "destination": "/api/v1/merchants?nmid=:nmid" },
+    { "source": "/v1/merchants", "destination": "/api/v1/merchants" },
+    { "source": "/api/v1/merchants", "destination": "/api/v1/merchants" },
     { "source": "/v1/(.*)", "destination": "/api/v1/$1" },
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ],

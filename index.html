@@ -1526,7 +1526,7 @@ const STEPS_REAL = [
   { icon:'🔐', text:'Menunggu Tanda Tangan Wallet...' },
   { icon:'📡', text:'Broadcast ke Solana Mainnet...' },
   { icon:'⛓️', text:'Menunggu Konfirmasi Blockchain...' },
-  { icon:'💰', text:'Konversi ke IDRX via Jupiter...' },
+  { icon:'🔥', text:'Burn IDRX untuk Settlement...' },
   { icon:'🏦', text:'Settlement IDR ke Merchant...' },
 ];
 
@@ -1694,10 +1694,106 @@ async function runRealPayment() {
     }
     setStep(6, 'done');
 
-    // Steps 7-8 — IDRX & Settlement
-    setStep(7, 'active'); await sleep(1000);
+    // Step 7 — Burn IDRX on-chain so IDRX API can settle IDR to merchant
+    setStep(7, 'active');
+    document.getElementById('proc-sub').textContent = 'Membakar IDRX untuk settlement ke merchant...';
+    let burnSignature = null;
+
+    if (state.wallet.provider && state.wallet.address) {
+      try {
+        // Wait a moment for swap TX to propagate before querying IDRX ATA
+        await sleep(2000);
+
+        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+        const ASSOC_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq');
+        const idrxMintPk = new solanaWeb3.PublicKey(IDRX_MINT);
+        const userPk = new solanaWeb3.PublicKey(state.wallet.address);
+
+        // Derive user's IDRX Associated Token Account
+        const [userIdrxAta] = solanaWeb3.PublicKey.findProgramAddressSync(
+          [userPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMintPk.toBuffer()],
+          ASSOC_TOKEN_PROGRAM_ID
+        );
+
+        // Build SPL Token burn instruction (index=8, u64 amount little-endian)
+        const burnAmtAtomic = BigInt(Math.round(state.payment.amountIDR * 100)); // IDRX 2 decimals
+        const burnData = new Uint8Array(9);
+        burnData[0] = 8; // burn instruction discriminator
+        new DataView(burnData.buffer, 1).setBigUint64(0, burnAmtAtomic, true);
+
+        const burnIx = new solanaWeb3.TransactionInstruction({
+          programId: TOKEN_PROGRAM_ID,
+          keys: [
+            { pubkey: userIdrxAta,  isSigner: false, isWritable: true },
+            { pubkey: idrxMintPk,   isSigner: false, isWritable: true },
+            { pubkey: userPk,       isSigner: true,  isWritable: false },
+          ],
+          data: burnData,
+        });
+
+        const rpcConn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        const { blockhash, lastValidBlockHeight } = await rpcConn.getLatestBlockhash();
+        const burnTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: userPk });
+        burnTx.add(burnIx);
+
+        toast('🔥 Setujui burn IDRX di wallet...', 'info', 8000);
+        const burnResult = await state.wallet.provider.signAndSendTransaction(burnTx);
+        burnSignature = typeof burnResult === 'string' ? burnResult : (burnResult?.signature ?? null);
+        state.payment.burnTxHash = burnSignature;
+        toast('✅ IDRX terbakar — menunggu konfirmasi...', 'success', 3000);
+
+        try {
+          await rpcConn.confirmTransaction(
+            { signature: burnSignature, blockhash, lastValidBlockHeight },
+            'confirmed'
+          );
+        } catch { /* non-fatal — proceed anyway */ }
+
+      } catch (burnErr) {
+        if (burnErr.message?.includes('User rejected') || burnErr.code === 4001) {
+          toast('⚠️ Burn dibatalkan — settlement akan diproses manual', 'warn', 6000);
+        } else {
+          console.warn('[SOLQ] Burn TX error:', burnErr.message);
+          toast('⚠️ Burn TX gagal — settlement manual', 'warn', 3000);
+        }
+      }
+    } else {
+      await sleep(1200); // simulation fallback — no real wallet
+    }
     setStep(7, 'done');
-    setStep(8, 'active'); await sleep(1200);
+
+    // Step 8 — Notify backend to confirm + trigger IDRX settle
+    setStep(8, 'active');
+    document.getElementById('proc-sub').textContent = 'Mengirim IDR ke merchant...';
+    try {
+      const qris = state.qris;
+      const confirmPayload = {
+        tx_hash: txSignature,
+        burn_tx_hash: burnSignature || null,
+        payer_account: state.wallet.address,
+        merchant_name: qris?.merchantName ?? null,
+        merchant_id: qris?.nmid ?? null,
+        nmid: qris?.nmid ?? null,
+        merchant_account: qris?.merchantAccount ?? null,
+        bank_code: qris?.bankCode ?? null,
+        amount_idr: state.payment.amountIDR,
+        currency_source: state.payment.token,
+      };
+      const confirmId = state.payment.intentId || `pi_local_${Date.now()}`;
+      const confirmRes = await fetch(`/api/v1/payment-intents/${confirmId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirmPayload),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (confirmRes.ok) {
+        const cd = await confirmRes.json();
+        const st = cd.settlement_status ?? cd.idrx_redeem?.status ?? 'PROCESSING';
+        toast(`✅ Settlement: ${st}`, 'success', 3000);
+      }
+    } catch (confirmErr) {
+      console.warn('[SOLQ] Confirm error:', confirmErr.message);
+    }
 
     // All done
     Array.from(list.children).forEach(c => c.className = 'step done');

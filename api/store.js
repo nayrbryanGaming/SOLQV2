@@ -267,3 +267,62 @@ export const resetStore = async () => {
     // ignore cleanup issues
   }
 };
+
+// ─── Merchant Registry ────────────────────────────────────────────────────────
+
+const MERCHANT_PREFIX = `${KEY_PREFIX}merchant:`;
+const merchantRegistry = {};
+
+function merchantKey(nmid) {
+  return `${MERCHANT_PREFIX}${String(nmid)}`;
+}
+
+function getDemoMerchant(nmid) {
+  const demoNmid = process.env.DEMO_MERCHANT_NMID;
+  if (!demoNmid) return null;
+  if (nmid !== demoNmid && nmid !== '*') return null;
+  return {
+    nmid: demoNmid,
+    bank_code: process.env.DEMO_MERCHANT_BANK_CODE ?? 'BCA',
+    bank_account: process.env.DEMO_MERCHANT_ACCOUNT ?? '1234567890',
+    bank_name: process.env.DEMO_MERCHANT_BANK_NAME ?? 'Bank Central Asia',
+    account_name: process.env.DEMO_MERCHANT_ACCOUNT_NAME ?? 'Demo Merchant',
+    merchant_name: process.env.DEMO_MERCHANT_DISPLAY_NAME ?? 'Demo Merchant',
+    source: 'env',
+  };
+}
+
+export const getMerchant = async (nmid) => {
+  if (!nmid) return null;
+
+  if (merchantRegistry[nmid]) return merchantRegistry[nmid];
+
+  if (KV_ENABLED) {
+    try {
+      const m = await kvGetJson(merchantKey(nmid));
+      if (m) {
+        merchantRegistry[nmid] = m;
+        return m;
+      }
+    } catch (_) {
+      // fall through
+    }
+  }
+
+  return getDemoMerchant(nmid);
+};
+
+export const registerMerchant = async (data) => {
+  if (!data?.nmid) throw new Error('nmid required');
+  const now = new Date().toISOString();
+  const merchant = { ...data, registered_at: data.registered_at ?? now, updated_at: now };
+  merchantRegistry[data.nmid] = merchant;
+  if (KV_ENABLED) {
+    try {
+      await kvSetJson(merchantKey(data.nmid), merchant);
+    } catch (_) {
+      // keep in-memory fallback
+    }
+  }
+  return merchant;
+};

@@ -1,7 +1,7 @@
-// IDRX offramp — converts IDRX to IDR and sends to bank/e-wallet
+// IDRX offramp — burn IDRX on-chain then call redeem API to settle IDR to merchant bank
 import { createHmac } from 'crypto';
 
-const IDRX_API_BASE = process.env.IDRX_API_BASE_URL ?? 'https://api.idrx.co';
+const IDRX_BASE = 'https://idrx.co';
 const IDRX_API_KEY = process.env.IDRX_API_KEY ?? 'dfcdee9f7b182552';
 const IDRX_SECRET_KEY =
   process.env.IDRX_SECRET_KEY ??
@@ -20,49 +20,86 @@ export function mapBankCode(rawCode) {
   return BANK_CODE_MAP[String(rawCode).toUpperCase()] ?? null;
 }
 
-function buildSignature(timestamp, bodyStr) {
-  const message = IDRX_API_KEY + timestamp + bodyStr;
-  return createHmac('sha256', IDRX_SECRET_KEY).update(message).digest('hex');
+// Signature: HMAC-SHA256(hex-decoded secret, timestamp + METHOD + urlPath + body) → base64url
+function buildSignature(timestamp, method, urlPath, bodyStr) {
+  const secretBytes = Buffer.from(IDRX_SECRET_KEY, 'hex');
+  const message = `${timestamp}${method.toUpperCase()}${urlPath}${bodyStr}`;
+  return createHmac('sha256', secretBytes).update(message).digest('base64url');
 }
 
-export async function createDisbursement({
-  externalId,
-  bankCode,
-  accountNumber,
+// Primary: submit IDRX redeem after burning IDRX on-chain
+// burnTxHash is the Solana TX signature of the on-chain SPL Token burn
+export async function submitRedeemRequest({
+  burnTxHash,
+  networkChainId = 'solana',
   amountIdr,
-  beneficiaryName,
-  description,
+  bankAccount,
+  bankCode,
+  bankName,
+  bankAccountName,
+  walletAddress = '',
 }) {
   const mappedCode = mapBankCode(bankCode);
   if (!mappedCode) throw new Error(`Unsupported bank code: ${bankCode}`);
+  if (!burnTxHash) throw new Error('burnTxHash required — burn IDRX on-chain first');
 
   const timestamp = String(Date.now());
+  const urlPath = '/api/transaction/redeem-request';
   const body = {
-    external_id: externalId,
-    amount: Math.round(amountIdr),
-    bank_code: mappedCode,
-    account_number: String(accountNumber),
-    beneficiary_name: beneficiaryName ?? 'Merchant',
-    description: description ?? `SOLQ ${externalId}`,
+    txHash: burnTxHash,
+    networkChainId,
+    amountTransfer: String(Math.round(amountIdr)),
+    bankAccount: String(bankAccount),
+    bankCode: mappedCode,
+    bankName: bankName ?? mappedCode,
+    bankAccountName: bankAccountName ?? 'Merchant',
+    walletAddress,
   };
   const bodyStr = JSON.stringify(body);
-  const signature = buildSignature(timestamp, bodyStr);
+  const signature = buildSignature(timestamp, 'POST', urlPath, bodyStr);
 
-  const response = await fetch(`${IDRX_API_BASE}/v1/disbursements`, {
+  const response = await fetch(`${IDRX_BASE}${urlPath}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-KEY': IDRX_API_KEY,
-      'X-TIMESTAMP': timestamp,
-      'X-SIGNATURE': signature,
+      'idrx-api-key': IDRX_API_KEY,
+      'idrx-api-sig': signature,
+      'idrx-api-ts': timestamp,
     },
     body: bodyStr,
   });
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
-    throw new Error(`IDRX disbursement failed [${response.status}]: ${text}`);
+    throw new Error(`IDRX redeem [${response.status}]: ${text}`);
   }
 
   return response.json();
+}
+
+// Legacy wrapper — requires burnTxHash now (old /v1/disbursements endpoint was wrong)
+export async function createDisbursement({
+  externalId,
+  bankCode,
+  accountNumber,
+  amountIdr,
+  beneficiaryName,
+  burnTxHash,
+  walletAddress,
+}) {
+  if (!burnTxHash) {
+    throw new Error(
+      'IDRX requires on-chain burn TX hash. Client must burn IDRX first, then pass burn_tx_hash.',
+    );
+  }
+  return submitRedeemRequest({
+    burnTxHash,
+    networkChainId: 'solana',
+    amountIdr,
+    bankAccount: accountNumber,
+    bankCode,
+    bankName: bankCode,
+    bankAccountName: beneficiaryName ?? 'Merchant',
+    walletAddress: walletAddress ?? '',
+  });
 }
