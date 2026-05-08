@@ -10,6 +10,7 @@ import {
   isValidSolanaSignature,
   verifyFinalizedSignature,
 } from '../utils/solana.js';
+import { createDisbursement, mapBankCode } from '../utils/xendit.js';
 
 function normalizeStringField(value, fallback = null) {
   if (typeof value !== 'string') {
@@ -401,6 +402,41 @@ export default async (req, res) => {
 
       const canonicalPayer = onChainPayer || payerAccount || existing.payer_account || null;
       const intent = await confirmIntent(intentId, txHash, canonicalPayer);
+
+      // IDRX → IDR offramp: disburse to merchant bank account / e-wallet via Xendit
+      let disbursement = null;
+      let disbursementError = null;
+      const merchantAccount = existing.merchant_account ?? existing.merchant?.pan ?? null;
+      const bankCode = existing.bank_code ?? null;
+      const amountIdr = Number(existing.amount_details?.fiat_amount ?? existing.platformFee ?? 0);
+      const merchantName = existing.merchant?.name ?? 'QRIS Merchant';
+
+      if (merchantAccount && mapBankCode(bankCode) && amountIdr >= 1000) {
+        try {
+          disbursement = await createDisbursement({
+            externalId: intentId,
+            bankCode,
+            accountNumber: merchantAccount,
+            amountIdr,
+            beneficiaryName: merchantName,
+            description: `SOLQ QRIS ${intentId.slice(0, 20)}`,
+          });
+          await updateIntent(intentId, {
+            settlement_status: 'DISBURSED',
+            xendit_disbursement_id: disbursement.id,
+            xendit_disbursement_status: disbursement.status,
+          });
+        } catch (err) {
+          disbursementError = String(err.message || err);
+          await updateIntent(intentId, {
+            settlement_status: 'SETTLEMENT_PENDING',
+            settlement_error: disbursementError,
+          });
+        }
+      } else {
+        await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
+      }
+
       res.status(200).json({
         ...intent,
         status: 'COMPLETED',
@@ -416,6 +452,8 @@ export default async (req, res) => {
           token_deltas: facts.tokenDeltas,
         },
         payer_warning: payerMismatchWarning,
+        disbursement: disbursement ?? undefined,
+        disbursement_error: disbursementError ?? undefined,
       });
     } catch (error) {
       res.status(400).json({ error: error.message });

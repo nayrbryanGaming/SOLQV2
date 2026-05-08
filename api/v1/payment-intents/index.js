@@ -16,7 +16,7 @@ function clampAmount(amount) {
 export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Idempotency-Key');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -26,6 +26,19 @@ export default async (req, res) => {
   if (req.method === 'POST') {
     try {
       const { qris_payload, currency, input_amount } = req.body;
+
+      // BUG-OLD-005 FIX: Idempotency — return existing intent if same key used within 10 min
+      const idempotencyKey = String(req.headers?.['x-idempotency-key'] || '').trim();
+      if (idempotencyKey) {
+        const { getIntent } = await import('../../store.js');
+        const existing = await getIntent(`idem:${idempotencyKey}`);
+        if (existing) {
+          const ageMs = Date.now() - new Date(existing.createdAt).getTime();
+          if (ageMs < 10 * 60 * 1000) {
+            return res.status(200).json({ ...existing, idempotent: true });
+          }
+        }
+      }
 
       if (!qris_payload) {
         return res.status(400).json({ error: 'qris_payload required' });
@@ -87,6 +100,12 @@ export default async (req, res) => {
         userSavingsVsQris: Number((amountIdr * 0.02).toFixed(6)),
         pricing,
       });
+
+      // Store idempotency reference for 10 minutes
+      if (idempotencyKey) {
+        const { createIntent: saveIdem } = await import('../../store.js');
+        await saveIdem({ id: `idem:${idempotencyKey}`, ...intent, createdAt: intent.createdAt });
+      }
 
       res.status(200).json({
         ...intent,

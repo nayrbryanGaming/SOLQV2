@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "functions": {
+    "api/**/*.js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },
     { "source": "/api/v1/payment-intents/:id/confirm", "destination": "/api/v1/[id]?id=:id" },
@@ -12,6 +15,8 @@
     { "source": "/solana-pay/:intentId", "destination": "/api/solana-pay/[intentId]?intentId=:intentId" },
     { "source": "/api/solana-pay/:intentId", "destination": "/api/solana-pay/[intentId]?intentId=:intentId" },
     { "source": "/v1/solana-pay/:intentId", "destination": "/api/solana-pay/[intentId]?intentId=:intentId" },
+    { "source": "/v1/webhooks/helius", "destination": "/api/v1/webhooks/helius" },
+    { "source": "/api/v1/webhooks/helius", "destination": "/api/v1/webhooks/helius" },
     { "source": "/v1/simulation/parse-qris", "destination": "/api/v1/simulation/parse-qris" },
     { "source": "/v1/simulation/quote", "destination": "/api/v1/simulation/quote" },
     { "source": "/v1/simulation/pay", "destination": "/api/v1/simulation/pay" },
@@ -39,8 +44,11 @@
       "source": "/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://solq-backend.onrender.com https://solq.railway.app https://api.coingecko.com https://lite-api.jup.ag https://mainnet.helius-rpc.com; worker-src blob:; frame-ancestors 'none';" }
       ]
     }
   ]
