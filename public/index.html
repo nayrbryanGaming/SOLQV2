@@ -1445,7 +1445,7 @@ async function fetchQuote() {
     const spread = 0.005;
     const effectiveRate = rate * (1 - spread);
     const tokenAmount = token === 'IDRX' ? amtIDR : amtIDR / effectiveRate;
-    const platformFee = Math.max(2500, Math.round(amtIDR * spread));
+    const platformFee = Math.round(amtIDR * spread);
     q = {
       token, amount_idr: amtIDR, token_needed: tokenAmount,
       rate_idr: rate, effective_rate_idr: effectiveRate,
