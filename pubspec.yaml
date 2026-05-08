@@ -46,6 +46,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/logos/solq_wordmark.png
+    - assets/logos/solq_icon.png
     - assets/logos/solq_logo_wordmark.jpg
     - assets/logos/solq_logo_icon.jpg
     - assets/logos/solq_logo_wordmark_transparent.png

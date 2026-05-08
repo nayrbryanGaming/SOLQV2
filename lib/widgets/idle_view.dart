@@ -28,10 +28,10 @@ class IdleView extends StatelessWidget {
         children: [
           // SOLQ Wordmark Logo
           Image.asset(
-            'assets/logos/solq_logo_wordmark_transparent.png',
+            'assets/logos/solq_wordmark.png',
             height: 100,
             errorBuilder: (_, __, ___) => Image.asset(
-              'assets/logos/solq_logo_icon_transparent.png',
+              'assets/logos/solq_icon.png',
               height: 100,
               errorBuilder: (_, __, ___) => _SolqLogoFallback(size: 100),
             ),
