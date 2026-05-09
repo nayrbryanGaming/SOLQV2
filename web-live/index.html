@@ -771,9 +771,9 @@ input::placeholder{color:var(--ink3)}
   <div class="confirm-section">
     <div class="section-label">Pay with</div>
     <div class="token-tabs">
-      <button class="token-tab active" id="tok-sol" onclick="selectToken('SOL')">SOL</button>
-      <button class="token-tab" id="tok-usdc" onclick="selectToken('USDC')">USDC</button>
-      <button class="token-tab" id="tok-idrx" onclick="selectToken('IDRX')">IDRX</button>
+      <button class="token-tab active" id="tok-sol" onclick="selectToken('SOL')" style="display:flex;align-items:center;gap:6px"><img src="/assets/logos/solana.png" width="18" height="18" style="border-radius:50%;object-fit:cover" onerror="this.style.display='none'">SOL</button>
+      <button class="token-tab" id="tok-usdc" onclick="selectToken('USDC')" style="display:flex;align-items:center;gap:6px"><img src="/assets/logos/usdc.png" width="18" height="18" style="border-radius:50%;object-fit:cover" onerror="this.style.display='none'">USDC</button>
+      <button class="token-tab" id="tok-idrx" onclick="selectToken('IDRX')" style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">&#x1F1EE;&#x1F1E9;</span>IDRX</button>
     </div>
   </div>
 
@@ -921,9 +921,13 @@ input::placeholder{color:var(--ink3)}
       <div class="modal-title">Connect a wallet</div>
       <div class="modal-sub">SOLQ never holds keys or funds.</div>
       <div class="wallet-list" id="wallet-list">
-        <!-- Solana wallets -->
+        <!-- Solana wallets — real brand logos -->
         <button class="wallet-item" onclick="connectPhantom()">
-          <div class="wallet-item-icon" style="background:transparent;padding:0"><svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#AB9FF2"/><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/><circle cx="18.5" cy="21" r="2" fill="#AB9FF2"/><circle cx="25.5" cy="21" r="2" fill="#AB9FF2"/></svg></div>
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/phantom_wallet.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="Phantom"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#AB9FF2;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">P</div>
+          </div>
           <div style="flex:1">
             <div class="wallet-item-name">Phantom</div>
             <div class="wallet-item-sub">Browser extension · Mobile</div>
@@ -931,7 +935,9 @@ input::placeholder{color:var(--ink3)}
           <span class="wallet-item-tag">Solana</span>
         </button>
         <button class="wallet-item" onclick="connectSolflare()">
-          <div class="wallet-item-icon" style="background:transparent;padding:0"><svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg></div>
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>
+          </div>
           <div style="flex:1">
             <div class="wallet-item-name">Solflare</div>
             <div class="wallet-item-sub">Browser extension · Mobile</div>
@@ -939,21 +945,41 @@ input::placeholder{color:var(--ink3)}
           <span class="wallet-item-tag">Solana</span>
         </button>
         <button class="wallet-item" onclick="connectBackpack()">
-          <div class="wallet-item-icon" style="background:transparent;padding:0"><svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#1A1F2E"/><rect x="13" y="20" width="18" height="13" rx="3" fill="white" fill-opacity="0.88"/><path d="M17 20V18A5 5 0 0127 18V20" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.88"/><rect x="18" y="23" width="8" height="4" rx="2" fill="#1A1F2E"/></svg></div>
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/backpack_wallet.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="Backpack"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#1A1F2E;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">B</div>
+          </div>
           <div style="flex:1">
             <div class="wallet-item-name">Backpack</div>
             <div class="wallet-item-sub">Mobile · Multi-chain</div>
           </div>
           <span class="wallet-item-tag">Solana</span>
         </button>
-        <!-- EVM -->
+        <!-- EVM / WalletConnect -->
         <button class="wallet-item" onclick="connectMetaMask()">
-          <div class="wallet-item-icon" style="background:transparent;padding:0"><svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#E2761B"/><path d="M33 11L23.5 18L25 14Z" fill="white" fill-opacity="0.85"/><path d="M11 11L20.5 18L19 14Z" fill="white" fill-opacity="0.65"/><path d="M29.5 28L27 31.5L33 33L34.5 28Z" fill="white" fill-opacity="0.8"/><path d="M9.5 28L11 33L17 31.5L14.5 28Z" fill="white" fill-opacity="0.8"/><path d="M16.5 21.5L14.5 24.5L20.5 24L16.5 21.5Z" fill="white" fill-opacity="0.9"/><path d="M27.5 21.5L23.5 24L29.5 24.5Z" fill="white" fill-opacity="0.9"/><path d="M20.5 24L19.5 28L25 28L24 24Z" fill="white" fill-opacity="0.75"/></svg></div>
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/metamask.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="MetaMask"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#E2761B;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">M</div>
+          </div>
           <div style="flex:1">
             <div class="wallet-item-name">MetaMask</div>
             <div class="wallet-item-sub">Polygon · Base · BNB</div>
           </div>
           <span class="wallet-item-tag">EVM</span>
+        </button>
+        <button class="wallet-item" onclick="connectWalletConnect && connectWalletConnect()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/walletconnect.png" width="36" height="36" style="border-radius:8px;display:block;background:#fff;padding:4px;object-fit:contain" alt="WalletConnect"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#3B99FC;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">W</div>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">WalletConnect</div>
+            <div class="wallet-item-sub">Any compatible wallet</div>
+          </div>
+          <span class="wallet-item-tag">Multi</span>
         </button>
       </div>
       <div class="wallet-custody-note">
