@@ -27,16 +27,16 @@
 
 ## Production Status
 
-```
-✅ ZERO CUSTODY       — Private key never enters SOLQ
-✅ ZERO MOCK          — All transactions real mainnet
-✅ REAL MAINNET       — Verified on-chain Solana
-✅ SCANNER STABLE     — Zero black screen, lifecycle hardened
-✅ WALLET HARDENED    — account_key extraction verified, zero parsing errors
-✅ QRIS ROBUST        — 100+ banks & e-wallets, static + dynamic, locked-nominal detection
-✅ CLOUD-FIRST        — Rejects localhost, auto-fallback to Vercel/Render
-✅ AUDIT COMPLIANT    — SHA-256 immutable log, 5-year retention
-```
+| Status | Guarantee |
+|--------|-----------|
+| **ZERO CUSTODY** | Private key never enters SOLQ servers |
+| **ZERO MOCK** | All transactions on real mainnet |
+| **REAL MAINNET** | Every TX verified on-chain, Solana Mainnet-Beta |
+| **SCANNER STABLE** | Zero black screen — lifecycle hardened |
+| **WALLET HARDENED** | `account_key` extraction verified, zero parsing errors |
+| **QRIS ROBUST** | 100+ banks & e-wallets, static + dynamic, locked-nominal detection |
+| **CLOUD-FIRST** | Rejects localhost, auto-fallback to Vercel/Render |
+| **AUDIT COMPLIANT** | SHA-256 immutable log, 5-year retention |
 
 ---
 
@@ -88,32 +88,34 @@ Indonesia has over **30 million active QRIS merchants** (Bank Indonesia, 2024). 
 
 ### The Friction Gap (Before SOLQ)
 
-```
-[Hold SOL/USDC in Phantom]
-        ↓
-1. Transfer to centralized exchange
-        ↓
-2. Sell to IDR  ← t+0 to t+2
-        ↓
-3. Withdraw to bank account ← fee + wait
-        ↓
-4. Open mobile banking
-        ↓
-5. Scan & pay QRIS
+```mermaid
+flowchart TD
+    A([Hold SOL/USDC in Phantom]) --> B[Transfer to centralized exchange]
+    B --> C[Sell to IDR\nt+0 to t+2]
+    C --> D[Withdraw to bank account\nfee + 1–48h wait]
+    D --> E[Open mobile banking]
+    E --> F([Scan and pay QRIS])
+
+    style A fill:#1e1e2e,color:#cdd6f4,stroke:#6c7086
+    style F fill:#313244,color:#cdd6f4,stroke:#6c7086
+    style C fill:#45475a,color:#f38ba8,stroke:#f38ba8
+    style D fill:#45475a,color:#f38ba8,stroke:#f38ba8
 ```
 
 **Total: 1–48 hours. Cost: 1.5–3%.**
 
 ### SOLQ's Solution
 
-```
-[Hold SOL/USDC in Phantom]
-        ↓
-1. Open SOLQ → Scan QRIS
-        ↓
-2. Confirm in Phantom/MWA  ← ~3 seconds
-        ↓
-3. Merchant receives IDR ✅  ← ~400ms finality
+```mermaid
+flowchart TD
+    A([Hold SOL/USDC in Phantom]) --> B[Open SOLQ — Scan QRIS]
+    B --> C[Confirm in Phantom / MWA\n~3 seconds]
+    C --> D([Merchant receives IDR\n~400ms finality])
+
+    style A fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
+    style B fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
+    style C fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
+    style D fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
 ```
 
 **Total: 1 tap. Cost: 0.5% platform fee + ~Rp 0.02 network fee.**
@@ -139,79 +141,78 @@ Indonesia has over **30 million active QRIS merchants** (Bank Indonesia, 2024). 
 
 ## Payment Flow End-to-End
 
-```
-User                          SOLQ Orchestrator                    Ecosystem
-─────                         ─────────────────                    ─────────
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as SOLQ Orchestrator
+    participant J as Jupiter Lite API
+    participant W as Phantom / MWA Wallet
+    participant R as Solana RPC
+    participant I as IDRX / BI-FAST
+    participant DB as PostgreSQL AuditLog
 
-Open SOLQ app
-Scan QRIS merchant ──────────> EMVCo TLV Decoder
-                               CRC-16/CCITT-FALSE validation
-                               Extract: merchant_name, NMID,
-                               bank_code, amount_mode
-                               (LOCKED_FROM_QR vs INPUT_REQUIRED)
-                               100+ bank/e-wallet detection
+    U->>S: Scan QRIS merchant code
+    S->>S: EMVCo TLV decode + CRC-16/CCITT-FALSE validation
+    S->>S: Extract merchant_name, NMID, bank_code, amount_mode
+    Note over S: LOCKED_FROM_QR vs INPUT_REQUIRED — 100+ bank/e-wallet detection
 
-                               Jupiter ExactOut Quote ──────────> Jupiter Lite API
-                               "How much SOL for Rp 50,000?"
-                               inAmount = exact SOL/USDC needed
-                               platformFeeBps = 50 (0.5%)
+    S->>J: ExactOut quote — "How much SOL for Rp 50,000?"
+    J-->>S: inAmount (exact SOL/USDC) + route + platformFeeBps=50
 
-View quote + all fees  <────── Payment Intent created
-(SOL amount, platform fee,     Deterministic pricing:
- network fee, slippage)        CoinGecko → Jupiter+FX → Binance+FX
-All shown BEFORE confirm       (60s cache, 2min staleness)
+    S->>S: Deterministic pricing — CoinGecko → Jupiter+FX → Binance+FX
+    Note over S: 60s cache, 2min staleness limit
 
-Confirm in Phantom ────────────────────────────────────────────> Wallet Sign
-or MWA (Android)               User signs; SOLQ never signs
+    S-->>U: Payment intent — SOL amount, platform fee, network fee, slippage
+    Note over U: ALL fees shown BEFORE confirmation
 
-                               On-chain verification ───────────> Solana RPC
-                               Helius → QuickNode → Alchemy → Ankr → public
+    U->>W: Confirm transaction
+    W-->>S: Signed TX (private key never leaves wallet)
 
-                               Security checks:
-                               ├─ Replay attack block (tx_hash unique)
-                               ├─ Payer mismatch check
-                               ├─ Risk Engine score (0-100, 4 tiers)
-                               └─ Amount validity check
+    S->>R: On-chain verify — Helius → QuickNode → Alchemy → Ankr → public
+    S->>S: Replay attack block (tx_hash uniqueness)
+    S->>S: Payer mismatch check
+    S->>S: Risk Engine — score 0-100, 4 tiers (LOW/MEDIUM/HIGH/BLOCK)
 
-                               IDRX Disbursement ───────────────> IDRX API → BI-FAST/GPN
+    S->>I: IDRX disbursement → BI-FAST / GPN / GoPay / OVO
+    I-->>U: Merchant receives IDR in existing bank account
 
-Merchant receives IDR  <────── Settlement confirmed ────────────> PostgreSQL AuditLog
-(existing bank/e-wallet)       SHA-256 event hash logged
+    S->>DB: SHA-256 event hash logged — 5-year retention
 ```
 
 ---
 
 ## System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Client Layer                                                        │
-│                                                                     │
-│  Flutter APK (Android)  ──  Web App (solq.vercel.app)               │
-│  ├─ apk-live  (mainnet, real tx)                                    │
-│  ├─ apk-demo  (devnet, simulation)                                  │
-│  └─ apk-nosec (mainnet, no root-check — CEO/investor demo)         │
-│                                                                     │
-│  Web Demo (solq-demo.vercel.app) — simulation, real QRIS parsing   │
-└────────────────────┬────────────────────────────────────────────────┘
-                     │ HTTPS / Vercel Serverless Functions
-┌────────────────────▼────────────────────────────────────────────────┐
-│  API Layer (Node.js ESM, no build step)                             │
-│                                                                     │
-│  POST /v1/payment-intents    → QRIS decode + Jupiter ExactOut       │
-│  GET  /solana-pay/:id        → Build unsigned Solana Pay TX         │
-│  POST /v1/payment-intents/:id/confirm                               │
-│    ├─ On-chain verify (Multi-RPC failover)                          │
-│    ├─ Replay attack block                                           │
-│    ├─ Risk Engine (score 0-100, 4 tiers)                           │
-│    └─ IDRX off-ramp → merchant IDR (BI-FAST / GPN / GoPay / OVO)  │
-└────────────────────┬────────────────────────────────────────────────┘
-                     │
-       ┌─────────────┼─────────────┬──────────────┐
-       ▼             ▼             ▼              ▼
-  Jupiter API    IDRX API     Solana RPC      PostgreSQL
- (ExactOut swap) (off-ramp)   (Helius+        (audit log,
-  lite-api.jup.ag idrx.co      failover)       SHA-256)
+```mermaid
+graph TD
+    subgraph CLIENT["Client Layer"]
+        APK1["apk-live\nMainnet · Real TX · Security ON"]
+        APK2["apk-demo\nDevnet · Simulation · Security ON"]
+        APK3["apk-nosec\nMainnet · Real TX · Security OFF"]
+        APK4["apk-demo-nosec\nDevnet · Simulation · Security OFF"]
+        WEB1["web-live\nsolq.vercel.app"]
+        WEB2["web-demo\nsolq.vercel.app/demo"]
+    end
+
+    subgraph API["API Layer — Vercel Serverless Functions (Node.js ESM)"]
+        PI["POST /v1/payment-intents\nQRIS decode + Jupiter ExactOut quote"]
+        SP["GET /solana-pay/:id\nBuild unsigned Solana Pay TX"]
+        CF["POST /v1/payment-intents/:id/confirm\nOn-chain verify · Risk Engine · IDRX off-ramp"]
+    end
+
+    subgraph ECO["Ecosystem"]
+        JUP["Jupiter Lite API\nlite-api.jup.ag\nExactOut swap"]
+        IDRX["IDRX API\nidrx.co\nIDR off-ramp"]
+        RPC["Solana RPC\nHelius → QuickNode\n→ Alchemy → Ankr"]
+        DB["PostgreSQL\nAudit log · SHA-256\n5-year retention"]
+    end
+
+    CLIENT -->|HTTPS| API
+    PI --> JUP
+    SP --> RPC
+    CF --> RPC
+    CF --> IDRX
+    CF --> DB
 ```
 
 ### Five Build Variants
@@ -534,11 +535,17 @@ SOLQ adalah **tool orchestrator** yang mengatur empat teknologi yang sudah ada s
 
 ## Alur Pembayaran
 
-```
-User scan QRIS → SOLQ decode TLV + deteksi bank (100+ institusi)
-→ Jupiter ExactOut quote → user konfirmasi di Phantom
-→ TX on-chain Solana → IDRX disburse ke merchant
-→ Merchant terima IDR di rekening yang sudah ada
+```mermaid
+flowchart LR
+    A([User scan QRIS]) --> B["SOLQ decode TLV\ndeteksi bank\n100+ institusi"]
+    B --> C["Jupiter ExactOut\nquote real-time"]
+    C --> D["User konfirmasi\ndi Phantom / MWA"]
+    D --> E["TX on-chain\nSolana ~400ms"]
+    E --> F["IDRX disburse\nke merchant"]
+    F --> G([Merchant terima IDR\ndi rekening yang sudah ada])
+
+    style A fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
+    style G fill:#1e3a1e,color:#a6e3a1,stroke:#a6e3a1
 ```
 
 ---
