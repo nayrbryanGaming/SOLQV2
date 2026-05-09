@@ -48,6 +48,11 @@ app.*.map.json
 node_modules/
 backend/node_modules/
 backend/dist/
+
+# APK files - built artifacts, stored only in GitHub Releases
+*.apk
+apk-*/solq-*.apk
+/solq-*.apk
 backend/audit_logs.jsonl
 
 # Secrets & Environment
