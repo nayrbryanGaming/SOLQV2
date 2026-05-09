@@ -6,6 +6,8 @@
 # Run from repo root:  bash apk-nosec/build.sh
 
 set -e
+cd "$(dirname "$0")/.."   # run from repo root regardless of CWD
+mkdir -p ./debug-info      # BUG-C005 fix: required by --split-debug-info
 
 echo "============================================"
 echo "  SOLQ NO-SECURITY APK  (mainnet / demo)"

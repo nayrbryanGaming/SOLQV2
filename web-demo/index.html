@@ -901,19 +901,44 @@ const WALLET_ICONS = {
   'OKX Web3':   '<img src="/assets/logos/okx_wallet.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;border-radius:8px;background:#111;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:10px&quot;>OKX</div>\'">',
 };
 
-function connectWallet(type) {
+// BUG-C009 fix: detect real browser extension — show real address but keep simulation
+async function connectWallet(type) {
   closeModal('modal-wallet');
   toast(`Menghubungkan ${type}...`, 'info');
-  setTimeout(() => {
-    state.wallet.connected = true;
-    state.wallet.type = type;
-    state.wallet.icon = WALLET_ICONS[type] || WALLET_ICONS.Phantom;
-    state.wallet.address = genAddress();
-    state.wallet.balanceSol = parseFloat((Math.random() * 8 + 0.5).toFixed(4));
-    updateWalletButton();
-    refreshBalance();
-    toast(`${type} terhubung (simulasi)`, 'success');
-  }, 1200);
+
+  let realAddress = null;
+
+  try {
+    if (type === 'Phantom') {
+      const provider = window.phantom?.solana ?? window.solana;
+      if (provider?.isPhantom) {
+        const resp = await provider.connect({ onlyIfTrusted: false });
+        realAddress = resp.publicKey.toString();
+      }
+    } else if (type === 'Solflare') {
+      if (window.solflare?.isSolflare) {
+        await window.solflare.connect();
+        realAddress = window.solflare.publicKey.toString();
+      }
+    } else if (type === 'Backpack') {
+      const bp = window.backpack?.solana ?? window.xnft?.solana;
+      if (bp) { await bp.connect(); realAddress = bp.publicKey.toString(); }
+    }
+  } catch (e) {
+    console.warn('[SOLQ-demo] Extension connect skipped:', e.message);
+  }
+
+  // Always simulation — real address just provides visual context
+  state.wallet.connected = true;
+  state.wallet.type = type;
+  state.wallet.icon = WALLET_ICONS[type] || WALLET_ICONS.Phantom;
+  state.wallet.address = realAddress || genAddress();
+  state.wallet.isRealWallet = !!realAddress;
+  state.wallet.balanceSol = parseFloat((Math.random() * 8 + 0.5).toFixed(4));
+  updateWalletButton();
+  refreshBalance();
+  const suffix = realAddress ? ' (wallet nyata terdeteksi)' : ' (simulasi)';
+  toast(`${type} terhubung${suffix}`, 'success');
 }
 
 function disconnectWallet() {
@@ -1805,21 +1830,6 @@ window.addEventListener('online', () => {
   if (state.payment.amountIDR >= 1000) fetchQuote();
 });
 </script>
-<script>
-// /demo-nosec route: hide simulation warning banners for clean CEO/investor demo
-(function() {
-  if (window.location.pathname === '/demo-nosec') {
-    document.addEventListener('DOMContentLoaded', function() {
-      // Hide the ⚠️ Mode Demo warning card on home screen
-      document.querySelectorAll('.sim-note-card, .demo-ribbon').forEach(function(el) {
-        el.style.display = 'none';
-      });
-      // Hide the SIMULASI warning block inside sign modal
-      var warnBlocks = document.querySelectorAll('[style*="rgba(245,158,11,.08)"]');
-      warnBlocks.forEach(function(el) { el.style.display = 'none'; });
-    });
-  }
-})();
-</script>
+<!-- /demo-nosec and /nosec routes removed — only 2 public routes: / and /demo -->
 </body>
 </html>

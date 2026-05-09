@@ -11,7 +11,12 @@ import {
   isValidSolanaSignature,
   verifyFinalizedSignature,
 } from '../utils/solana.js';
-import { submitRedeemRequest, mapBankCode } from '../utils/idrx.js';
+// BUG-C001: IDRX Redeem requires EVM chain (Polygon/Base/BNB/etc). Solana NOT supported.
+// For Solana → IDR, we use Xendit disbursement directly (already integrated).
+// IDRX EVM bridge via Wormhole/deBridge is on roadmap.
+import { createDisbursement, mapBankCode } from '../utils/xendit.js';
+
+const MIN_DISBURSEMENT_IDR = 32000; // ~2 USD — Xendit minimum + IDRX minimum
 
 function normalizeStringField(value, fallback = null) {
   if (typeof value !== 'string') {
@@ -404,11 +409,22 @@ export default async (req, res) => {
       const canonicalPayer = onChainPayer || payerAccount || existing.payer_account || null;
       const intent = await confirmIntent(intentId, txHash, canonicalPayer);
 
-      // IDRX → IDR offramp via IDRX redeem API (requires client to burn IDRX on-chain first)
+      // BUG-C001 fix: Xendit disbursement for Solana → IDR
+      // (IDRX redeem only supports EVM chains; Xendit handles Solana path)
       let disbursement = null;
       let disbursementError = null;
       const burnTxHash = normalizeStringField(req.body?.burn_tx_hash, null);
       const amountIdr = Number(existing.amount_details?.fiat_amount ?? existing.platformFee ?? 0);
+
+      // BUG-C008 fix: enforce minimum disbursement amount
+      if (amountIdr > 0 && amountIdr < MIN_DISBURSEMENT_IDR) {
+        return res.status(400).json({
+          error: 'AMOUNT_BELOW_MINIMUM',
+          message: `Minimum transaksi Rp ${MIN_DISBURSEMENT_IDR.toLocaleString('id-ID')}`,
+          minimum_idr: MIN_DISBURSEMENT_IDR,
+          received_idr: amountIdr,
+        });
+      }
 
       // Merchant bank details: registered registry > intent fields > manual settlement
       const intentNmid = existing.nmid ?? existing.merchant_id ?? existing.merchant?.id ?? null;
@@ -417,39 +433,33 @@ export default async (req, res) => {
       const merchantAccount =
         registeredMerchant?.bank_account ?? existing.merchant_account ?? existing.merchant?.pan ?? null;
       const bankCode = registeredMerchant?.bank_code ?? existing.bank_code ?? null;
-      const bankName = registeredMerchant?.bank_name ?? bankCode ?? null;
       const bankAccountName =
         registeredMerchant?.account_name ?? existing.merchant?.name ?? 'QRIS Merchant';
 
-      if (burnTxHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= 1000) {
+      // Xendit disbursement: on-chain TX confirmed → send IDR to merchant bank/e-wallet
+      if (txHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
         try {
-          disbursement = await submitRedeemRequest({
-            burnTxHash,
-            networkChainId: 'solana',
-            amountIdr,
-            bankAccount: merchantAccount,
+          disbursement = await createDisbursement({
+            externalId: `solq_${intentId}_${txHash.slice(0, 8)}`,
             bankCode,
-            bankName,
-            bankAccountName,
-            walletAddress: canonicalPayer ?? '',
+            accountNumber: merchantAccount,
+            amountIdr,
+            beneficiaryName: bankAccountName,
+            description: `SOLQ payment ${intentId}`,
           });
           await updateIntent(intentId, {
             settlement_status: 'DISBURSED',
-            idrx_redeem_id: disbursement?.id ?? disbursement?.transactionId ?? null,
-            idrx_redeem_status: disbursement?.status ?? 'PROCESSING',
-            burn_tx_hash: burnTxHash,
+            xendit_disbursement_id: disbursement?.id ?? null,
+            xendit_disbursement_status: disbursement?.status ?? 'COMPLETED',
           });
         } catch (err) {
           disbursementError = String(err.message || err);
           await updateIntent(intentId, {
             settlement_status: 'SETTLEMENT_PENDING',
             settlement_error: disbursementError,
-            burn_tx_hash: burnTxHash,
           });
         }
-      } else if (!burnTxHash) {
-        await updateIntent(intentId, { settlement_status: 'AWAITING_BURN_TX' });
-      } else {
+      } else if (!merchantAccount || !mapBankCode(bankCode)) {
         await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
       }
 
@@ -468,9 +478,10 @@ export default async (req, res) => {
           token_deltas: facts.tokenDeltas,
         },
         payer_warning: payerMismatchWarning,
-        burn_tx_hash: burnTxHash ?? undefined,
-        idrx_redeem: disbursement ?? undefined,
+        xendit_disbursement: disbursement ?? undefined,
         disbursement_error: disbursementError ?? undefined,
+        // Note: burn_tx_hash only used for EVM IDRX path (future roadmap)
+        note: 'Solana offramp: Xendit disbursement. IDRX EVM bridge: roadmap.',
       });
     } catch (error) {
       res.status(400).json({ error: error.message });

@@ -5,10 +5,6 @@
   },
   "rewrites": [
     { "source": "/health", "destination": "/api/health" },
-    { "source": "/demo", "destination": "/web-demo/index.html" },
-    { "source": "/demo/(.*)", "destination": "/web-demo/$1" },
-    { "source": "/nosec", "destination": "/web-live/index.html" },
-    { "source": "/demo-nosec", "destination": "/web-demo/index.html" },
     { "source": "/api/v1/payment-intents/:id/confirm", "destination": "/api/v1/[id]?id=:id" },
     { "source": "/api/v1/payment-intents/:id", "destination": "/api/v1/[id]?id=:id" },
     { "source": "/v1/payment-intents/:id/confirm", "destination": "/api/v1/[id]?id=:id" },
@@ -30,7 +26,9 @@
     { "source": "/api/v1/merchants", "destination": "/api/v1/merchants" },
     { "source": "/v1/(.*)", "destination": "/api/v1/$1" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/", "destination": "/web-live/index.html" }
+    { "source": "/demo/(.*)", "destination": "/web-demo/$1" },
+    { "source": "/demo", "destination": "/web-demo/index.html" },
+    { "source": "/(.*)", "destination": "/web-live/index.html" }
   ],
   "headers": [
     {

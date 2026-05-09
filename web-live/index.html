@@ -1046,15 +1046,35 @@ input::placeholder{color:var(--ink3)}
 // ═══════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════
-const PLATFORM_FEE_BPS = 50; // 0.5% — no minimum
+const PLATFORM_FEE_BPS     = 50; // 0.5% — locked, do not change
+const PLATFORM_FEE_WALLET  = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
 const SOL_MINT   = 'So11111111111111111111111111111111111111112';
 const USDC_MINT  = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const IDRX_MINT  = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
+const TOKEN_PROGRAM_ID_STR  = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const ASSOC_TOKEN_PROG_STR  = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq';
+const MIN_PAYMENT_IDR       = 32000; // IDRX minimum redeem: ~2 USD
 const RPC_ENDPOINTS = [
   'https://api.mainnet-beta.solana.com',
   'https://solana-api.projectserum.com',
 ];
 const API_BASE = '';
+
+// BUG-C004 fix: derive USDC ATA for platform fee wallet
+// Jupiter expects feeAccount = Associated Token Account, not raw wallet address
+function getPlatformFeeAccount() {
+  try {
+    const TOKEN_PROGRAM_ID   = new solanaWeb3.PublicKey(TOKEN_PROGRAM_ID_STR);
+    const ASSOC_TOKEN_PROG   = new solanaWeb3.PublicKey(ASSOC_TOKEN_PROG_STR);
+    const feeWallet          = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+    const idrxMint           = new solanaWeb3.PublicKey(IDRX_MINT);
+    const [feeAta] = solanaWeb3.PublicKey.findProgramAddressSync(
+      [feeWallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMint.toBuffer()],
+      ASSOC_TOKEN_PROG
+    );
+    return feeAta.toString();
+  } catch { return null; }
+}
 
 // ═══════════════════════════════════════════
 //  STATE
@@ -1719,8 +1739,9 @@ function startQuoteTimer() {
 //  PAYMENT FLOW
 // ═══════════════════════════════════════════
 async function startPayment() {
-  if (!state.payment.amountIDR || state.payment.amountIDR < 1000) {
-    toast('Amount not valid (min Rp 1.000)', 'error'); return;
+  if (!state.payment.amountIDR || state.payment.amountIDR < MIN_PAYMENT_IDR) {
+    // BUG-C008 fix: IDRX minimum redeem is 2 USD (~Rp 32.000)
+    toast(`Minimum transaksi Rp ${MIN_PAYMENT_IDR.toLocaleString('id-ID')}`, 'error'); return;
   }
   if (!state.wallet.connected) {
     openWalletModal(); toast('Connect a wallet first', 'info'); return;
@@ -1847,15 +1868,19 @@ async function runRealPayment() {
       // Jupiter client-side fallback
       if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
         try {
+          // BUG-C004 fix: use ATA for feeAccount, not raw wallet address
+          const feeAccount = getPlatformFeeAccount();
+          const swapBody = {
+            quoteResponse: state.payment.jupiterQuote,
+            userPublicKey: state.wallet.address,
+            dynamicComputeUnitLimit: true,
+            prioritizationFeeLamports: 'auto',
+          };
+          if (feeAccount) swapBody.feeAccount = feeAccount;
           const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              quoteResponse: state.payment.jupiterQuote,
-              userPublicKey: state.wallet.address,
-              dynamicComputeUnitLimit: true,
-              prioritizationFeeLamports: 'auto',
-            }),
+            body: JSON.stringify(swapBody),
             signal: AbortSignal.timeout(15000),
           });
           if (swapR.ok) {
@@ -2149,16 +2174,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<script>
-// /nosec route: show "LIVE DEMO" mode badge so it's visually distinct
-(function() {
-  if (window.location.pathname === '/nosec') {
-    const badge = document.createElement('div');
-    badge.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:oklch(0.72 0.16 145);color:#0E0E0C;font-size:11px;font-weight:700;letter-spacing:.06em;text-align:center;padding:3px 0;';
-    badge.textContent = 'LIVE DEMO MODE — REAL SOLANA MAINNET';
-    document.body.prepend(badge);
-  }
-})();
-</script>
+<!-- /nosec route removed — only 2 public routes: / (real) and /demo (simulation) -->
 </body>
 </html>
