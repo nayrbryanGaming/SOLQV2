@@ -26,9 +26,9 @@
     { "source": "/api/v1/merchants", "destination": "/api/v1/merchants" },
     { "source": "/v1/(.*)", "destination": "/api/v1/$1" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/demo/(.*)", "destination": "/web-demo/$1" },
-    { "source": "/demo", "destination": "/web-demo/index.html" },
-    { "source": "/(.*)", "destination": "/web-live/index.html" }
+    { "source": "/demo/(.*)", "destination": "/demo/$1" },
+    { "source": "/demo", "destination": "/demo/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {

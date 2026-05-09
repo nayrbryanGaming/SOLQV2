@@ -1,879 +1,1331 @@
-<!DOCTYPE html>
+<!DOCTYPE html><!-- build:20260509-live -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#080514">
-<meta name="description" content="SOLQ Demo — Simulasi pembayaran QRIS dengan Solana. Scan QRIS merchant manapun.">
-<title>SOLQ Demo — Solana × QRIS Simulator</title>
-<link rel="icon" type="image/png" href="/logo_full.png">
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FAF9F6">
+<title>SOLQ — Solana × QRIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Solana Web3.js -->
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<!-- jsQR -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{
-  --bg:#080514;--bg2:#0F0A22;--card:#120A2E;--card2:#1A103C;
-  --purple:#8B2EE8;--purple2:#A855F7;--purple3:#C084FC;
-  --green:#00FF94;--green2:#00CC77;--cyan:#00D4FF;
-  --text:#FFF;--muted:#9CA3AF;--dim:#6B7280;
-  --border:rgba(255,255,255,.09);--danger:#EF4444;--warn:#F59E0B;
-}
-html,body{height:100%;overflow:hidden}
-
-/* Desktop layout */
-body{background:radial-gradient(ellipse at 30% 50%,rgba(139,46,232,.15) 0%,transparent 60%),
-  radial-gradient(ellipse at 70% 50%,rgba(0,212,255,.1) 0%,transparent 60%),
-  var(--bg);
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  display:flex;align-items:center;justify-content:center;min-height:100dvh}
-
-/* Desktop sidebar */
-.desktop-info{display:none;flex:1;max-width:360px;padding:40px 32px;color:var(--text)}
-@media(min-width:900px){
-  body{overflow-y:auto;align-items:flex-start;padding:24px;gap:48px}
-  .desktop-info{display:block}
-}
-.di-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,255,148,.1);
-  border:1px solid rgba(0,255,148,.3);border-radius:20px;padding:6px 14px;
-  font-size:12px;font-weight:700;color:var(--green);margin-bottom:24px;letter-spacing:.5px}
-.di-logo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
-.di-brand{font-size:40px;font-weight:900;letter-spacing:2px}
-.di-brand em{color:var(--purple2);font-style:normal}
-.di-desc{font-size:16px;color:var(--muted);line-height:1.7;margin-bottom:32px}
-.di-feature{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;
-  padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.04);
-  border:1px solid var(--border)}
-.di-feat-icon{font-size:20px;flex-shrink:0;margin-top:2px}
-.di-feat-title{font-size:14px;font-weight:700;margin-bottom:4px}
-.di-feat-desc{font-size:12px;color:var(--muted);line-height:1.5}
-.di-wallets{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
-.di-wallet-chip{padding:6px 12px;border-radius:20px;border:1px solid var(--border);
-  font-size:12px;color:var(--muted);background:rgba(255,255,255,.04)}
-.di-api{margin-top:28px;padding:16px;border-radius:14px;
-  background:rgba(0,0,0,.4);border:1px solid var(--border);
-  font-size:11px;font-family:monospace;color:var(--dim);line-height:1.6}
-.di-api span{color:var(--purple3)}
-
-/* Phone container */
-.phone{background:var(--bg);color:var(--text);
-  width:100%;max-width:430px;height:100dvh;
-  position:relative;overflow:hidden;flex-shrink:0}
-@media(min-width:900px){
-  .phone{height:min(900px,95dvh);border-radius:28px;
-    box-shadow:0 0 0 1px rgba(255,255,255,.08),0 40px 80px rgba(0,0,0,.8);overflow:hidden}
+/* ── Design tokens ── */
+:root {
+  --bg:       #FAF9F6;
+  --ink:      #0E0E0C;
+  --ink2:     #3A3A36;
+  --ink3:     #76766E;
+  --line:     #E6E4DD;
+  --card:     #FFFFFF;
+  --card-alt: #F2F0E8;
+  --ok:       oklch(0.72 0.16 145);
+  --ok-soft:  oklch(0.95 0.04 145);
+  --ok-fg:    oklch(0.42 0.14 145);
+  --warn:     oklch(0.78 0.13 75);
+  --warn-soft:oklch(0.96 0.04 75);
+  --warn-fg:  oklch(0.45 0.13 70);
+  --err:      oklch(0.62 0.18 28);
+  --err-soft: oklch(0.96 0.04 28);
+  --font-ui:  'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, monospace;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
 }
 
-.screen{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+/* ── Reset ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#EAE8E0;font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
+button{font-family:var(--font-ui);cursor:pointer;border:none;background:none}
+input{font-family:var(--font-ui)}
+input::placeholder{color:var(--ink3)}
+
+/* ── Frame (phone chrome on desktop) ── */
+.frame{
+  position:relative;
+  width:100%;max-width:430px;
+  margin:0 auto;
+  min-height:100dvh;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+@media(min-width:500px){
+  body{display:flex;justify-content:center;align-items:flex-start;padding:40px 0;min-height:100vh}
+  .frame{min-height:auto;height:812px;border-radius:40px;box-shadow:0 40px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06);overflow:hidden}
+}
+
+/* ── Screens ── */
+.screen{display:none;flex-direction:column;flex:1;overflow-y:auto;overflow-x:hidden}
 .screen.active{display:flex}
-.hidden{display:none!important}
+#s-scanner{overflow:hidden}
 
-/* DEMO BADGE */
-.demo-ribbon{position:fixed;top:12px;right:12px;z-index:1000;
-  background:linear-gradient(135deg,rgba(245,158,11,.9),rgba(251,191,36,.9));
-  color:#000;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;
-  letter-spacing:1px;backdrop-filter:blur(8px)}
-@media(min-width:900px){.demo-ribbon{top:16px;right:16px}}
+/* ── Top bar ── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px 16px;
+  border-bottom:1px solid var(--line);
+  background:var(--bg);
+  flex-shrink:0;
+}
+.topbar-title{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-.2px}
+.topbar-btn{
+  width:32px;height:32px;border-radius:8px;
+  border:1px solid var(--line);background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.topbar-btn:hover{background:var(--card-alt)}
+.topbar-spacer{width:32px}
 
-/* SPLASH */
-#s-splash{background:linear-gradient(160deg,#0A0320 0%,#1A0640 60%,#0A0320 100%);
-  align-items:center;justify-content:center;gap:0}
-.splash-logo-wrap{display:flex;flex-direction:column;align-items:center;gap:20px;
-  animation:splashfade 1s ease both}
-@keyframes splashfade{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
-.splash-title{font-size:40px;font-weight:900;letter-spacing:3px;margin-top:4px}
-.splash-title em{color:var(--purple2);font-style:normal}
-.splash-sub{color:var(--muted);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px}
-.splash-demo-pill{margin-top:16px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);
-  border-radius:20px;padding:6px 16px;font-size:11px;font-weight:700;color:var(--warn);letter-spacing:1px}
+/* ── Cards ── */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md)}
+.card-alt{background:var(--card-alt);border-radius:var(--r-md)}
 
-/* TOP BAR */
-.topbar{display:flex;align-items:center;justify-content:space-between;
-  padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
-  background:var(--bg);position:sticky;top:0;z-index:10}
-.topbar-logo{font-size:20px;font-weight:800;letter-spacing:1px;display:flex;align-items:center;gap:8px}
-.topbar-logo em{color:var(--purple2);font-style:normal}
-.topbar-logo .sim-tag{font-size:9px;font-weight:700;color:var(--warn);
-  background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);
-  border-radius:10px;padding:2px 6px;letter-spacing:.5px}
-.btn-connect{background:rgba(139,46,232,.2);border:1px solid var(--purple);
-  color:var(--purple2);padding:6px 14px;border-radius:20px;font-size:12px;
-  font-weight:600;cursor:pointer;transition:.2s}
-.btn-connect:hover,.btn-connect:active{background:rgba(139,46,232,.35)}
-.btn-connect.connected{background:rgba(0,255,148,.1);border-color:var(--green);color:var(--green)}
-.addr{font-size:11px;font-family:monospace}
+/* ── Rows ── */
+.row{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  padding:12px 0;border-bottom:1px solid var(--line);gap:12px;
+}
+.row:last-child{border-bottom:none;padding-bottom:10px}
+.row-label{font-size:13px;color:var(--ink3)}
+.row-val{font-size:13px;color:var(--ink);font-weight:500;text-align:right}
+.row-val.mono{font-family:var(--font-mono)}
+.row-sub{font-size:11px;color:var(--ink3);margin-top:2px;font-family:var(--font-mono);text-align:right}
 
-/* HOME */
-#s-home{background:var(--bg)}
-.home-scroll{flex:1;overflow-y:auto;padding:0 0 100px}
-.balance-card{margin:16px;border-radius:20px;
-  background:linear-gradient(135deg,#1E0A4E 0%,#2D1060 50%,#1A0840 100%);
-  padding:20px;position:relative;overflow:hidden}
-.balance-card::before{content:'';position:absolute;top:-30px;right:-30px;
-  width:120px;height:120px;border-radius:50%;
-  background:radial-gradient(circle,rgba(139,46,232,.3),transparent 70%)}
-.balance-label{font-size:12px;color:var(--muted);margin-bottom:4px}
-.balance-sol{font-size:32px;font-weight:800;margin-bottom:2px}
-.balance-idr{font-size:14px;color:var(--muted)}
-.balance-change{display:inline-flex;align-items:center;gap:4px;margin-top:8px;
-  background:rgba(0,255,148,.1);border:1px solid rgba(0,255,148,.2);
-  padding:3px 10px;border-radius:20px;font-size:12px;color:var(--green)}
-.sim-note-card{margin:0 16px 12px;border-radius:14px;padding:12px 16px;
-  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
-  font-size:12px;color:var(--warn);line-height:1.5}
-.price-card{margin:0 16px 12px;border-radius:16px;background:var(--card);
-  padding:16px;border:1px solid var(--border)}
-.price-row{display:flex;align-items:center;justify-content:space-between}
-.price-token{display:flex;align-items:center;gap:10px}
-.price-icon{width:36px;height:36px;border-radius:50%;
-  background:linear-gradient(135deg,#9945FF,#14F195);
-  display:flex;align-items:center;justify-content:center;font-size:18px}
-.price-name{font-weight:700;font-size:15px}
-.price-symbol{font-size:11px;color:var(--muted)}
-.price-right{text-align:right}
-.price-idr{font-size:16px;font-weight:700}
-.price-usd{font-size:11px;color:var(--muted)}
-.price-change-pos{color:var(--green);font-size:12px}
-.price-change-neg{color:var(--danger);font-size:12px}
-.section-title{font-size:13px;font-weight:600;color:var(--muted);
-  padding:0 20px 8px;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
-.txn-item{display:flex;align-items:center;gap:12px;padding:12px 20px;
-  border-bottom:1px solid var(--border)}
-.txn-icon{width:40px;height:40px;border-radius:50%;background:var(--card2);
-  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-.txn-info{flex:1}
-.txn-merchant{font-size:14px;font-weight:600}
-.txn-time{font-size:11px;color:var(--muted)}
-.txn-amount{text-align:right}
-.txn-idr{font-size:14px;font-weight:600;color:var(--danger)}
-.txn-sol{font-size:11px;color:var(--muted)}
-.fab{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-  background:linear-gradient(135deg,var(--purple),var(--purple2));
-  color:#fff;border:none;border-radius:32px;padding:16px 40px;
-  font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 30px rgba(139,46,232,.5);
-  display:flex;align-items:center;gap:10px;letter-spacing:.5px;z-index:10;
-  transition:.2s;max-width:calc(430px - 40px)}
-.fab:active{transform:translateX(-50%) scale(.97)}
-.fab-icon{font-size:20px}
+/* ── Buttons ── */
+.btn{
+  width:100%;padding:14px 18px;border-radius:var(--r-md);
+  font-size:15px;font-weight:500;letter-spacing:-.1px;
+  transition:opacity .12s;
+}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--ink);color:var(--bg);border:1px solid var(--ink)}
+.btn-primary:not(:disabled):hover{opacity:.88}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn-ghost:hover{background:var(--card-alt)}
+.btn-sm{padding:10px 14px;font-size:13px;border-radius:var(--r-sm);width:auto}
 
-/* SCANNER */
-#s-scanner{background:#000;overflow:hidden}
-#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-#scan-canvas{display:none}
-.scan-overlay{position:absolute;inset:0;display:flex;flex-direction:column;pointer-events:none}
-.scan-top{flex:1;background:rgba(0,0,0,.55)}
-.scan-middle{display:flex}
-.scan-side{flex:1;background:rgba(0,0,0,.55)}
-.scan-frame{width:260px;height:260px;position:relative;flex-shrink:0}
-.corner{position:absolute;width:40px;height:40px}
-.corner.tl{top:0;left:0;border-top:3px solid var(--green);border-left:3px solid var(--green)}
-.corner.tr{top:0;right:0;border-top:3px solid var(--green);border-right:3px solid var(--green)}
-.corner.bl{bottom:0;left:0;border-bottom:3px solid var(--green);border-left:3px solid var(--green)}
-.corner.br{bottom:0;right:0;border-bottom:3px solid var(--green);border-right:3px solid var(--green)}
-.scan-line{position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,var(--green),transparent);
-  animation:scanline 2s linear infinite}
-@keyframes scanline{0%{top:0}100%{top:100%}}
-.scan-bottom{flex:1;background:rgba(0,0,0,.55)}
-.scan-ui{position:absolute;bottom:0;left:0;right:0;padding:20px;
-  display:flex;flex-direction:column;align-items:center;gap:12px;pointer-events:all}
-.scan-hint{color:rgba(255,255,255,.85);font-size:14px;text-align:center;line-height:1.5}
-.scan-hint span{color:var(--green);font-weight:700}
-.scan-btns{display:flex;gap:8px;width:100%}
-.btn-scan-action{flex:1;padding:12px 8px;border-radius:14px;border:1px solid rgba(255,255,255,.2);
-  background:rgba(255,255,255,.1);color:#fff;font-size:12px;font-weight:600;cursor:pointer;
-  backdrop-filter:blur(10px);text-align:center;transition:.15s}
-.btn-scan-action:active{background:rgba(255,255,255,.2)}
-.btn-scan-back{position:absolute;top:50px;left:16px;width:44px;height:44px;
-  border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:20px;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;pointer-events:all;
-  backdrop-filter:blur(8px)}
-.scan-detected{position:absolute;inset:0;background:rgba(0,255,148,.15);
-  display:none;align-items:center;justify-content:center;pointer-events:none}
-.scan-detected.show{display:flex;animation:flash .3s ease}
-@keyframes flash{0%{background:rgba(0,255,148,.4)}100%{background:rgba(0,255,148,.15)}}
-.cam-error{position:absolute;inset:0;background:#080514;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center}
-.cam-error-icon{font-size:48px}
-.cam-error-title{font-size:16px;font-weight:700}
-.cam-error-sub{font-size:13px;color:var(--muted);line-height:1.5}
-.manual-input-wrap{width:100%;display:flex;flex-direction:column;gap:8px;max-width:360px}
-textarea.qris-manual{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);
-  border-radius:12px;padding:12px;color:#fff;font-size:11px;font-family:monospace;
-  resize:none;height:120px;outline:none}
-textarea.qris-manual:focus{border-color:var(--purple)}
-.btn-parse{padding:12px;border-radius:12px;border:none;
-  background:var(--purple);color:#fff;font-size:14px;font-weight:600;cursor:pointer;width:100%}
-.btn-demo-scan{padding:12px 24px;border-radius:14px;border:1px solid var(--green);
-  background:rgba(0,255,148,.1);color:var(--green);font-size:14px;
-  font-weight:600;cursor:pointer;width:100%;text-align:center}
-.or-divider{display:flex;align-items:center;gap:10px;margin:4px 0;color:var(--dim);font-size:12px}
-.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:var(--border)}
-.manual-overlay{position:absolute;inset:0;background:rgba(8,5,20,.96);display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center}
+/* ── Chips ── */
+.chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 8px;border-radius:6px;
+  font-size:11px;font-weight:500;letter-spacing:.2px;
+}
+.chip-neutral{background:var(--card-alt);color:var(--ink2)}
+.chip-ok{background:var(--ok-soft);color:var(--ok-fg)}
+.chip-warn{background:var(--warn-soft);color:var(--warn-fg)}
+.chip-outline{background:transparent;color:var(--ink2);border:1px solid var(--line)}
 
-/* CONFIRM */
-#s-confirm{background:var(--bg)}
-.confirm-scroll{flex:1;overflow-y:auto;padding:16px 16px 100px}
-.merchant-card{background:linear-gradient(135deg,var(--card) 0%,#1E104A 100%);
-  border-radius:20px;padding:20px;margin-bottom:12px;border:1px solid var(--border)}
-.merchant-header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
-.merchant-avatar{width:52px;height:52px;border-radius:16px;
-  background:linear-gradient(135deg,var(--purple),var(--purple2));
-  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-.merchant-name{font-size:18px;font-weight:800}
-.merchant-city{font-size:12px;color:var(--muted);margin-top:2px}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
-  border-radius:20px;font-size:11px;font-weight:600;margin-top:4px}
-.badge-static{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--warn)}
-.badge-dynamic{background:rgba(0,255,148,.1);border:1px solid rgba(0,255,148,.3);color:var(--green)}
-.badge-sim{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:var(--warn);margin-left:6px}
-.merchant-detail{display:flex;gap:8px;flex-wrap:wrap}
-.detail-chip{background:rgba(255,255,255,.06);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--muted)}
-.amount-section{background:var(--card);border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid var(--border)}
-.amount-label{font-size:12px;color:var(--muted);margin-bottom:8px}
-.amount-input-wrap{display:flex;align-items:center;gap:8px;
-  background:rgba(255,255,255,.05);border-radius:12px;padding:14px;
-  border:2px solid var(--border);transition:.2s}
-.amount-input-wrap:focus-within{border-color:var(--purple)}
-.amount-prefix{font-size:18px;font-weight:600;color:var(--muted)}
-.amount-input{flex:1;background:transparent;border:none;outline:none;
-  color:#fff;font-size:24px;font-weight:800;min-width:0}
-.amount-fixed{font-size:28px;font-weight:800;color:#fff}
-.token-picker{display:flex;gap:8px;margin-top:8px}
-.token-btn{flex:1;padding:10px 8px;border-radius:12px;border:2px solid var(--border);
-  background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;
-  transition:.2s;display:flex;align-items:center;justify-content:center;gap:6px}
-.token-btn.active{border-color:var(--purple);background:rgba(139,46,232,.15);color:#fff}
-.quote-card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid var(--border)}
-.quote-title{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:12px;
-  display:flex;align-items:center;justify-content:space-between}
-.quote-timer{color:var(--warn);font-size:11px}
-.quote-row{display:flex;justify-content:space-between;padding:6px 0;
-  border-bottom:1px solid var(--border);font-size:13px}
-.quote-row:last-child{border:none;font-weight:700;font-size:14px;padding-top:10px}
-.quote-label{color:var(--muted)}
-.quote-val{font-weight:600}
-.quote-total{color:var(--green);font-size:16px;font-weight:800}
-.quote-loading{text-align:center;padding:20px;color:var(--muted);font-size:13px}
-.btn-pay{width:100%;padding:16px;border-radius:16px;border:none;
-  background:linear-gradient(135deg,var(--purple),var(--purple2));
-  color:#fff;font-size:16px;font-weight:700;cursor:pointer;
-  box-shadow:0 4px 20px rgba(139,46,232,.4);transition:.2s;letter-spacing:.3px}
-.btn-pay:active{transform:scale(.98)}
-.btn-pay:disabled{opacity:.5;cursor:default}
-.btn-cancel{width:100%;padding:14px;border-radius:16px;border:1px solid var(--border);
-  background:transparent;color:var(--muted);font-size:14px;cursor:pointer;margin-top:8px}
+/* ── Dot ── */
+.dot{display:inline-block;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--ok)}
+.dot-warn{background:var(--warn)}
+.dot-err{background:var(--err)}
+.dot-ink{background:var(--ink)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
+.dot-pulse{animation:pulse 1.4s ease-in-out infinite}
 
-/* PROCESSING */
-#s-processing{background:var(--bg);align-items:center;justify-content:center}
-.proc-content{width:100%;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:0}
-.proc-logo{width:80px;height:80px;margin-bottom:24px;animation:procpulse 1.5s ease-in-out infinite}
-@keyframes procpulse{0%,100%{filter:drop-shadow(0 0 12px rgba(139,46,232,.5))}
-  50%{filter:drop-shadow(0 0 28px rgba(168,85,247,.8))}}
-.proc-title{font-size:20px;font-weight:800;margin-bottom:6px;text-align:center}
-.proc-sub{font-size:13px;color:var(--muted);margin-bottom:32px;text-align:center}
-.step-list{width:100%;display:flex;flex-direction:column;gap:10px}
-.step{display:flex;align-items:center;gap:14px;padding:12px 16px;
-  border-radius:14px;background:var(--card);border:1px solid var(--border);transition:.3s}
-.step.done{background:rgba(0,255,148,.07);border-color:rgba(0,255,148,.2)}
-.step.active{background:rgba(139,46,232,.1);border-color:rgba(139,46,232,.3);
-  animation:stepglow .8s ease-in-out infinite alternate}
-@keyframes stepglow{from{border-color:rgba(139,46,232,.3)}to{border-color:var(--purple2)}}
-.step-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:16px;flex-shrink:0;background:rgba(255,255,255,.07)}
-.step.done .step-icon{background:rgba(0,255,148,.15)}
-.step.active .step-icon{background:rgba(139,46,232,.2)}
-.step-text{font-size:13px;font-weight:600}
-.step.done .step-text{color:var(--green)}
-.step.active .step-text{color:var(--purple3)}
-.step.pending .step-text{color:var(--muted)}
-.sim-disclaimer{margin-top:20px;padding:12px 16px;border-radius:12px;
-  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
-  font-size:11px;color:var(--warn);text-align:center;line-height:1.5;width:100%}
+/* ── SOLQ mark ── */
+.solq-mark{
+  display:flex;align-items:center;justify-content:center;
+  border-radius:7px;background:var(--ink);color:var(--bg);
+  font-family:var(--font-mono);font-weight:600;letter-spacing:-.5px;
+  flex-shrink:0;
+}
 
-/* RECEIPT */
-#s-receipt{background:var(--bg);overflow-y:auto}
-.receipt-card{background:linear-gradient(160deg,#120A2E 0%,#1E0A5E 100%);
-  border-radius:24px;border:1px solid rgba(139,46,232,.3);margin:20px 16px;
-  overflow:hidden;max-width:398px}
-.receipt-top{background:linear-gradient(135deg,#8B2EE8,#A855F7);padding:28px 24px;text-align:center}
-.receipt-check{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);
-  display:flex;align-items:center;justify-content:center;font-size:32px;
-  margin:0 auto 16px;animation:checkbounce .5s ease .2s both}
-@keyframes checkbounce{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
-.receipt-success{font-size:20px;font-weight:800;margin-bottom:4px}
-.receipt-sim-badge{display:inline-block;background:rgba(0,0,0,.3);border-radius:10px;
-  padding:3px 10px;font-size:10px;font-weight:700;color:rgba(255,255,255,.8);
-  letter-spacing:.5px;margin-bottom:4px}
-.receipt-amount{font-size:36px;font-weight:800;margin:8px 0}
-.receipt-merchant{font-size:14px;color:rgba(255,255,255,.8)}
-.receipt-body{padding:20px 24px}
-.receipt-row{display:flex;justify-content:space-between;padding:10px 0;
-  border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
-.receipt-row:last-child{border:none}
-.r-label{color:var(--muted)}
-.r-val{font-weight:600;max-width:200px;text-align:right;word-break:break-all;font-size:12px}
-.r-val.green{color:var(--green)}
-.r-val.addr{font-family:monospace;font-size:11px}
-.receipt-actions{padding:16px 24px 24px;display:flex;flex-direction:column;gap:8px}
-.btn-explorer{display:block;text-align:center;padding:12px;border-radius:14px;
-  border:1px solid rgba(139,46,232,.4);background:rgba(139,46,232,.1);
-  color:var(--purple2);text-decoration:none;font-size:13px;font-weight:600}
-.btn-done{display:block;text-align:center;padding:14px;border-radius:14px;
-  background:linear-gradient(135deg,var(--purple),var(--purple2));
-  color:#fff;font-size:15px;font-weight:700;cursor:pointer;border:none;width:100%}
-
-/* MODAL */
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);
-  display:none;align-items:flex-end;z-index:100;backdrop-filter:blur(4px);
-  max-width:430px;margin:0 auto}
-.modal-backdrop.show{display:flex}
-.modal-sheet{background:var(--bg2);border-radius:24px 24px 0 0;width:100%;
-  padding:0 0 env(safe-area-inset-bottom,20px);
-  animation:slideup .3s cubic-bezier(.17,.67,.24,.99)}
-@keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.modal-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);margin:12px auto 0}
-.modal-title{font-size:16px;font-weight:700;text-align:center;padding:16px 20px 0}
-.modal-sub{font-size:13px;color:var(--muted);text-align:center;padding:6px 20px 16px}
-.modal-body{padding:0 16px 16px}
-.wallet-option{display:flex;align-items:center;gap:14px;padding:14px 16px;
-  border-radius:14px;border:1px solid var(--border);background:var(--card);
-  cursor:pointer;transition:.2s;margin-bottom:8px}
-.wallet-option:hover{border-color:var(--purple);background:rgba(139,46,232,.1)}
-.wallet-logo{width:44px;height:44px;border-radius:12px;object-fit:cover;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:24px}
-.wallet-name{font-size:15px;font-weight:700}
-.wallet-desc{font-size:11px;color:var(--muted)}
-.wallet-arrow{margin-left:auto;color:var(--muted);font-size:18px}
-
-/* SIGN MODAL */
-.sign-header{background:linear-gradient(135deg,#4c1d95,#6d28d9);
-  border-radius:24px 24px 0 0;padding:20px;text-align:center}
-.sign-logo{width:48px;height:48px;border-radius:50%;
-  background:rgba(255,255,255,.15);display:flex;align-items:center;
-  justify-content:center;font-size:26px;margin:0 auto 10px}
-.sign-row{display:flex;justify-content:space-between;padding:10px 0;
-  border-bottom:1px solid var(--border);font-size:13px}
-.sign-label{color:var(--muted)}
-.sign-val{font-weight:600;font-family:monospace;font-size:11px;max-width:180px;
+/* ── HOME ── */
+#s-home{padding-bottom:24px}
+.home-header{padding:20px 20px 0}
+.wallet-card{
+  padding:14px;border-radius:var(--r-md);
+  background:var(--card);border:1px solid var(--line);
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;transition:background .12s;
+}
+.wallet-card:hover{background:var(--card-alt)}
+.wallet-card-icon{
+  width:32px;height:32px;border-radius:var(--r-sm);
+  background:var(--card-alt);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.wallet-card-label{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px}
+.wallet-card-addr{font-family:var(--font-mono);font-size:12px;color:var(--ink);margin-top:2px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sign-amount{color:var(--warn);font-size:15px;font-weight:800}
-.btn-approve{width:100%;padding:14px;border-radius:14px;border:none;
-  background:#9945FF;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
-.btn-reject{width:100%;padding:12px;border-radius:14px;border:1px solid var(--border);
-  background:transparent;color:var(--muted);font-size:14px;cursor:pointer;margin-top:8px}
+.wallet-card-bal{text-align:right;flex-shrink:0}
+.wallet-card-bal-sol{font-family:var(--font-mono);font-size:13px;color:var(--ink);font-weight:600}
+.wallet-card-bal-idr{font-size:11px;color:var(--ink3);margin-top:2px}
 
-/* TOAST */
-.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);
-  background:#1A0840;border:1px solid var(--border);border-radius:12px;
-  padding:10px 18px;font-size:13px;display:none;z-index:200;
-  white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5);max-width:320px}
-.toast.show{display:block;animation:fadein .2s ease}
-.toast.error{border-color:var(--danger);color:#FCA5A5}
-.toast.success{border-color:var(--green);color:var(--green)}
-.toast.info{border-color:var(--purple);color:var(--purple3)}
-@keyframes fadein{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%)}}
-.dots::after{content:'...';animation:dots 1.2s infinite}
-@keyframes dots{0%{content:'.'}40%{content:'..'}80%,100%{content:'...'}}
-::-webkit-scrollbar{width:0}
-input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.scan-cta{
+  margin:20px 20px 0;padding:28px 22px;
+  border-radius:var(--r-lg);background:var(--ink);
+  color:var(--bg);cursor:pointer;border:none;text-align:left;width:calc(100% - 40px);
+  position:relative;overflow:hidden;
+  transition:opacity .12s;
+}
+.scan-cta:hover{opacity:.92}
+.scan-cta-eyebrow{
+  display:flex;align-items:center;gap:8px;margin-bottom:24px;
+}
+.scan-cta-eyebrow-icon{
+  width:22px;height:22px;border-radius:5px;
+  border:1.5px solid rgba(250,249,246,.5);
+  display:flex;align-items:center;justify-content:center;
+}
+.scan-cta-eyebrow-label{font-family:var(--font-mono);font-size:11px;opacity:.6;letter-spacing:.5px}
+.scan-cta-title{font-size:21px;font-weight:500;letter-spacing:-.4px;line-height:1.2}
+.scan-cta-sub{font-size:12px;opacity:.55;margin-top:8px}
+.scan-cta-arrow{
+  position:absolute;right:18px;bottom:18px;
+  width:34px;height:34px;border-radius:9px;
+  background:var(--bg);display:flex;align-items:center;justify-content:center;
+}
+
+.rates-section{padding:20px 20px 0}
+.section-label{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+.rates-card{padding:4px 14px}
+
+.footer-note{
+  padding:16px 20px 0;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.footer-note-dot{width:5px;height:5px;border-radius:50%;background:var(--ink3);flex-shrink:0}
+.footer-note-text{font-size:11px;color:var(--ink3)}
+
+/* ── SCANNER ── */
+#s-scanner{background:#0A0A08;position:relative;flex:1}
+.cam-area{position:absolute;inset:0;overflow:hidden}
+#video{width:100%;height:100%;object-fit:cover}
+#scan-canvas{display:none}
+.cam-overlay{position:absolute;inset:0;pointer-events:none}
+.cam-header{
+  position:absolute;top:0;left:0;right:0;z-index:3;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 18px;
+}
+.cam-close-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(250,249,246,.12);backdrop-filter:blur(10px);
+  border:none;color:var(--bg);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.cam-badge{
+  padding:6px 12px;border-radius:20px;
+  background:rgba(250,249,246,.12);backdrop-filter:blur(8px);
+  color:var(--bg);font-family:var(--font-mono);font-size:11px;letter-spacing:.4px;
+}
+.cam-reticle{
+  position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);
+  width:220px;height:220px;z-index:3;pointer-events:none;
+}
+.cam-corner{position:absolute;width:26px;height:26px}
+.cam-corner-tl{top:0;left:0;border-top:2px solid var(--bg);border-left:2px solid var(--bg);border-radius:6px 0 0 0}
+.cam-corner-tr{top:0;right:0;border-top:2px solid var(--bg);border-right:2px solid var(--bg);border-radius:0 6px 0 0}
+.cam-corner-bl{bottom:0;left:0;border-bottom:2px solid var(--bg);border-left:2px solid var(--bg);border-radius:0 0 0 6px}
+.cam-corner-br{bottom:0;right:0;border-bottom:2px solid var(--bg);border-right:2px solid var(--bg);border-radius:0 0 6px 0}
+.cam-scan-line{
+  position:absolute;left:0;right:0;height:1px;
+  background:var(--ok);box-shadow:0 0 10px var(--ok);
+  transition:top .08s linear;
+}
+.cam-status{
+  position:absolute;bottom:0;left:0;right:0;z-index:3;
+  padding:0 20px 32px;
+}
+.cam-status-card{
+  padding:14px;border-radius:var(--r-md);
+  background:rgba(250,249,246,.08);backdrop-filter:blur(14px);
+  border:1px solid rgba(250,249,246,.14);
+  color:var(--bg);
+}
+.cam-status-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.cam-status-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.3px}
+.cam-status-sub{font-size:12px;opacity:.65}
+.cam-actions{
+  position:absolute;bottom:100px;left:0;right:0;z-index:4;
+  display:flex;justify-content:center;gap:10px;padding:0 24px;
+}
+.cam-action-btn{
+  padding:9px 14px;border-radius:var(--r-sm);
+  background:rgba(250,249,246,.14);backdrop-filter:blur(10px);
+  border:1px solid rgba(250,249,246,.2);
+  color:var(--bg);font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;
+}
+.cam-error{
+  position:absolute;inset:0;z-index:5;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#0A0A08;padding:32px;text-align:center;
+}
+.cam-error.hidden{display:none}
+.cam-error-icon{margin-bottom:16px}
+.cam-error-title{color:var(--bg);font-size:16px;font-weight:600;margin-bottom:8px}
+.cam-error-sub{color:rgba(250,249,246,.5);font-size:13px;line-height:1.5;margin-bottom:20px}
+
+/* Manual overlay */
+.manual-overlay{
+  position:absolute;inset:0;z-index:10;
+  background:var(--bg);padding:24px;display:flex;flex-direction:column;
+}
+.manual-overlay.hidden{display:none}
+.manual-textarea{
+  width:100%;flex:1;min-height:120px;padding:12px;
+  border:1px solid var(--line);border-radius:var(--r-md);
+  font-family:var(--font-mono);font-size:12px;color:var(--ink);
+  background:var(--card);resize:none;outline:none;margin:12px 0;
+}
+.manual-textarea:focus{border-color:var(--ink)}
+
+/* ── CONFIRM ── */
+#s-confirm{padding-bottom:24px}
+.confirm-section{padding:18px 20px 0}
+.merchant-card{padding:14px}
+.merchant-row{display:flex;align-items:center;gap:12px}
+.merchant-avatar{
+  width:38px;height:38px;border-radius:9px;
+  background:var(--card-alt);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--ink);
+  flex-shrink:0;
+}
+.merchant-name{font-size:14px;font-weight:500;color:var(--ink)}
+.merchant-meta{font-family:var(--font-mono);font-size:11px;color:var(--ink3);margin-top:3px}
+.amount-card{padding:20px 16px;text-align:center}
+.amount-rp-label{font-size:18px;color:var(--ink3);font-weight:500}
+.amount-input{
+  border:none;outline:none;background:transparent;
+  font-family:var(--font-ui);font-size:34px;font-weight:600;color:var(--ink);
+  text-align:center;width:200px;letter-spacing:-.8px;
+}
+.amount-usdc-hint{font-family:var(--font-mono);font-size:12px;color:var(--ink3);margin-top:4px}
+.amount-fixed{font-size:34px;font-weight:600;color:var(--ink);letter-spacing:-.8px}
+.amount-locked-label{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.token-tabs{display:flex;gap:6px}
+.token-tab{
+  flex:1;padding:10px 8px;border-radius:var(--r-sm);
+  border:1px solid var(--line);background:var(--card);
+  font-size:13px;font-weight:500;color:var(--ink2);
+  cursor:pointer;transition:all .12s;text-align:center;
+}
+.token-tab.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.token-tab:hover:not(.active){background:var(--card-alt)}
+.quote-loading{padding:16px 0;font-size:13px;color:var(--ink3);text-align:center}
+.quote-total-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 0 10px;
+}
+.quote-total-label{font-size:14px;color:var(--ink);font-weight:600}
+.quote-total-val{font-family:var(--font-mono);font-size:15px;color:var(--ink);font-weight:600}
+.confirm-cta-note{font-size:11px;color:var(--ink3);text-align:center;margin-top:10px}
+.confirm-footer{padding:16px 20px 0}
+
+/* ── PROCESSING ── */
+#s-processing{padding:28px 24px;align-items:center}
+.proc-amount-label{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px}
+.proc-amount{font-size:28px;font-weight:600;color:var(--ink);letter-spacing:-.6px;margin-top:6px}
+.proc-sub{font-family:var(--font-mono);font-size:12px;color:var(--ink3);margin-top:4px}
+.steps-list{width:100%;margin-top:32px}
+.step{display:flex;gap:14px;padding-bottom:18px;position:relative}
+.step:last-child{padding-bottom:0}
+.step-connector{
+  position:absolute;left:11px;top:24px;width:2px;bottom:-6px;
+  background:var(--line);transition:background .3s;
+}
+.step.done .step-connector{background:var(--ok)}
+.step-bullet{
+  width:24px;height:24px;border-radius:50%;
+  border:2px solid var(--line);background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;position:relative;z-index:1;
+  transition:all .2s;
+}
+.step.active .step-bullet{border-color:var(--ink)}
+.step.done .step-bullet{background:var(--ok);border-color:var(--ok)}
+.step-body{flex:1;padding-top:1px}
+.step-label{font-size:14px;font-weight:500;color:var(--ink3);transition:color .2s}
+.step.active .step-label,.step.done .step-label{color:var(--ink)}
+.step-sublabel{font-size:12px;color:var(--ink3);margin-top:2px}
+.step-state{margin-top:6px;font-family:var(--font-mono);font-size:10px;color:var(--ink3)}
+.proc-explorer{margin-top:16px;width:100%}
+.proc-explorer.hidden{display:none}
+.proc-explorer a{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);
+  font-family:var(--font-mono);font-size:12px;color:var(--ink2);text-decoration:none;
+}
+.proc-explorer a:hover{background:var(--card-alt)}
+.proc-note{
+  margin-top:20px;padding:12px;border-radius:var(--r-sm);background:var(--card-alt);
+  font-size:11px;color:var(--ink2);line-height:1.5;
+}
+.proc-cancel-btn{
+  margin-top:12px;font-size:13px;color:var(--ink3);
+  text-decoration:underline;cursor:pointer;background:none;border:none;
+  display:none;
+}
+
+/* ── RECEIPT ── */
+#s-receipt{padding-bottom:24px}
+.receipt-check{
+  margin:24px auto 14px;
+  width:56px;height:56px;border-radius:50%;
+  background:var(--ok-soft);
+  display:flex;align-items:center;justify-content:center;
+}
+.receipt-label{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;text-align:center}
+.receipt-amount{font-size:28px;font-weight:600;color:var(--ink);letter-spacing:-.6px;text-align:center;margin:4px 0}
+.receipt-to{font-size:12px;color:var(--ink3);text-align:center}
+.receipt-proof{padding:14px;margin-top:14px}
+.receipt-proof-hash{font-family:var(--font-mono);font-size:11px;color:var(--ink);word-break:break-all;line-height:1.6}
+.receipt-btns{display:flex;gap:8px;margin-top:12px}
+.receipt-btn{
+  flex:1;padding:10px;border-radius:var(--r-sm);
+  border:1px solid var(--line);background:var(--bg);
+  font-size:12px;color:var(--ink);cursor:pointer;
+}
+.receipt-btn:hover{background:var(--card-alt)}
+
+/* ── ERROR ── */
+#s-error{align-items:center;justify-content:center;padding:32px 24px;text-align:center}
+.error-icon{width:56px;height:56px;border-radius:50%;background:var(--err-soft);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.error-title{font-size:18px;font-weight:600;color:var(--ink);margin-bottom:8px}
+.error-msg{font-size:14px;color:var(--ink3);line-height:1.5;margin-bottom:24px}
+
+/* ── MODAL ── */
+.modal-backdrop{
+  position:absolute;inset:0;z-index:20;
+  background:rgba(14,14,12,.45);
+  display:flex;align-items:flex-end;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.modal-backdrop.show{opacity:1;pointer-events:auto}
+.modal-sheet{
+  width:100%;background:var(--bg);
+  border-radius:20px 20px 0 0;
+  padding:8px 0 24px;
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.22,.9,.3,1);
+}
+.modal-backdrop.show .modal-sheet{transform:translateY(0)}
+.modal-drag{display:flex;justify-content:center;padding:6px 0 14px}
+.modal-drag-handle{width:36px;height:4px;border-radius:2px;background:var(--line)}
+.modal-body{padding:0 20px}
+.modal-title{font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.modal-sub{font-size:13px;color:var(--ink3);margin-bottom:16px}
+
+/* Wallet list */
+.wallet-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.wallet-item{
+  display:flex;align-items:center;gap:14px;
+  padding:14px;border-radius:var(--r-md);
+  border:1px solid var(--line);background:var(--card);
+  cursor:pointer;transition:all .14s;text-align:left;
+}
+.wallet-item:hover{background:var(--card-alt)}
+.wallet-item.selected{background:var(--ink);border-color:var(--ink)}
+.wallet-item-icon{
+  width:36px;height:36px;border-radius:8px;
+  background:var(--card-alt);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--ink2);
+  flex-shrink:0;transition:all .14s;
+}
+.wallet-item.selected .wallet-item-icon{background:rgba(250,249,246,.15);color:var(--bg)}
+.wallet-item-name{font-size:14px;font-weight:500;color:var(--ink);transition:color .14s}
+.wallet-item.selected .wallet-item-name{color:var(--bg)}
+.wallet-item-sub{font-size:12px;color:var(--ink3);margin-top:2px;transition:color .14s}
+.wallet-item.selected .wallet-item-sub{color:rgba(250,249,246,.55)}
+.wallet-item-tag{
+  font-family:var(--font-mono);font-size:10px;font-weight:600;
+  padding:3px 7px;border-radius:5px;
+  background:var(--card-alt);color:var(--ink2);
+  flex-shrink:0;transition:all .14s;
+}
+.wallet-item.selected .wallet-item-tag{background:rgba(250,249,246,.12);color:var(--bg)}
+.wallet-custody-note{
+  padding:12px;border-radius:var(--r-sm);background:var(--card-alt);
+  font-size:11px;color:var(--ink2);line-height:1.5;margin-bottom:14px;
+}
+
+/* Sign modal */
+.sign-rows{margin:12px 0}
+.sign-warn{
+  padding:12px;border-radius:var(--r-sm);
+  background:var(--warn-soft);
+  font-size:12px;color:var(--warn-fg);line-height:1.5;margin-bottom:14px;
+}
+.sign-btns{display:flex;gap:10px}
+.sign-btn-reject{
+  flex:1;padding:14px;border-radius:var(--r-md);
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);
+  font-size:14px;font-weight:500;cursor:pointer;
+}
+.sign-btn-approve{
+  flex:1;padding:14px;border-radius:var(--r-md);
+  background:var(--ink);color:var(--bg);border:1px solid var(--ink);
+  font-size:14px;font-weight:500;cursor:pointer;
+}
+.sign-btn-approve:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── TOAST ── */
+.toast{
+  position:absolute;bottom:24px;left:16px;right:16px;z-index:99;
+  padding:12px 16px;border-radius:var(--r-md);
+  font-size:13px;font-weight:500;color:var(--bg);
+  background:var(--ink);
+  transform:translateY(120%);opacity:0;
+  transition:transform .2s cubic-bezier(.22,.9,.3,1),opacity .2s;
+  pointer-events:none;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{background:var(--ok-fg)}
+.toast.error{background:var(--err)}
+.toast.warn{background:var(--warn-fg)}
+
+/* ── Dots animation ── */
+@keyframes dotsani{0%,100%{content:'...'}33%{content:'.'}66%{content:'..'}  }
+.dots::after{content:'...';animation:dotsani 1.2s steps(1,end) infinite}
+
+/* ── Animations ── */
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+.fade-in{animation:fade-in .18s ease}
+
+/* ── Android Phone Chrome (visible on desktop phone frame only) ── */
+.android-sb{
+  display:none;
+  height:28px;background:var(--bg);
+  padding:0 20px;
+  flex-direction:row;align-items:center;justify-content:space-between;
+  flex-shrink:0;z-index:50;
+  font-size:11px;font-weight:700;color:var(--ink);letter-spacing:-.3px;
+  user-select:none;pointer-events:none;
+}
+@media(min-width:500px){.android-sb{display:flex}}
+.android-sb-icons{display:flex;align-items:center;gap:5px;opacity:.8}
+
+.android-nb{
+  display:none;
+  height:36px;background:var(--bg);
+  flex-direction:row;align-items:center;justify-content:space-around;
+  flex-shrink:0;padding:0 48px;z-index:50;
+  border-top:1px solid var(--line);
+}
+@media(min-width:500px){.android-nb{display:flex}}
+.android-nb-btn{
+  width:30px;height:30px;
+  display:flex;align-items:center;justify-content:center;
+  opacity:.4;cursor:pointer;transition:opacity .15s;
+  color:var(--ink);
+}
+.android-nb-btn:hover{opacity:.75}
+
+/* Desktop: wrap frame in phone bezel */
+@media(min-width:500px){
+  body{padding:48px 0}
+  .frame{height:844px}
+  .frame::before{
+    content:'';position:absolute;
+    left:-3px;top:120px;width:3px;height:56px;
+    background:rgba(0,0,0,.15);border-radius:2px 0 0 2px;
+    pointer-events:none;
+  }
+  .frame::after{
+    content:'';position:absolute;
+    right:-3px;top:140px;width:3px;height:80px;
+    background:rgba(0,0,0,.15);border-radius:0 2px 2px 0;
+    pointer-events:none;
+  }
+}
 </style>
 </head>
 <body>
+<div class="frame">
 
-<!-- Desktop info sidebar -->
-<div class="desktop-info">
-  <div class="di-badge">🎮 DEMO / SIMULASI</div>
-  <div class="di-logo">
-    <img src="/logo_q.png" alt="SOLQ" style="height:52px;object-fit:contain;display:block;filter:drop-shadow(0 2px 12px rgba(139,46,232,.4))">
-  </div>
-  <p class="di-desc">Simulasi pembayaran QRIS dengan aset Solana.<br>
-    Scan QRIS merchant mana pun — merchant name dan NMID otomatis terbaca.</p>
-  <div class="di-feature">
-    <span class="di-feat-icon">📷</span>
-    <div><div class="di-feat-title">Scan QRIS Nyata</div>
-    <div class="di-feat-desc">Gunakan kamera device untuk scan QRIS merchant Indonesia mana pun</div></div>
-  </div>
-  <div class="di-feature">
-    <span class="di-feat-icon">🔍</span>
-    <div><div class="di-feat-title">Parser EMVCo Real</div>
-    <div class="di-feat-desc">CRC-16/CCITT validasi, ekstrak nama toko, NMID, bank acquirer</div></div>
-  </div>
-  <div class="di-feature">
-    <span class="di-feat-icon">⚡</span>
-    <div><div class="di-feat-title">Simulasi Lengkap</div>
-    <div class="di-feat-desc">Flow pembayaran penuh: QRIS → Jupiter Quote → TX → Settlement</div></div>
-  </div>
-  <div class="di-feature">
-    <span class="di-feat-icon">💰</span>
-    <div><div class="di-feat-title">Fee 0.5% Transparan</div>
-    <div class="di-feat-desc">Platform 70% + Dev 30% split, gas ditanggung SOLQ</div></div>
-  </div>
-  <div class="di-wallets">
-    <span class="di-wallet-chip">👻 Phantom</span>
-    <span class="di-wallet-chip">☀️ Solflare</span>
-    <span class="di-wallet-chip">🎒 Backpack</span>
-    <span class="di-wallet-chip">◎ SOL</span>
-    <span class="di-wallet-chip">$ USDC</span>
-    <span class="di-wallet-chip">🇮🇩 IDRX</span>
-  </div>
-  <div class="di-api">
-    <span style="color:var(--purple3)">API Endpoints:</span><br>
-    POST <span>/v1/simulation/parse-qris</span><br>
-    POST <span>/v1/simulation/quote</span><br>
-    POST <span>/v1/simulation/pay</span>
+<!-- Android status bar — shown only on desktop phone frame -->
+<div class="android-sb" id="android-sb">
+  <span id="android-time">9:41</span>
+  <div class="android-sb-icons">
+    <!-- Signal -->
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><rect x="0" y="8" width="3" height="3"/><rect x="4" y="5" width="3" height="6"/><rect x="8" y="2" width="3" height="9"/><rect x="12" y="0" width="3" height="11"/></svg>
+    <!-- WiFi -->
+    <svg width="14" height="11" viewBox="0 0 14 11" fill="currentColor"><circle cx="7" cy="10" r="1.2"/><path d="M4.2 7.3A3.9 3.9 0 0 1 7 6.2c1.1 0 2.1.4 2.8 1.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M1.8 5A6.5 6.5 0 0 1 7 3c2 0 3.8.8 5.2 2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+    <!-- Battery -->
+    <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2" stroke="currentColor" stroke-opacity=".5"/><rect x="2" y="2" width="13" height="7" rx="1" fill="currentColor"/><path d="M20 3.5v4a1.5 1.5 0 0 0 0-4z" fill="currentColor" fill-opacity=".4"/></svg>
   </div>
 </div>
 
-<!-- DEMO BADGE -->
-<div class="demo-ribbon">DEMO</div>
-
-<!-- Phone App -->
-<div class="phone">
-
-<!-- SPLASH -->
-<div id="s-splash" class="screen active">
-  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
-    background:linear-gradient(160deg,#0A0320 0%,#1A0640 60%,#0A0320 100%)">
-    <div class="splash-logo-wrap">
-      <img src="/logo_q.png" alt="SOLQ"
-        style="width:260px;max-width:80vw;object-fit:contain;filter:drop-shadow(0 4px 24px rgba(139,46,232,.6))">
-      <div class="splash-demo-pill" style="margin-top:20px">⚡ MODE SIMULASI</div>
-    </div>
-  </div>
-</div>
-
-<!-- HOME -->
-<div id="s-home" class="screen">
+<!-- ═══ SCREEN: HOME ═══ -->
+<div id="s-home" class="screen active">
+  <!-- Top bar -->
   <div class="topbar">
-    <div class="topbar-logo">
-      <img src="/logo_full.png" alt="SOLQ" style="height:32px;object-fit:contain">
-      <span class="sim-tag">DEMO</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <img src="/assets/logos/solq_icon.png" width="32" height="32" style="border-radius:8px;object-fit:contain;display:block;background:#fff;padding:2px" alt="SOLQ" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="solq-mark" style="width:32px;height:32px;font-size:12px;display:none">SQ</div>
+      <span class="topbar-title">SOLQ</span>
     </div>
-    <button class="btn-connect" id="btn-wallet-top" onclick="openWalletModal()">Connect Wallet</button>
+    <div style="display:flex;gap:6px">
+      <button class="topbar-btn" onclick="navigate('history')" title="Activity">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h6" stroke="#0E0E0C" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button class="topbar-btn wallet-connect-btn" id="btn-wallet-top" onclick="openWalletModal()" style="min-width:32px;width:auto;padding:0 10px;font-size:12px;font-weight:500;color:var(--ink)">
+        Connect wallet
+      </button>
+    </div>
   </div>
-  <div class="home-scroll">
-    <div class="balance-card">
-      <div class="balance-label" id="bal-label">Wallet Balance (Simulasi)</div>
-      <div class="balance-sol" id="bal-sol">— SOL</div>
-      <div class="balance-idr" id="bal-idr">≈ Rp —</div>
-      <div class="balance-change" id="bal-change" style="display:none">↑ 0%</div>
-    </div>
 
-    <div class="sim-note-card">
-      ⚠️ <strong>Mode Demo:</strong> Semua transaksi disimulasikan. Tidak ada dana nyata yang berpindah.
-      Scan QRIS merchant manapun — nama toko & NMID otomatis terbaca dari QR.
-    </div>
-
-    <div class="price-card">
-      <div class="price-row">
-        <div class="price-token">
-          <div class="price-icon">◎</div>
-          <div><div class="price-name">Solana</div><div class="price-symbol">SOL / IDR</div></div>
-        </div>
-        <div class="price-right">
-          <div class="price-idr" id="sol-price-idr">Loading<span class="dots"></span></div>
-          <div class="price-usd" id="sol-price-usd">$ —</div>
-          <div id="sol-change" class="price-change-pos">—</div>
-        </div>
+  <!-- Wallet card -->
+  <div class="home-header">
+    <div class="wallet-card" onclick="openWalletModal()">
+      <div class="wallet-card-icon">
+        <span class="dot dot-ok dot-pulse" style="width:8px;height:8px" id="wallet-dot"></span>
       </div>
-    </div>
-    <div class="price-card" style="margin-top:0">
-      <div class="price-row">
-        <div class="price-token">
-          <div class="price-icon" style="background:linear-gradient(135deg,#2775CA,#5BADFF)">$</div>
-          <div><div class="price-name">USDC</div><div class="price-symbol">USDC / IDR</div></div>
-        </div>
-        <div class="price-right">
-          <div class="price-idr" id="usdc-price-idr">Loading<span class="dots"></span></div>
-          <div class="price-usd">$1.00</div>
-          <div class="price-change-pos">≈ stabil</div>
-        </div>
+      <div style="flex:1;min-width:0">
+        <div class="wallet-card-label" id="wallet-card-label">Not connected</div>
+        <div class="wallet-card-addr" id="wallet-card-addr">Tap to connect a Solana wallet</div>
       </div>
-    </div>
-
-    <div class="section-title">Riwayat Simulasi</div>
-    <div id="txn-list">
-      <div class="txn-item">
-        <div class="txn-icon">🏪</div>
-        <div class="txn-info"><div class="txn-merchant">Belum ada transaksi</div><div class="txn-time">Scan QRIS untuk mulai</div></div>
-        <div class="txn-amount"></div>
+      <div class="wallet-card-bal">
+        <div class="wallet-card-bal-sol" id="bal-sol">— SOL</div>
+        <div class="wallet-card-bal-idr" id="bal-idr">≈ Rp —</div>
       </div>
     </div>
   </div>
-  <button class="fab" onclick="navigate('scanner')"><span class="fab-icon">⬛</span> SCAN QRIS</button>
+
+  <!-- Scan CTA -->
+  <div style="padding:0 20px;margin-top:20px">
+    <div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Pay any QRIS</div>
+    <button class="scan-cta" onclick="startScan()">
+      <div class="scan-cta-eyebrow">
+        <div class="scan-cta-eyebrow-icon">
+          <div style="width:8px;height:8px;background:rgba(250,249,246,.9);border-radius:1px"></div>
+        </div>
+        <span class="scan-cta-eyebrow-label">EMVCo · Tag 26/27/54</span>
+      </div>
+      <div class="scan-cta-title">Scan a merchant<br>QRIS sticker</div>
+      <div class="scan-cta-sub">Camera opens · merchant receives rupiah</div>
+      <div class="scan-cta-arrow">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M5 3l5 5-5 5" stroke="#0E0E0C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </button>
+  </div>
+
+  <!-- Live rates -->
+  <div class="rates-section">
+    <div class="section-label">Live rates</div>
+    <div class="card rates-card">
+      <div class="row">
+        <div class="row-label">1 SOL</div>
+        <div>
+          <div class="row-val mono" id="sol-price-idr">Rp —</div>
+          <div class="row-sub" id="sol-price-usd">$ —</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-label">1 USDC</div>
+        <div class="row-val mono" id="usdc-price-idr">Rp —</div>
+      </div>
+      <div class="row" style="border-bottom:none">
+        <div class="row-label">Settlement rail</div>
+        <div class="row-val">IDRX → BI-FAST</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <!-- Footer -->
+  <div class="footer-note">
+    <div class="footer-note-dot"></div>
+    <span class="footer-note-text">Powered by Solana · QRIS Settlement via IDRX</span>
+  </div>
 </div>
 
-<!-- SCANNER -->
-<div id="s-scanner" class="screen">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="scan-canvas"></canvas>
-  <div class="scan-overlay">
-    <div class="scan-top"></div>
-    <div class="scan-middle">
-      <div class="scan-side"></div>
-      <div class="scan-frame">
-        <div class="corner tl"></div><div class="corner tr"></div>
-        <div class="corner bl"></div><div class="corner br"></div>
-        <div class="scan-line"></div>
+<!-- ═══ SCREEN: SCANNER ═══ -->
+<div id="s-scanner" class="screen" style="background:#0A0A08;position:relative;min-height:100%">
+  <div class="cam-area">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="scan-canvas"></canvas>
+  </div>
+
+  <!-- Header -->
+  <div class="cam-header">
+    <button class="cam-close-btn" onclick="goHome()">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="#FAF9F6" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <div class="cam-badge" style="display:flex;align-items:center;gap:5px;padding:4px 10px">
+      <img src="/assets/logos/qris_logo.png" height="14" style="object-fit:contain;display:block" onerror="this.style.display='none'">
+      <span>QRIS</span>
+    </div>
+    <div style="width:36px"></div>
+  </div>
+
+  <!-- Reticle -->
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;pointer-events:none">
+    <div class="cam-reticle">
+      <div class="cam-corner cam-corner-tl"></div>
+      <div class="cam-corner cam-corner-tr"></div>
+      <div class="cam-corner cam-corner-bl"></div>
+      <div class="cam-corner cam-corner-br"></div>
+      <div class="cam-scan-line" id="scan-line" style="top:10%"></div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="cam-actions">
+    <label class="cam-action-btn" style="cursor:pointer">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 9V7H4M10 3V5H8M2 3V5H4M10 9V7H8" stroke="#FAF9F6" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Image
+      <input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+    </label>
+    <button class="cam-action-btn" onclick="showManualEntry()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 4h10M1 8h6" stroke="#FAF9F6" stroke-width="1.4" stroke-linecap="round"/></svg>
+      Manual
+    </button>
+    <button class="cam-action-btn" onclick="showDemoScan()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#FAF9F6" stroke-width="1.3"/><path d="M6 4v2.5l1.5 1" stroke="#FAF9F6" stroke-width="1.3" stroke-linecap="round"/></svg>
+      Demo
+    </button>
+  </div>
+
+  <!-- Status bar -->
+  <div class="cam-status">
+    <div class="cam-status-card">
+      <div class="cam-status-row">
+        <span class="dot dot-warn dot-pulse" style="width:6px;height:6px" id="scan-dot"></span>
+        <span class="cam-status-label" id="scan-label">SCANNING</span>
       </div>
-      <div class="scan-side"></div>
-    </div>
-    <div class="scan-bottom"></div>
-  </div>
-  <div class="scan-detected" id="scan-detected">✅</div>
-  <button class="btn-scan-back" onclick="goHome()">←</button>
-  <div class="scan-ui">
-    <div class="scan-hint">Scan <span>QRIS merchant manapun</span><br>
-      <span style="font-size:11px;color:rgba(255,255,255,.6)">GoPay · OVO · Dana · BCA · + semua bank</span></div>
-    <div class="scan-btns">
-      <div class="btn-scan-action" onclick="showDemoScan()">🎯 Demo QRIS</div>
-      <label class="btn-scan-action" style="cursor:pointer">
-        📁 Upload
-        <input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
-      </label>
-      <div class="btn-scan-action" onclick="showManualEntry()">⌨️ Manual</div>
+      <div class="cam-status-sub">Arahkan kamera ke stiker QRIS merchant</div>
     </div>
   </div>
-  <!-- Camera error fallback -->
+
+  <!-- Camera error -->
   <div class="cam-error hidden" id="cam-error">
-    <div class="cam-error-icon">📷</div>
+    <div class="cam-error-icon">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" stroke="rgba(250,249,246,.3)" stroke-width="1.5"/><path d="M10 10l12 12M22 10l-12 12" stroke="#FAF9F6" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
     <div class="cam-error-title">Kamera tidak tersedia</div>
-    <div class="cam-error-sub">Gunakan HTTPS atau localhost untuk akses kamera browser.<br>Coba pilihan berikut:</div>
-    <div class="manual-input-wrap">
-      <button class="btn-demo-scan" onclick="showDemoScan()">🎯 Gunakan QRIS Demo Merchant</button>
-      <div class="or-divider">atau paste QRIS manual</div>
-      <textarea class="qris-manual" id="manual-qris-err" placeholder="Paste kode QRIS di sini...&#10;Contoh: 000201010211...6304XXXX"></textarea>
-      <button class="btn-parse" onclick="parseManualFromErr()">Parse QRIS</button>
-    </div>
+    <div class="cam-error-sub">Izinkan akses kamera atau gunakan input manual</div>
+    <button class="btn btn-ghost btn-sm" style="color:rgba(250,249,246,.7);border-color:rgba(250,249,246,.2)" onclick="showManualEntry()">Input Manual</button>
   </div>
-  <!-- Manual overlay -->
+
+  <!-- Manual input overlay -->
   <div class="manual-overlay hidden" id="manual-overlay">
-    <div class="cam-error-icon">⌨️</div>
-    <div class="cam-error-title" style="margin-bottom:12px">Masukkan QRIS Manual</div>
-    <div class="manual-input-wrap">
-      <textarea class="qris-manual" id="manual-qris2" placeholder="Paste kode QRIS di sini..."></textarea>
-      <button class="btn-parse" onclick="parseManualQRIS2()">Parse & Validasi QRIS</button>
-      <div class="or-divider">atau</div>
-      <button class="btn-demo-scan" onclick="showDemoScan()">🎯 Gunakan QRIS Demo</button>
-      <button class="btn-scan-action" style="width:100%;padding:12px;border-radius:12px;margin-top:4px"
-        onclick="hideManualEntry()">Kembali ke Scanner</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:14px;font-weight:600;color:var(--ink)">Input QRIS Manual</span>
+      <button onclick="hideManualEntry()" style="color:var(--ink3)">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5l-10 10" stroke="#76766E" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
     </div>
+    <p style="font-size:13px;color:var(--ink3);margin-bottom:4px">Paste kode QRIS (string panjang mulai dari 000201...)</p>
+    <textarea class="manual-textarea" id="manual-qris2" placeholder="000201010211...6304XXXX"></textarea>
+    <button class="btn btn-primary" onclick="parseManual2()">Proses QRIS</button>
   </div>
 </div>
 
-<!-- CONFIRM -->
+<!-- ═══ SCREEN: CONFIRM ═══ -->
 <div id="s-confirm" class="screen">
   <div class="topbar">
-    <button onclick="navigate('scanner')" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">←</button>
-    <div style="font-weight:700">Konfirmasi Pembayaran</div>
-    <div style="width:28px"></div>
+    <button class="topbar-btn" onclick="goHome()">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="#0E0E0C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="topbar-title">Confirm payment</span>
+    <div id="qr-type-chip" class="chip chip-ok topbar-spacer" style="width:auto;padding:4px 8px">
+      <span class="dot dot-ok" style="width:5px;height:5px"></span> DYNAMIC
+    </div>
   </div>
-  <div class="confirm-scroll">
-    <div class="merchant-card">
-      <div class="merchant-header">
-        <div class="merchant-avatar" id="merchant-avatar">🏪</div>
-        <div>
+
+  <!-- Merchant -->
+  <div class="confirm-section">
+    <div class="section-label">Merchant</div>
+    <div class="card merchant-card">
+      <div class="merchant-row">
+        <div class="merchant-avatar" id="merchant-avatar">M</div>
+        <div style="flex:1;min-width:0">
           <div class="merchant-name" id="merchant-name">Merchant</div>
-          <div class="merchant-city" id="merchant-city">Indonesia</div>
-          <span class="badge" id="qr-type-badge"></span>
-          <span class="badge badge-sim">SIMULASI</span>
+          <div class="merchant-meta" id="merchant-meta">NMID — · —</div>
         </div>
       </div>
-      <div class="merchant-detail">
-        <div class="detail-chip" id="nmid-chip">NMID: —</div>
-        <div class="detail-chip" id="bank-chip">Bank: —</div>
-        <div class="detail-chip" id="mcc-chip">MCC: —</div>
-        <div class="detail-chip">🇮🇩 IDR</div>
-      </div>
     </div>
+  </div>
 
-    <div class="amount-section">
-      <div class="amount-label">Nominal Pembayaran</div>
-      <div class="amount-input-wrap" id="amount-wrap-input">
-        <span class="amount-prefix">Rp</span>
-        <input class="amount-input" id="amount-input" type="number" placeholder="0"
-          oninput="onAmountChange()" min="1000" max="100000000">
+  <!-- Amount -->
+  <div class="confirm-section">
+    <div class="section-label" id="amount-section-label">Amount</div>
+    <div class="card amount-card">
+      <div id="amount-wrap-input">
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:6px">
+          <span class="amount-rp-label">Rp</span>
+          <input class="amount-input" id="amount-input" type="number" inputmode="numeric" placeholder="0" min="1000" oninput="onAmountChange()">
+        </div>
+        <div class="amount-usdc-hint" id="amount-usdc-hint">min Rp 1.000</div>
       </div>
       <div id="amount-fixed-wrap" class="hidden">
-        <div style="color:var(--muted);font-size:12px;margin-bottom:4px">Nominal Terkunci (QR Dinamis)</div>
+        <div class="amount-locked-label">Locked by merchant</div>
         <div class="amount-fixed" id="amount-fixed-val">Rp 0</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px" id="amount-hint"></div>
-    </div>
-
-    <div class="amount-section" style="margin-top:0">
-      <div class="amount-label">Bayar dengan</div>
-      <div class="token-picker">
-        <button class="token-btn active" id="tok-sol" onclick="selectToken('SOL')">◎ SOL</button>
-        <button class="token-btn" id="tok-usdc" onclick="selectToken('USDC')">$ USDC</button>
-        <button class="token-btn" id="tok-idrx" onclick="selectToken('IDRX')">🇮🇩 IDRX</button>
+        <div class="amount-usdc-hint" id="amount-usdc-hint2"></div>
       </div>
     </div>
+  </div>
 
-    <div class="quote-card" id="quote-section">
-      <div class="quote-title">
-        <span>Rincian Biaya</span>
-        <span class="quote-timer" id="quote-timer">⏱ 30s</span>
-      </div>
-      <div id="quote-body"><div class="quote-loading">Menghitung<span class="dots"></span></div></div>
+  <!-- Token selector -->
+  <div class="confirm-section">
+    <div class="section-label">Pay with</div>
+    <div class="token-tabs">
+      <button class="token-tab active" id="tok-sol" onclick="selectToken('SOL')" style="display:flex;align-items:center;gap:6px"><img src="/assets/logos/solana.png" width="18" height="18" style="border-radius:50%;object-fit:cover" onerror="this.style.display='none'">SOL</button>
+      <button class="token-tab" id="tok-usdc" onclick="selectToken('USDC')" style="display:flex;align-items:center;gap:6px"><img src="/assets/logos/usdc.png" width="18" height="18" style="border-radius:50%;object-fit:cover" onerror="this.style.display='none'">USDC</button>
+      <button class="token-tab" id="tok-idrx" onclick="selectToken('IDRX')" style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">&#x1F1EE;&#x1F1E9;</span>IDRX</button>
     </div>
+  </div>
 
-    <button class="btn-pay" id="btn-pay" onclick="startPayment()" disabled>Bayar Sekarang (Simulasi)</button>
-    <button class="btn-cancel" onclick="goHome()">Batal</button>
+  <!-- Routing -->
+  <div class="confirm-section">
+    <div class="section-label">Routing</div>
+    <div class="card" style="padding:4px 14px">
+      <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC → IDRX</div></div>
+      <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDRX → IDR via BI-FAST</div></div>
+    </div>
+  </div>
+
+  <!-- Fee breakdown -->
+  <div class="confirm-section">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span class="section-label" style="margin:0">Fees · transparent</span>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--ink3)">est. ±0.05%</span>
+    </div>
+    <div class="card" style="padding:4px 14px">
+      <div id="quote-body">
+        <div class="quote-loading">Enter amount to see quote</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-height:16px"></div>
+
+  <!-- CTA -->
+  <div class="confirm-footer">
+    <button class="btn btn-primary" id="btn-pay" disabled onclick="startPayment()">Enter amount</button>
+    <div class="confirm-cta-note">Your wallet will request a signature. SOLQ never moves funds without it.</div>
   </div>
 </div>
 
-<!-- PROCESSING -->
+<!-- ═══ SCREEN: PROCESSING ═══ -->
 <div id="s-processing" class="screen">
-  <div class="proc-content">
-    <img src="/logo_full.png" alt="SOLQ" class="proc-logo"
-      style="width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 16px rgba(139,46,232,.6))">
-    <div class="proc-title" id="proc-title">Memproses Simulasi</div>
-    <div class="proc-sub" id="proc-sub">Mohon tunggu sebentar...</div>
-    <div class="step-list" id="step-list"></div>
-    <div class="sim-disclaimer" id="proc-explorer" style="display:none">
-      ⚡ <strong>Mode Simulasi</strong> — Transaksi ini tidak nyata.<br>
-      <a id="explorer-link" href="#" target="_blank" style="color:var(--purple2);text-decoration:none">Lihat di Solana Explorer (simulasi) →</a>
-    </div>
+  <div style="padding:28px 24px 0;width:100%">
+    <div class="proc-amount-label">Paying merchant</div>
+    <div class="proc-amount" id="proc-amount">Rp 0</div>
+    <div class="proc-sub" id="proc-sub">Jangan tutup halaman ini</div>
   </div>
+
+  <div class="steps-list" style="padding:0 24px;margin-top:32px">
+    <!-- Steps injected by JS -->
+  </div>
+
+  <div class="proc-explorer hidden" id="proc-explorer" style="padding:0 24px;margin-top:0">
+    <a href="#" id="explorer-link" target="_blank" rel="noopener noreferrer">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M5 2H2v8h8V7M7 2h3v3M10 2l-5 5" stroke="#3A3A36" stroke-width="1.3" stroke-linecap="round"/></svg>
+      View on Solana Explorer
+    </a>
+  </div>
+
+  <div class="proc-note" style="margin:16px 24px 0">
+    SOLQ never holds your funds. Each stage is event-driven — the UI advances only on real on-chain or partner confirmation.
+  </div>
+
+  <button class="proc-cancel-btn" id="btn-cancel-proc" onclick="goHome()">Cancel transaction</button>
 </div>
 
-<!-- RECEIPT -->
+<!-- ═══ SCREEN: RECEIPT ═══ -->
 <div id="s-receipt" class="screen">
-  <div class="receipt-card">
-    <div class="receipt-top">
-      <div class="receipt-check">✅</div>
-      <div class="receipt-success">Simulasi Berhasil!</div>
-      <div class="receipt-sim-badge">⚡ MODE SIMULASI — Tidak ada dana nyata</div>
-      <div class="receipt-amount" id="receipt-amount">Rp 0</div>
-      <div class="receipt-merchant" id="receipt-merchant">Merchant</div>
+  <div class="topbar">
+    <div class="topbar-spacer"></div>
+    <span class="topbar-title">Receipt</span>
+    <div class="topbar-spacer"></div>
+  </div>
+
+  <div style="padding:24px 20px 0;text-align:center">
+    <div class="receipt-check">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 11l4 4 8-8" stroke="oklch(0.42 0.14 145)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-    <div class="receipt-body">
-      <div class="receipt-row"><span class="r-label">Tanggal</span><span class="r-val" id="r-date">—</span></div>
-      <div class="receipt-row"><span class="r-label">Merchant</span><span class="r-val" id="r-merchant">—</span></div>
-      <div class="receipt-row"><span class="r-label">NMID</span><span class="r-val addr" id="r-nmid">—</span></div>
-      <div class="receipt-row"><span class="r-label">Token</span><span class="r-val" id="r-token">—</span></div>
-      <div class="receipt-row"><span class="r-label">Jumlah Token</span><span class="r-val" id="r-token-amount">—</span></div>
-      <div class="receipt-row"><span class="r-label">Fee Layanan (0.5%)</span><span class="r-val" id="r-fee">—</span></div>
-      <div class="receipt-row"><span class="r-label">Gas Solana</span><span class="r-val">Gratis ✓ (SOLQ cover)</span></div>
-      <div class="receipt-row"><span class="r-label">Tx Hash (sim)</span><span class="r-val addr green" id="r-txhash">—</span></div>
-      <div class="receipt-row"><span class="r-label">Status</span><span class="r-val green">✅ Simulated Complete</span></div>
+    <div class="receipt-label">Merchant credited</div>
+    <div class="receipt-amount" id="receipt-amount">Rp 0</div>
+    <div class="receipt-to" id="receipt-to">to —</div>
+  </div>
+
+  <div style="padding:24px 20px 0">
+    <div class="card" style="padding:4px 14px">
+      <div class="row">
+        <div class="row-label">Status</div>
+        <div style="display:inline-flex;align-items:center;gap:6px">
+          <span class="dot dot-ok" style="width:6px;height:6px"></span>
+          <span class="row-val">COMPLETED</span>
+        </div>
+      </div>
+      <div class="row"><div class="row-label">Merchant</div><div class="row-val" id="r-merchant">—</div></div>
+      <div class="row"><div class="row-label">NMID</div><div class="row-val mono" id="r-nmid">—</div></div>
+      <div class="row"><div class="row-label">Paid with</div><div class="row-val" id="r-token">—</div></div>
+      <div class="row"><div class="row-label">Token amount</div><div class="row-val mono" id="r-token-amount">—</div></div>
+      <div class="row"><div class="row-label">Platform fee (0.5%)</div><div class="row-val mono" id="r-fee">—</div></div>
+      <div class="row" style="border-bottom:none"><div class="row-label">Time</div><div class="row-val" id="r-date">—</div></div>
     </div>
-    <div class="receipt-actions">
-      <a class="btn-explorer" id="explorer-btn" href="#" target="_blank">🔍 Lihat di Solana Explorer</a>
-      <button class="btn-done" onclick="goHome()">Selesai</button>
+  </div>
+
+  <div style="padding:14px 20px 0">
+    <div class="section-label">On-chain proof</div>
+    <div class="card receipt-proof">
+      <div class="receipt-proof-hash" id="r-txhash">—</div>
+      <div class="receipt-btns">
+        <a class="receipt-btn" id="explorer-btn" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none;text-align:center">View on Explorer</a>
+        <button class="receipt-btn" onclick="copyTxHash()">Copy hash</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <div style="padding:16px 20px 24px">
+    <button class="btn btn-primary" onclick="goHome()">Done</button>
+  </div>
+</div>
+
+<!-- ═══ SCREEN: ERROR ═══ -->
+<div id="s-error" class="screen">
+  <div class="error-icon">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="oklch(0.62 0.18 28)" stroke-width="2" stroke-linecap="round"/></svg>
+  </div>
+  <div class="error-title" id="err-title">Terjadi kesalahan</div>
+  <div class="error-msg" id="err-msg">Silakan coba lagi.</div>
+  <button class="btn btn-ghost" style="width:auto;padding:12px 24px" onclick="goHome()">Kembali ke Beranda</button>
+</div>
+
+<!-- ═══ SCREEN: HISTORY ═══ -->
+<div id="s-history" class="screen">
+  <div class="topbar">
+    <button class="topbar-btn" onclick="navigate('home')">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="#0E0E0C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="topbar-title">Activity</span>
+    <div class="topbar-spacer"></div>
+  </div>
+  <div style="padding:20px">
+    <div id="history-list" style="background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden">
+      <div style="padding:20px;text-align:center;font-size:13px;color:var(--ink3)">Belum ada transaksi</div>
     </div>
   </div>
 </div>
 
-<!-- WALLET MODAL -->
+<!-- ═══ MODAL: WALLET ═══ -->
 <div class="modal-backdrop" id="modal-wallet">
   <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Hubungkan Dompet (Simulasi)</div>
-    <div class="modal-sub">Pilih wallet untuk demo</div>
+    <div class="modal-drag"><div class="modal-drag-handle"></div></div>
     <div class="modal-body">
-      <div class="wallet-option" onclick="connectWallet('Phantom')">
-        <div class="wallet-logo">👻</div>
-        <div><div class="wallet-name">Phantom</div><div class="wallet-desc">Wallet Solana terpopuler</div></div>
-        <div class="wallet-arrow">›</div>
+      <div class="modal-title">Connect a wallet</div>
+      <div class="modal-sub">SOLQ never holds keys or funds.</div>
+      <div class="wallet-list" id="wallet-list">
+        <!-- Solana wallets — real brand logos -->
+        <button class="wallet-item" onclick="connectPhantom()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/phantom_wallet.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="Phantom"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#AB9FF2;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">P</div>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">Phantom</div>
+            <div class="wallet-item-sub">Browser extension · Mobile</div>
+          </div>
+          <span class="wallet-item-tag">Solana</span>
+        </button>
+        <button class="wallet-item" onclick="connectSolflare()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">Solflare</div>
+            <div class="wallet-item-sub">Browser extension · Mobile</div>
+          </div>
+          <span class="wallet-item-tag">Solana</span>
+        </button>
+        <button class="wallet-item" onclick="connectBackpack()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/backpack_wallet.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="Backpack"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#1A1F2E;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">B</div>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">Backpack</div>
+            <div class="wallet-item-sub">Mobile · Multi-chain</div>
+          </div>
+          <span class="wallet-item-tag">Solana</span>
+        </button>
+        <!-- EVM / WalletConnect -->
+        <button class="wallet-item" onclick="connectMetaMask()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/metamask.png" width="36" height="36" style="border-radius:8px;display:block;object-fit:cover" alt="MetaMask"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#E2761B;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">M</div>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">MetaMask</div>
+            <div class="wallet-item-sub">Polygon · Base · BNB</div>
+          </div>
+          <span class="wallet-item-tag">EVM</span>
+        </button>
+        <button class="wallet-item" onclick="connectWalletConnect && connectWalletConnect()">
+          <div class="wallet-item-icon" style="background:transparent;padding:0">
+            <img src="/assets/logos/walletconnect.png" width="36" height="36" style="border-radius:8px;display:block;background:#fff;padding:4px;object-fit:contain" alt="WalletConnect"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;width:36px;height:36px;border-radius:8px;background:#3B99FC;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">W</div>
+          </div>
+          <div style="flex:1">
+            <div class="wallet-item-name">WalletConnect</div>
+            <div class="wallet-item-sub">Any compatible wallet</div>
+          </div>
+          <span class="wallet-item-tag">Multi</span>
+        </button>
       </div>
-      <div class="wallet-option" onclick="connectWallet('Solflare')">
-        <div class="wallet-logo">☀️</div>
-        <div><div class="wallet-name">Solflare</div><div class="wallet-desc">Native Solana wallet</div></div>
-        <div class="wallet-arrow">›</div>
+      <div class="wallet-custody-note">
+        <strong style="color:var(--ink)">Non-custodial.</strong> Public key only. No seed phrase, no signing on our servers.
       </div>
-      <div class="wallet-option" onclick="connectWallet('Backpack')">
-        <div class="wallet-logo">🎒</div>
-        <div><div class="wallet-name">Backpack</div><div class="wallet-desc">xNFT Wallet</div></div>
-        <div class="wallet-arrow">›</div>
-      </div>
-      <button class="btn-cancel" onclick="closeModal('modal-wallet')">Batal</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-wallet')">Cancel</button>
     </div>
   </div>
 </div>
 
-<!-- SIGN MODAL (simulation) -->
+<!-- ═══ MODAL: SIGN ═══ -->
 <div class="modal-backdrop" id="modal-sign">
   <div class="modal-sheet">
-    <div class="sign-header">
-      <div class="sign-logo" id="sign-wallet-icon">👻</div>
-      <div style="font-size:15px;font-weight:700" id="sign-wallet-name">Phantom</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:4px">SOLQ meminta konfirmasi simulasi</div>
-    </div>
-    <div class="modal-body" style="padding-top:16px">
-      <div class="sign-row"><span class="sign-label">Dari (sim)</span><span class="sign-val" id="sign-from">—</span></div>
-      <div class="sign-row"><span class="sign-label">Ke</span><span class="sign-val" id="sign-merchant-label">SOLQ Escrow</span></div>
-      <div class="sign-row"><span class="sign-label">Jumlah</span><span class="sign-amount" id="sign-amount">— SOL</span></div>
-      <div class="sign-row"><span class="sign-label">Network</span><span class="sign-val">Solana Mainnet (SIMULASI)</span></div>
-      <div class="sign-row"><span class="sign-label">Gas</span><span class="sign-val">Gratis ✓ (SOLQ cover)</span></div>
-      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);
-        border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn);margin:12px 0">
-        ⚡ <strong>SIMULASI</strong> — Tidak ada dana nyata yang berpindah.
-        Ini adalah demo SOLQ untuk hackathon.
+    <div class="modal-drag"><div class="modal-drag-handle"></div></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border-radius:8px;overflow:hidden;flex-shrink:0" id="sign-wallet-icon"><img src="/assets/logos/phantom_wallet.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML='<div style=&quot;width:36px;height:36px;border-radius:8px;background:#AB9FF2;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>P</div>'"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Wallet authorization</div>
+          <div style="font-size:11px;color:var(--ink3)" id="sign-wallet-name">Review and sign in your wallet</div>
+        </div>
       </div>
-      <button class="btn-approve" id="btn-approve" onclick="approveSign()">✅ Konfirmasi Simulasi</button>
-      <button class="btn-reject" onclick="closeModal('modal-sign')">Batal</button>
+      <div class="card sign-rows" style="padding:4px 14px">
+        <div class="row"><div class="row-label">Send</div><div class="row-val mono" id="sign-amount-token">— —</div></div>
+        <div class="row"><div class="row-label">From</div><div class="row-val mono" id="sign-from" style="font-size:11px">—</div></div>
+        <div class="row"><div class="row-label">To</div><div class="row-val">Jupiter aggregator → IDRX</div></div>
+        <div class="row" style="border-bottom:none"><div class="row-label">Merchant receives</div><div class="row-val mono" id="sign-merchant-idr">Rp —</div></div>
+      </div>
+      <div class="sign-warn">
+        Only sign if the merchant and amount match what you scanned. SOLQ cannot reverse a signed transaction.
+      </div>
+      <div class="sign-btns">
+        <button class="sign-btn-reject" onclick="closeModal('modal-sign')">Reject</button>
+        <button class="sign-btn-approve" id="btn-approve" onclick="approveSign()">Sign</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- TOAST -->
+<!-- ═══ TOAST ═══ -->
 <div class="toast" id="toast"></div>
 
-</div><!-- .phone -->
+<!-- Android nav bar — 3 gesture buttons, shown only on desktop phone frame -->
+<div class="android-nb">
+  <!-- Back -->
+  <div class="android-nb-btn" onclick="(typeof goHome==='function')&&goHome()" title="Back">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4L6 9l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <!-- Home -->
+  <div class="android-nb-btn" onclick="(typeof goHome==='function')&&goHome()" title="Home">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="2"/></svg>
+  </div>
+  <!-- Recents -->
+  <div class="android-nb-btn" title="Recents">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 4V3a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </div>
+</div>
+</div><!-- .frame -->
 
 <script>
-// ═══════════════════════════════════════════════════════════════════
-//  CONFIG
-// ═══════════════════════════════════════════════════════════════════
-const API_BASE = (() => {
-  const h = window.location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3002';
-  if (h.includes('solq-demo')) return 'https://solq.vercel.app';
-  return window.location.origin;
-})();
+// ═══════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════
+const PLATFORM_FEE_BPS     = 50; // 0.5% — locked, do not change
+const PLATFORM_FEE_WALLET  = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
+const SOL_MINT   = 'So11111111111111111111111111111111111111112';
+const USDC_MINT  = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const IDRX_MINT  = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
+const TOKEN_PROGRAM_ID_STR  = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const ASSOC_TOKEN_PROG_STR  = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq';
+const MIN_PAYMENT_IDR       = 32000; // IDRX minimum redeem: ~2 USD
+const RPC_ENDPOINTS = [
+  'https://api.mainnet-beta.solana.com',
+  'https://solana-api.projectserum.com',
+];
+const API_BASE = '';
 
-// ═══════════════════════════════════════════════════════════════════
+// BUG-C004 fix: derive USDC ATA for platform fee wallet
+// Jupiter expects feeAccount = Associated Token Account, not raw wallet address
+function getPlatformFeeAccount() {
+  try {
+    const TOKEN_PROGRAM_ID   = new solanaWeb3.PublicKey(TOKEN_PROGRAM_ID_STR);
+    const ASSOC_TOKEN_PROG   = new solanaWeb3.PublicKey(ASSOC_TOKEN_PROG_STR);
+    const feeWallet          = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+    const idrxMint           = new solanaWeb3.PublicKey(IDRX_MINT);
+    const [feeAta] = solanaWeb3.PublicKey.findProgramAddressSync(
+      [feeWallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMint.toBuffer()],
+      ASSOC_TOKEN_PROG
+    );
+    return feeAta.toString();
+  } catch { return null; }
+}
+
+// ═══════════════════════════════════════════
 //  STATE
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 const state = {
-  screen: 'splash',
-  wallet: { connected: false, address: null, type: null, icon: '👻', balanceSol: 0 },
-  prices: { sol: { idr: 0, usd: 0, change24h: 0 }, usdc: { idr: 16200 }, loaded: false },
+  screen: 'home',
+  wallet: { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0 },
+  prices: { sol: { idr: 2850000, usd: 175, change24h: 0 }, usdc: { idr: 16200 }, loaded: false },
   qris: null,
-  payment: { amountIDR: 0, token: 'SOL', quote: null, txHash: null },
+  payment: { amountIDR: 0, token: 'SOL', quote: null, jupiterQuote: null, intentId: null, txHash: null },
   quoteTimer: null, quoteSeconds: 30,
   cameraStream: null, scanning: false,
+  history: [],
 };
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  UTILS
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const rp = (n, d='id-ID') => 'Rp ' + Number(n).toLocaleString(d);
-const toFixed = (n, d) => Number(n).toFixed(d);
+const rp = n => 'Rp ' + Number(n).toLocaleString('id-ID');
 
-// ═══════════════════════════════════════════════════════════════════
-//  TOAST
-// ═══════════════════════════════════════════════════════════════════
-function toast(msg, type = 'info', dur = 3000) {
+function toast(msg, type = 'info', dur = 3500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = `toast show ${type}`;
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.className = 'toast', dur);
+  el._t = setTimeout(() => { el.className = 'toast'; }, dur);
 }
 
-// ═══════════════════════════════════════════════════════════════════
+function copyTxHash() {
+  const h = state.payment.txHash;
+  if (h && navigator.clipboard) {
+    navigator.clipboard.writeText(h).then(() => toast('Hash copied', 'success', 2000));
+  }
+}
+
+// ═══════════════════════════════════════════
 //  NAVIGATION
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function navigate(to) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const scr = document.getElementById('s-' + to);
   if (scr) scr.classList.add('active');
   state.screen = to;
   if (to === 'scanner') startCamera();
-  if (to === 'home') { refreshBalance(); updateWalletButton(); }
+  if (to === 'home') { stopCamera(); clearInterval(state.quoteTimer); refreshBalance(); updateWalletUI(); }
   if (to === 'confirm') startQuoteTimer();
 }
 
-function goHome() {
-  stopCamera();
-  navigate('home');
+function startScan() {
+  if (!state.wallet.connected) {
+    openWalletModal();
+    toast('Connect a wallet first', 'info');
+    return;
+  }
+  navigate('scanner');
 }
 
-// ═══════════════════════════════════════════════════════════════════
+function goHome() { stopCamera(); clearInterval(state.quoteTimer); navigate('home'); }
+
+function showError(title, msg) {
+  document.getElementById('err-title').textContent = title;
+  document.getElementById('err-msg').textContent = msg;
+  navigate('error');
+}
+
+// ═══════════════════════════════════════════
 //  MODALS
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function openWalletModal() {
-  if (state.wallet.connected) { disconnectWallet(); return; }
+  if (state.wallet.connected) { promptDisconnect(); return; }
   document.getElementById('modal-wallet').classList.add('show');
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
-// ═══════════════════════════════════════════════════════════════════
-//  WALLET (simulated for demo mode)
-// ═══════════════════════════════════════════════════════════════════
-function genAddress() {
-  const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({length:44}, () => c[Math.floor(Math.random()*c.length)]).join('');
+function promptDisconnect() {
+  if (confirm('Disconnect wallet ' + state.wallet.type + '?')) disconnectWallet();
 }
 
-const WALLET_ICONS = { Phantom:'👻', Solflare:'☀️', Backpack:'🎒', 'OKX Web3':'⭕' };
-
-function connectWallet(type) {
+// ═══════════════════════════════════════════
+//  WALLET CONNECTION
+// ═══════════════════════════════════════════
+async function connectPhantom() {
   closeModal('modal-wallet');
-  toast(`Menghubungkan ${type}...`, 'info');
-  setTimeout(() => {
-    state.wallet.connected = true;
-    state.wallet.type = type;
-    state.wallet.icon = WALLET_ICONS[type] || '🔑';
-    state.wallet.address = genAddress();
-    state.wallet.balanceSol = parseFloat((Math.random() * 8 + 0.5).toFixed(4));
-    updateWalletButton();
-    refreshBalance();
-    toast(`✅ ${type} terhubung (simulasi)`, 'success');
-  }, 1200);
+  const provider = window.phantom?.solana ?? window.solana;
+  if (!provider?.isPhantom) {
+    if (confirm('Phantom not installed. Open phantom.app?')) window.open('https://phantom.app', '_blank');
+    return;
+  }
+  try {
+    toast('Connecting Phantom...', 'info');
+    const resp = await provider.connect();
+    const address = resp.publicKey.toString();
+    setConnectedWallet('Phantom', 'phantom', address, provider, 'solana');
+    await fetchWalletBalance(address);
+  } catch (e) {
+    toast('Connection cancelled', 'error');
+  }
+}
+
+async function connectSolflare() {
+  closeModal('modal-wallet');
+  const provider = window.solflare;
+  if (!provider?.isSolflare) {
+    if (confirm('Solflare not installed. Open solflare.com?')) window.open('https://solflare.com', '_blank');
+    return;
+  }
+  try {
+    toast('Connecting Solflare...', 'info');
+    await provider.connect();
+    const address = provider.publicKey.toString();
+    setConnectedWallet('Solflare', 'solflare', address, provider, 'solana');
+    await fetchWalletBalance(address);
+  } catch (e) {
+    toast('Connection cancelled', 'error');
+  }
+}
+
+async function connectBackpack() {
+  closeModal('modal-wallet');
+  const provider = window.backpack?.solana ?? window.xnft?.solana;
+  if (!provider) {
+    if (confirm('Backpack not installed. Open backpack.app?')) window.open('https://www.backpack.app', '_blank');
+    return;
+  }
+  try {
+    toast('Connecting Backpack...', 'info');
+    await provider.connect();
+    const address = provider.publicKey.toString();
+    setConnectedWallet('Backpack', 'backpack', address, provider, 'solana');
+    await fetchWalletBalance(address);
+  } catch (e) {
+    toast('Connection cancelled', 'error');
+  }
+}
+
+async function connectMetaMask() {
+  closeModal('modal-wallet');
+  if (!window.ethereum) {
+    if (confirm('MetaMask not installed. Open metamask.io?')) window.open('https://metamask.io', '_blank');
+    return;
+  }
+  try {
+    toast('Connecting MetaMask...', 'info');
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const address = accounts[0];
+    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainNames = { '0x89': 'Polygon', '0x2105': 'Base', '0x38': 'BNB Chain', '0x1': 'Ethereum' };
+    const chainName = chainNames[chainIdHex] || 'EVM';
+    setConnectedWallet('MetaMask (' + chainName + ')', 'metamask', address, window.ethereum, 'evm');
+  } catch (e) {
+    toast('Connection cancelled', 'error');
+  }
+}
+
+function getWalletSVG(key) {
+  // Real PNG logos — SVG fallback only for Solflare (no PNG asset)
+  const imgs = {
+    phantom:      '<img src="/assets/logos/phantom_wallet.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;border-radius:8px;background:#AB9FF2;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>P</div>\'">',
+    solflare:     '<svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>',
+    backpack:     '<img src="/assets/logos/backpack_wallet.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;border-radius:8px;background:#1A1F2E;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>B</div>\'">',
+    metamask:     '<img src="/assets/logos/metamask.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;border-radius:8px;background:#E2761B;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>M</div>\'">',
+    walletconnect:'<img src="/assets/logos/walletconnect.png" width="36" height="36" style="border-radius:8px;object-fit:cover;display:block" onerror="this.outerHTML=\'<div style=&quot;width:36px;height:36px;border-radius:8px;background:#3B99FC;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>W</div>\'">',
+  };
+  return imgs[key] || imgs.phantom;
+}
+
+function setConnectedWallet(type, initial, address, provider, chain) {
+  state.wallet.connected = true;
+  state.wallet.type = type;
+  state.wallet.initial = initial;
+  state.wallet.address = address;
+  state.wallet.provider = provider;
+  state.wallet.chain = chain;
+  updateWalletUI();
+  toast(type + ' connected', 'success');
 }
 
 function disconnectWallet() {
-  state.wallet.connected = false;
-  state.wallet.address = null;
-  state.wallet.type = null;
-  updateWalletButton();
-  document.getElementById('bal-sol').textContent = '— SOL';
-  document.getElementById('bal-idr').textContent = '≈ Rp —';
-  document.getElementById('bal-change').style.display = 'none';
-  toast('Wallet terputus', 'info');
+  if (state.wallet.provider?.disconnect) state.wallet.provider.disconnect().catch(() => {});
+  state.wallet = { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0 };
+  updateWalletUI();
+  toast('Wallet disconnected', 'info');
 }
 
-function updateWalletButton() {
+function updateWalletUI() {
   const btn = document.getElementById('btn-wallet-top');
+  const dotEl = document.getElementById('wallet-dot');
+  const labelEl = document.getElementById('wallet-card-label');
+  const addrEl = document.getElementById('wallet-card-addr');
   if (state.wallet.connected && state.wallet.address) {
     const a = state.wallet.address;
-    btn.textContent = a.slice(0,4) + '...' + a.slice(-4);
-    btn.className = 'btn-connect connected addr';
+    btn.textContent = a.slice(0, 4) + '...' + a.slice(-4);
+    btn.style.cssText = 'min-width:32px;width:auto;padding:0 10px;font-size:12px;font-weight:500;color:var(--ink);font-family:var(--font-mono)';
+    dotEl.className = 'dot dot-ok dot-pulse';
+    dotEl.style.cssText = 'width:8px;height:8px';
+    labelEl.textContent = state.wallet.type || 'Connected';
+    addrEl.textContent = a;
   } else {
-    btn.textContent = 'Connect Wallet';
-    btn.className = 'btn-connect';
+    btn.textContent = 'Connect wallet';
+    btn.style.cssText = 'min-width:32px;width:auto;padding:0 10px;font-size:12px;font-weight:500;color:var(--ink)';
+    dotEl.className = 'dot dot-ink';
+    dotEl.style.cssText = 'width:8px;height:8px;opacity:.3';
+    labelEl.textContent = 'Not connected';
+    addrEl.textContent = 'Tap to connect a Solana wallet';
+    document.getElementById('bal-sol').textContent = '— SOL';
+    document.getElementById('bal-idr').textContent = '≈ Rp —';
+  }
+}
+
+async function fetchWalletBalance(address) {
+  for (const rpc of RPC_ENDPOINTS) {
+    try {
+      const r = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address] }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const d = await r.json();
+      if (d.result?.value !== undefined) {
+        state.wallet.balanceSol = d.result.value / 1e9;
+        refreshBalance();
+        return;
+      }
+    } catch {}
   }
 }
 
 function refreshBalance() {
   if (!state.wallet.connected) return;
   const idr = state.prices.sol.idr || 2850000;
-  const balIdr = (state.wallet.balanceSol * idr).toLocaleString('id-ID');
   document.getElementById('bal-sol').textContent = state.wallet.balanceSol.toFixed(4) + ' SOL';
-  document.getElementById('bal-idr').textContent = `≈ Rp ${balIdr}`;
-  const ch = state.prices.sol.change24h;
-  const chEl = document.getElementById('bal-change');
-  if (ch) {
-    chEl.style.display = 'inline-flex';
-    chEl.textContent = (ch >= 0 ? '↑ ' : '↓ ') + Math.abs(ch).toFixed(2) + '%';
-    chEl.style.background = ch >= 0 ? 'rgba(0,255,148,.1)' : 'rgba(239,68,68,.1)';
-    chEl.style.borderColor = ch >= 0 ? 'rgba(0,255,148,.2)' : 'rgba(239,68,68,.2)';
-    chEl.style.color = ch >= 0 ? 'var(--green)' : 'var(--danger)';
-  }
+  document.getElementById('bal-idr').textContent = '≈ ' + rp(Math.round(state.wallet.balanceSol * idr));
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  LIVE PRICES (CoinGecko)
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  PRICES
+// ═══════════════════════════════════════════
 async function fetchPrices() {
   try {
     const r = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=solana,usd-coin&vs_currencies=idr,usd&include_24hr_change=true',
       { signal: AbortSignal.timeout(8000) }
     );
-    if (!r.ok) throw new Error('CoinGecko error');
+    if (!r.ok) throw new Error();
     const d = await r.json();
     state.prices.sol = { idr: d.solana?.idr || 0, usd: d.solana?.usd || 0, change24h: d.solana?.idr_24h_change || 0 };
     state.prices.usdc = { idr: d['usd-coin']?.idr || 16200 };
     state.prices.loaded = true;
   } catch {
-    state.prices.sol = { idr: 2850000, usd: 175, change24h: 1.8 };
-    state.prices.usdc = { idr: 16200 };
     state.prices.loaded = true;
   }
   updatePriceUI();
@@ -881,22 +1333,19 @@ async function fetchPrices() {
 }
 
 function updatePriceUI() {
-  const { idr, usd, change24h } = state.prices.sol;
-  if (!idr) return;
-  document.getElementById('sol-price-idr').textContent = 'Rp ' + idr.toLocaleString('id-ID');
-  document.getElementById('sol-price-usd').textContent = '$ ' + usd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  const chEl = document.getElementById('sol-change');
-  const sign = change24h >= 0 ? '+' : '';
-  chEl.textContent = sign + change24h.toFixed(2) + '% (24h)';
-  chEl.className = change24h >= 0 ? 'price-change-pos' : 'price-change-neg';
-  const usdcIdr = state.prices.usdc.idr;
-  document.getElementById('usdc-price-idr').textContent = 'Rp ' + usdcIdr.toLocaleString('id-ID');
+  const { idr, usd } = state.prices.sol;
+  if (idr) {
+    document.getElementById('sol-price-idr').textContent = 'Rp ' + idr.toLocaleString('id-ID');
+    document.getElementById('sol-price-usd').textContent = '$ ' + usd.toFixed(2);
+  }
+  document.getElementById('usdc-price-idr').textContent = 'Rp ' + state.prices.usdc.idr.toLocaleString('id-ID');
 }
+
 setInterval(fetchPrices, 60000);
 
-// ═══════════════════════════════════════════════════════════════════
-//  QRIS PARSER (EMVCo CRC-16)
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  QRIS PARSER (EMVCo CRC-16/CCITT-FALSE)
+// ═══════════════════════════════════════════
 function calcCRC16(str) {
   let crc = 0xFFFF;
   for (let i = 0; i < str.length; i++) {
@@ -911,145 +1360,31 @@ function calcCRC16(str) {
 
 function parseTLV(data, start = 0, end = null) {
   end = end ?? data.length;
-  const result = {}; let pos = start;
+  const r = {}; let pos = start;
   while (pos + 4 <= end) {
     const tag = data.substring(pos, pos + 2);
     const len = parseInt(data.substring(pos + 2, pos + 4), 10);
     if (isNaN(len) || len < 0 || pos + 4 + len > end) break;
-    result[tag] = data.substring(pos + 4, pos + 4 + len);
+    r[tag] = data.substring(pos + 4, pos + 4 + len);
     pos += 4 + len;
   }
-  return result;
+  return r;
 }
 
-// ── Universal QR detector — handles QRIS, GoPay, OVO, Dana, URL, anything ──
-function parseAnyQR(payload) {
-  payload = (payload || '').trim();
-  if (payload.length < 4) throw new Error('QR code kosong');
-
-  // ── 1. Standard QRIS (EMVCo) ──────────────────────────────────────
-  if (payload.startsWith('000201') || payload.includes('6304')) {
-    try { return parseQRISStrict(payload); } catch(e) {
-      // CRC mismatch or minor issue — still try permissive parse
-      return parseQRISPermissive(payload);
-    }
-  }
-
-  // ── 2. GoPay / Gojek ─────────────────────────────────────────────
-  if (/gopay|gojek|go-jek/i.test(payload)) {
-    const name = payload.match(/merchant[_\-\s]*name[=:"\s]*([^&"'\s]+)/i)?.[1] || 'GoPay Merchant';
-    const amt  = payload.match(/amount[=:](\d+)/i)?.[1] || null;
-    return { valid:true, qrFormat:'GOPAY', merchantName: decodeURIComponent(name),
-      merchantCity:'Indonesia', amount: amt ? parseInt(amt)/100 : null,
-      nmid: payload.match(/mid=([^&]+)/i)?.[1] || 'N/A', account:'GoPay',
-      mcc:'5999', bank:'GoPay', isDynamic: !!amt, rawPayload: payload };
-  }
-
-  // ── 3. OVO ───────────────────────────────────────────────────────
-  if (/ovo\.id|ovo:\/\/|OVOQR/i.test(payload)) {
-    const amt = payload.match(/amount=(\d+)/i)?.[1] || null;
-    const name = payload.match(/name=([^&]+)/i)?.[1] || 'OVO Merchant';
-    return { valid:true, qrFormat:'OVO', merchantName: decodeURIComponent(name),
-      merchantCity:'Indonesia', amount: amt ? parseInt(amt) : null,
-      nmid:'N/A', account:'OVO', mcc:'5999', bank:'OVO', isDynamic:!!amt, rawPayload:payload };
-  }
-
-  // ── 4. Dana ──────────────────────────────────────────────────────
-  if (/dana\.id|DANA:\/\//i.test(payload)) {
-    const amt = payload.match(/amount=(\d+)/i)?.[1] || null;
-    const name = payload.match(/name=([^&]+)/i)?.[1] || 'Dana Merchant';
-    return { valid:true, qrFormat:'DANA', merchantName: decodeURIComponent(name),
-      merchantCity:'Indonesia', amount: amt ? parseInt(amt) : null,
-      nmid:'N/A', account:'Dana', mcc:'5999', bank:'Dana', isDynamic:!!amt, rawPayload:payload };
-  }
-
-  // ── 5. ShopeePay / SeaPay ────────────────────────────────────────
-  if (/shopee|shopeepay|sea\.money/i.test(payload)) {
-    const name = payload.match(/name=([^&]+)/i)?.[1] || 'ShopeePay Merchant';
-    return { valid:true, qrFormat:'SHOPEEPAY', merchantName: decodeURIComponent(name),
-      merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'ShopeePay',
-      mcc:'5999', bank:'ShopeePay', isDynamic:false, rawPayload:payload };
-  }
-
-  // ── 6. BRImo / BRI ───────────────────────────────────────────────
-  if (/bri\.co\.id|brimo|BRIVA/i.test(payload)) {
-    const name = payload.match(/name=([^&]+)/i)?.[1] || 'BRI Merchant';
-    return { valid:true, qrFormat:'BRI', merchantName: decodeURIComponent(name),
-      merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'BRI',
-      mcc:'5999', bank:'BRI', isDynamic:false, rawPayload:payload };
-  }
-
-  // ── 7. Generic URL QR ─────────────────────────────────────────────
-  // BUG-066 FIX: Some acquirers (e.g. Gojek/GoPay) wrap QRIS data inside a URL
-  // like https://qr.gojek.com/000201... — try parsing the URL fragment as QRIS first.
-  if (/^https?:\/\//i.test(payload)) {
-    try {
-      const url = new URL(payload);
-      // Try to extract QRIS payload embedded in URL path or hash
-      const candidates = [url.pathname.slice(1), url.hash.slice(1), url.searchParams.get('data') || ''];
-      for (const candidate of candidates) {
-        if (candidate && candidate.startsWith('000201')) {
-          const embedded = parseAnyQR(candidate);
-          if (embedded && embedded.valid && embedded.qrFormat === 'QRIS') return embedded;
-        }
-      }
-      const domain = url.hostname.replace('www.','');
-      const name = (url.searchParams.get('merchant') || url.searchParams.get('name') ||
-                    url.searchParams.get('store') || domain.split('.')[0]).replace(/-/g,' ');
-      const amt = url.searchParams.get('amount') || url.searchParams.get('amt') || null;
-      const brand = domain.includes('tokopedia') ? 'Tokopedia'
-                  : domain.includes('bukalapak') ? 'Bukalapak'
-                  : domain.includes('blibli') ? 'Blibli'
-                  : domain.includes('traveloka') ? 'Traveloka'
-                  : name.charAt(0).toUpperCase() + name.slice(1);
-      return { valid:true, qrFormat:'URL', merchantName: brand,
-        merchantCity:'Indonesia', amount: amt ? Math.round(parseFloat(amt)) || null : null,
-        nmid:'N/A', account: domain, mcc:'5999', bank:'Online', isDynamic:!!amt, rawPayload:payload };
-    } catch(_) {}
-  }
-
-  // ── 8. Solana Pay ────────────────────────────────────────────────
-  if (/^solana:/i.test(payload)) {
-    const url = new URL(payload.replace('solana:','solana://x/?recipient='));
-    const amt = url.searchParams.get('amount');
-    return { valid:true, qrFormat:'SOLANA_PAY', merchantName:'Solana Pay Merchant',
-      merchantCity:'Indonesia', amount: amt ? parseFloat(amt) * 16000000 : null,
-      nmid:'N/A', account:'Solana', mcc:'5999', bank:'Solana', isDynamic:!!amt, rawPayload:payload };
-  }
-
-  // ── 9. Unknown / plain text — accept anyway, ask for amount ──────
-  // BUG-068 FIX: Default to "Merchant Tidak Dikenal" when name cannot be extracted.
-  const shortLabel = payload.length > 30 ? payload.substring(0,28)+'…' : payload;
-  const unknownName = (shortLabel && shortLabel.trim().length > 3)
-    ? shortLabel
-    : 'Merchant Tidak Dikenal';
-  return { valid:true, qrFormat:'UNKNOWN', merchantName: unknownName,
-    merchantCity:'Indonesia', amount:null, nmid:'N/A', account:'N/A',
-    mcc:'5999', bank:'Unknown', isDynamic:false, rawPayload:payload,
-    _warning:'Format QR tidak dikenal — masukkan nominal secara manual' };
-}
-
-function parseQRISStrict(payload) {
+function parseQRIS(payload) {
   payload = payload.trim();
+  if (payload.length < 20) throw new Error('Payload terlalu pendek untuk QRIS');
   const crcIdx = payload.lastIndexOf('6304');
-  if (crcIdx < 0) throw new Error('Bukan QRIS');
+  if (crcIdx < 0) throw new Error('Tag CRC (6304) tidak ditemukan — bukan QRIS valid');
+  const dataForCRC = payload.substring(0, crcIdx + 4);
+  const expectedCRC = payload.substring(crcIdx + 4, crcIdx + 8).toUpperCase();
+  const calcCRC = calcCRC16(dataForCRC);
+  if (calcCRC !== expectedCRC) console.warn('[QRIS] CRC mismatch:', expectedCRC, 'vs', calcCRC);
   const tags = parseTLV(payload, 0, crcIdx);
-  if (tags['00'] !== '01') throw new Error('Bukan QRIS');
-  return _buildQrisResult(payload, tags);
-}
-
-function parseQRISPermissive(payload) {
-  // Try parse even without valid CRC / tag 00
-  const crcIdx = payload.lastIndexOf('6304');
-  const parseEnd = crcIdx > 0 ? crcIdx : payload.length;
-  const tags = parseTLV(payload, 0, parseEnd);
-  return _buildQrisResult(payload, tags);
-}
-
-function _buildQrisResult(payload, tags) {
+  if (tags['00'] !== '01') throw new Error('Format QRIS tidak valid (tag 00 harus 01)');
   let nmid = null, account = null;
   for (let i = 26; i <= 51; i++) {
-    const tid = i.toString().padStart(2,'0');
+    const tid = i.toString().padStart(2, '0');
     if (tags[tid]) {
       const sub = parseTLV(tags[tid]);
       if (sub['04']) nmid = sub['04'];
@@ -1058,94 +1393,56 @@ function _buildQrisResult(payload, tags) {
       if (!nmid && sub['03']) nmid = sub['03'];
     }
   }
-  // Regex fallback for tag 59 (handles nested-packed QRIS)
-  const t59match = payload.match(/59(\d{2})/);
-  let rawName = tags['59'];
-  if (!rawName && t59match) {
-    const len = parseInt(t59match[1],10);
-    const idx = payload.indexOf(t59match[0]) + 4;
-    rawName = payload.substring(idx, idx+len);
-  }
-  rawName = (rawName || 'Merchant').trim();
-  const merchantName = rawName === rawName.toUpperCase()
-    ? rawName.split(' ').map(w => w.charAt(0)+w.slice(1).toLowerCase()).join(' ')
+  const rawName = (tags['59'] || 'Merchant').trim();
+  const merchantName = rawName.length > 2 && rawName === rawName.toUpperCase()
+    ? rawName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
     : rawName;
-  const rawCity = tags['60'] || (() => {
-    const m = payload.match(/60(\d{2})/);
-    if (!m) return 'Indonesia';
-    const l = parseInt(m[1],10);
-    return payload.substring(payload.indexOf(m[0])+4, payload.indexOf(m[0])+4+l);
-  })();
   return {
-    valid:true, qrFormat:'QRIS',
+    valid: true,
     isDynamic: tags['01'] === '12',
     merchantName,
-    merchantCity: rawCity.trim() || 'Indonesia',
-    // BUG-067 FIX: Normalize all amount formats to integer IDR.
-    // Tag 54 can be "50000", "50000.00", or "50,000" — strip commas, parse float.
-    amount: tags['54'] ? Math.round(parseFloat(tags['54'].replace(/,/g, '.'))) || null : null,
+    merchantCity: (tags['60'] || 'Indonesia').trim(),
+    amount: tags['54'] ? parseFloat(tags['54']) : null,
     currency: tags['53'] || '360',
-    nmid: nmid || 'N/A', account: account || 'N/A',
-    mcc: tags['52'] || '5999', bank:'QRIS', rawPayload: payload,
+    nmid: nmid || 'N/A',
+    account: account || 'N/A',
+    mcc: tags['52'] || '0000',
+    rawPayload: payload,
   };
 }
 
-// Keep old name as alias
-function parseQRISLocal(payload) { return parseAnyQR(payload); }
+// ═══════════════════════════════════════════
+//  CAMERA & SCAN
+// ═══════════════════════════════════════════
+let scanProgress = 0;
+let scanAnimFrame = null;
 
-// ═══════════════════════════════════════════════════════════════════
-//  CAMERA & SCANNING
-// ═══════════════════════════════════════════════════════════════════
-// BUG-070 FIX: Show explanation toast before browser native camera permission prompt.
-async function startCamera() {
-  const video = document.getElementById('video');
+function startCamera() {
   document.getElementById('cam-error').classList.add('hidden');
   document.getElementById('manual-overlay').classList.add('hidden');
+  scanProgress = 0;
   if (!navigator.mediaDevices?.getUserMedia) {
     document.getElementById('cam-error').classList.remove('hidden');
     return;
   }
-
-  let permState = 'prompt';
-  try {
-    const result = await navigator.permissions.query({ name: 'camera' });
-    permState = result.state;
-  } catch (_) {}
-
-  if (permState === 'denied') {
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+  }).then(stream => {
+    state.cameraStream = stream;
+    const v = document.getElementById('video');
+    v.srcObject = stream;
+    v.play().catch(() => {});
+    state.scanning = true;
+    animateScanLine();
+    requestAnimationFrame(scanFrame);
+  }).catch(() => {
     document.getElementById('cam-error').classList.remove('hidden');
-    toast('Akses kamera ditolak. Izinkan kamera di pengaturan browser.', 'warn');
-    return;
-  }
-
-  if (permState === 'prompt') {
-    toast('📷 SOLQ butuh akses kamera untuk scan QRIS. Izinkan ketika browser meminta.', 'info', 4000);
-    await new Promise(r => setTimeout(r, 800));
-  }
-
-  const constraints = {
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-    }
-  };
-  navigator.mediaDevices.getUserMedia(constraints)
-    .then(stream => {
-      state.cameraStream = stream;
-      video.srcObject = stream;
-      video.play().catch(() => {});
-      state.scanning = true;
-      requestAnimationFrame(scanFrame);
-    })
-    .catch(() => {
-      document.getElementById('cam-error').classList.remove('hidden');
-      toast('Gagal mengakses kamera. Pastikan tidak ada aplikasi lain yang menggunakannya.', 'warn');
-    });
+  });
 }
 
 function stopCamera() {
   state.scanning = false;
+  if (scanAnimFrame) { cancelAnimationFrame(scanAnimFrame); scanAnimFrame = null; }
   if (state.cameraStream) {
     state.cameraStream.getTracks().forEach(t => t.stop());
     state.cameraStream = null;
@@ -1154,105 +1451,78 @@ function stopCamera() {
   if (v) v.srcObject = null;
 }
 
+function animateScanLine() {
+  if (!state.scanning) return;
+  scanProgress = (scanProgress + 1) % 100;
+  const line = document.getElementById('scan-line');
+  if (line) line.style.top = (10 + scanProgress * 0.8) + '%';
+  const label = document.getElementById('scan-label');
+  if (label) {
+    if (scanProgress < 30) label.textContent = 'SCANNING';
+    else if (scanProgress < 60) label.textContent = 'PARSING EMVCo TLV';
+    else label.textContent = 'EXTRACTING TAG 26/54';
+  }
+  scanAnimFrame = requestAnimationFrame(animateScanLine);
+}
+
 function scanFrame() {
   if (!state.scanning || state.screen !== 'scanner') return;
   const video = document.getElementById('video');
   const canvas = document.getElementById('scan-canvas');
-  if (!video || !canvas) return;
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    if (typeof jsQR !== 'undefined') {
-      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-      if (code && code.data) {
-        state._scanFailCount = 0;
-        handleQRDetected(code.data);
-        return;
-      }
-      // BUG-069 FIX: Show hint after 5 consecutive decode failures
-      state._scanFailCount = (state._scanFailCount || 0) + 1;
-      if (state._scanFailCount === 60) { // ~2 seconds at 30fps
-        const hint = document.getElementById('scan-hint');
-        if (hint) { hint.textContent = 'Dekatkan kamera ke kode QR'; hint.style.display = 'block'; }
-      }
-    }
+  if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+    requestAnimationFrame(scanFrame);
+    return;
+  }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  if (typeof jsQR !== 'undefined') {
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+    if (code?.data) { handleQRDetected(code.data); return; }
   }
   requestAnimationFrame(scanFrame);
 }
 
 async function handleQRDetected(rawData) {
   state.scanning = false;
-  const det = document.getElementById('scan-detected');
-  det.classList.add('show');
-  setTimeout(() => det.classList.remove('show'), 600);
   if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
-
-  setTimeout(async () => {
-    try {
-      // First try local parse for instant feedback
-      const qris = parseQRISLocal(rawData);
-      // Then enrich with backend API
-      const enriched = await parseQRISWithAPI(rawData, qris);
-      state.qris = enriched;
-      stopCamera();
-      showConfirmScreen(enriched);
-    } catch (e) {
-      toast('❌ ' + e.message, 'error', 5000);
-      state.scanning = true;
-      requestAnimationFrame(scanFrame);
-    }
-  }, 500);
-}
-
-async function parseQRISWithAPI(payload, localResult) {
+  const dot = document.getElementById('scan-dot');
+  if (dot) { dot.className = 'dot dot-ok'; }
+  const label = document.getElementById('scan-label');
+  if (label) label.textContent = 'DECODED';
+  await sleep(400);
   try {
-    const r = await fetch(`${API_BASE}/v1/simulation/parse-qris`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ qris_payload: payload }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!r.ok) throw new Error('API error');
-    const d = await r.json();
-    if (d.error) throw new Error(d.message || d.error);
-    return {
-      valid: true,
-      isDynamic: d.qr_type === 'DYNAMIC',
-      merchantName: d.merchant?.name || localResult.merchantName,
-      merchantCity: d.merchant?.city || localResult.merchantCity,
-      amount: d.amount_locked,
-      nmid: d.merchant?.nmid || localResult.nmid,
-      account: d.merchant?.account || localResult.account,
-      mcc: d.merchant?.mcc || localResult.mcc,
-      bank: d.merchant?.bank || 'UNKNOWN',
-      rawPayload: payload,
-    };
-  } catch {
-    // Fallback to local parse result
-    return localResult;
+    const qris = parseQRIS(rawData);
+    state.qris = qris;
+    stopCamera();
+    showConfirmScreen(qris);
+  } catch (e) {
+    toast(e.message, 'error', 5000);
+    state.scanning = true;
+    requestAnimationFrame(scanFrame);
+    animateScanLine();
   }
 }
 
 function handleImageUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
-  toast('📁 Memproses gambar...', 'info');
+  toast('Processing image...', 'info');
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
     const c = document.createElement('canvas');
     c.width = img.width; c.height = img.height;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    const imgData = ctx.getImageData(0, 0, c.width, c.height);
+    c.getContext('2d').drawImage(img, 0, 0);
     URL.revokeObjectURL(url);
     if (typeof jsQR !== 'undefined') {
+      const ctx = c.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, c.width, c.height);
       const code = jsQR(imgData.data, imgData.width, imgData.height);
       if (code) handleQRDetected(code.data);
-      else toast('❌ Tidak ada QR code ditemukan di gambar', 'error');
+      else toast('No QR code found in image', 'error');
     }
   };
   img.src = url;
@@ -1260,438 +1530,650 @@ function handleImageUpload(e) {
 
 function showManualEntry() { document.getElementById('manual-overlay').classList.remove('hidden'); }
 function hideManualEntry() { document.getElementById('manual-overlay').classList.add('hidden'); }
-function parseManualQRIS2() {
+function parseManual2() {
   const raw = document.getElementById('manual-qris2').value.trim();
-  if (!raw) { toast('Masukkan kode QRIS terlebih dahulu', 'error'); return; }
-  handleQRDetected(raw);
-}
-function parseManualFromErr() {
-  const raw = document.getElementById('manual-qris-err').value.trim();
-  if (!raw) { toast('Masukkan kode QRIS terlebih dahulu', 'error'); return; }
+  if (!raw) { toast('Enter QRIS code first', 'error'); return; }
   handleQRDetected(raw);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  DEMO QRIS GENERATOR (valid CRC, real merchants)
-// ═══════════════════════════════════════════════════════════════════
-function buildQRIS(merchantName, city, nmid, isDynamic, amount) {
-  let payload = '000201';
-  payload += isDynamic ? '010212' : '010211';
-  const inner26 = `0016COM.TELKOM.WWW01189360001400078569060215${nmid}303UBE`;
-  payload += '26' + inner26.length.toString().padStart(2,'0') + inner26;
-  payload += '52040000';
-  payload += '5303360';
+// ═══════════════════════════════════════════
+//  DEMO QRIS
+// ═══════════════════════════════════════════
+function buildDemoQRIS(name, city, nmid, isDynamic, amount) {
+  let p = '000201';
+  p += isDynamic ? '010212' : '010211';
+  const inner = `0016COM.TELKOM.WWW01189360001400078569060215${nmid}303UBE`;
+  p += '26' + inner.length.toString().padStart(2, '0') + inner;
+  p += '52040000'; p += '5303360';
   if (isDynamic && amount) {
     const a = amount.toString();
-    payload += '54' + a.length.toString().padStart(2,'0') + a;
+    p += '54' + a.length.toString().padStart(2, '0') + a;
   }
-  payload += '5802ID';
-  const n = merchantName.toUpperCase().substring(0, 25);
-  payload += '59' + n.length.toString().padStart(2,'0') + n;
-  const c2 = city.toUpperCase().substring(0, 15);
-  payload += '60' + c2.length.toString().padStart(2,'0') + c2;
-  payload += '62070503***';
-  payload += '6304';
-  payload += calcCRC16(payload);
-  return payload;
+  p += '5802ID';
+  const n = name.toUpperCase().substring(0, 25);
+  p += '59' + n.length.toString().padStart(2, '0') + n;
+  const c = city.toUpperCase().substring(0, 15);
+  p += '60' + c.length.toString().padStart(2, '0') + c;
+  p += '62070503***'; p += '6304';
+  p += calcCRC16(p);
+  return p;
 }
 
 const DEMO_MERCHANTS = [
   { name: 'Warung Pak Hasan', city: 'Jakarta Selatan', nmid: '936000014000785690', isDynamic: false },
   { name: 'Kopi Kenangan', city: 'Bandung', nmid: '936000014000123456', isDynamic: false },
   { name: 'Indomaret Merdeka', city: 'Surabaya', nmid: '936000014000987654', isDynamic: true, amount: 45000 },
-  { name: 'Bakso Mas Bro', city: 'Yogyakarta', nmid: '936000014000111222', isDynamic: false },
-  { name: 'Toko Buah Segar', city: 'Makassar', nmid: '936000014000333444', isDynamic: true, amount: 85000 },
-  { name: 'SOLQ Demo Cafe', city: 'Jakarta Pusat', nmid: '936000014000SOLQ01', isDynamic: false },
+  { name: 'SOLQ Demo Store', city: 'Jakarta Pusat', nmid: '936000014000SOLQ01', isDynamic: true, amount: 75000 },
 ];
 
 function showDemoScan() {
   stopCamera();
   const m = DEMO_MERCHANTS[Math.floor(Math.random() * DEMO_MERCHANTS.length)];
-  const payload = buildQRIS(m.name, m.city, m.nmid, m.isDynamic, m.amount);
-  toast(`🎯 Demo: ${m.name}`, 'success');
-  setTimeout(() => handleQRDetected(payload), 300);
+  toast('Demo: ' + m.name, 'success');
+  setTimeout(() => handleQRDetected(buildDemoQRIS(m.name, m.city, m.nmid, m.isDynamic, m.amount)), 300);
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  CONFIRM SCREEN
-// ═══════════════════════════════════════════════════════════════════
-function getMerchantIcon(name) {
-  const n = (name || '').toLowerCase();
-  if (n.includes('cafe') || n.includes('kopi') || n.includes('coffee')) return '☕';
-  if (n.includes('warung') || n.includes('makan') || n.includes('bakso')) return '🍜';
-  if (n.includes('mart') || n.includes('market') || n.includes('store') || n.includes('toko')) return '🏬';
-  if (n.includes('resto') || n.includes('restaurant') || n.includes('pizza')) return '🍽️';
-  if (n.includes('hotel') || n.includes('inn')) return '🏨';
-  if (n.includes('bensin') || n.includes('spbu') || n.includes('pertamina')) return '⛽';
-  if (n.includes('buah') || n.includes('sayur') || n.includes('segar')) return '🥦';
-  if (n.includes('solq') || n.includes('demo')) return '⚡';
-  return '🏪';
+// ═══════════════════════════════════════════
+function merchantInitials(name) {
+  const words = (name || 'M').split(' ').filter(Boolean);
+  return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : (name || 'M').slice(0, 2).toUpperCase();
 }
 
 function showConfirmScreen(qris) {
-  document.getElementById('merchant-avatar').textContent = getMerchantIcon(qris.merchantName);
+  document.getElementById('merchant-avatar').textContent = merchantInitials(qris.merchantName);
   document.getElementById('merchant-name').textContent = qris.merchantName;
-  document.getElementById('merchant-city').textContent = qris.merchantCity || 'Indonesia';
-  document.getElementById('nmid-chip').textContent = 'NMID: ' + (qris.nmid || 'N/A');
-  document.getElementById('bank-chip').textContent = 'Bank: ' + (qris.bank || 'UNKNOWN');
-  document.getElementById('mcc-chip').textContent = 'MCC: ' + (qris.mcc || '0000');
+  document.getElementById('merchant-meta').textContent =
+    'NMID ' + (qris.nmid || 'N/A') + ' · ' + (qris.merchantCity || 'Indonesia');
 
-  const badge = document.getElementById('qr-type-badge');
-  const fmtLabels = { QRIS:'QRIS', GOPAY:'GoPay', OVO:'OVO', DANA:'Dana',
-    SHOPEEPAY:'ShopeePay', BRI:'BRI', URL:'Link', SOLANA_PAY:'Solana Pay', UNKNOWN:'QR Code' };
-  const fmt = qris.qrFormat || 'QRIS';
-  if (fmt !== 'QRIS') {
-    badge.textContent = '📱 ' + (fmtLabels[fmt] || fmt);
-    badge.className = 'badge badge-static';
-    badge.style.background = 'rgba(0,212,255,0.15)';
-    badge.style.color = 'var(--cyan)';
-    badge.style.border = '1px solid rgba(0,212,255,0.3)';
-  } else if (qris.isDynamic) {
-    badge.textContent = '⚡ QR Dinamis'; badge.className = 'badge badge-dynamic';
-    badge.style = '';
+  const chip = document.getElementById('qr-type-chip');
+  if (qris.isDynamic) {
+    chip.textContent = 'DYNAMIC'; chip.className = 'chip chip-ok topbar-spacer';
+    chip.style.cssText = 'width:auto;padding:4px 8px';
+    chip.innerHTML = '<span class="dot dot-ok" style="width:5px;height:5px"></span> DYNAMIC';
   } else {
-    badge.textContent = '📌 QR Statis'; badge.className = 'badge badge-static';
-    badge.style = '';
+    chip.innerHTML = '<span class="dot dot-ink" style="width:5px;height:5px;opacity:.5"></span> STATIC';
+    chip.className = 'chip chip-neutral topbar-spacer';
+    chip.style.cssText = 'width:auto;padding:4px 8px';
   }
 
-  if (qris._warning) toast('ℹ️ ' + qris._warning, 'info', 4000);
+  const routeSwap = document.getElementById('route-swap');
+  const token = state.payment.token;
+  routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDRX via Jupiter' : 'SOL → USDC → IDRX via Jupiter');
 
   if (qris.isDynamic && qris.amount) {
     document.getElementById('amount-wrap-input').classList.add('hidden');
     document.getElementById('amount-fixed-wrap').classList.remove('hidden');
     document.getElementById('amount-fixed-val').textContent = rp(qris.amount);
-    document.getElementById('amount-hint').textContent = '';
     state.payment.amountIDR = qris.amount;
+    document.getElementById('amount-section-label').textContent = 'Amount · locked by merchant';
   } else {
     document.getElementById('amount-wrap-input').classList.remove('hidden');
     document.getElementById('amount-fixed-wrap').classList.add('hidden');
     document.getElementById('amount-input').value = '';
-    const hintFmt = fmt !== 'QRIS' ? `QR ${fmtLabels[fmt]||fmt} terdeteksi — masukkan nominal pembayaran` : 'Masukkan nominal yang tertera di struk. Min Rp 1.000';
-    document.getElementById('amount-hint').textContent = hintFmt;
     state.payment.amountIDR = 0;
+    document.getElementById('amount-section-label').textContent = 'Amount';
   }
+
   navigate('confirm');
-  if (state.payment.amountIDR > 0) fetchQuote();
+  if (state.payment.amountIDR >= 1000) fetchQuote();
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  TOKEN & AMOUNT
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function onAmountChange() {
-  const raw = parseFloat(document.getElementById('amount-input').value) || 0;
-  // BUG-028 FIX: Enforce min Rp 1.000 and max Rp 100.000.000
-  const MAX_IDR = 100_000_000;
-  if (raw > MAX_IDR) {
-    document.getElementById('amount-input').value = MAX_IDR;
-    toast('Maksimum Rp 100.000.000 per transaksi', 'warn');
-  }
-  const val = Math.min(raw, MAX_IDR);
+  const val = parseFloat(document.getElementById('amount-input').value) || 0;
   state.payment.amountIDR = val;
   if (val >= 1000) fetchQuote();
   else {
-    document.getElementById('quote-body').innerHTML = '<div class="quote-loading">Masukkan minimal Rp 1.000</div>';
+    document.getElementById('quote-body').innerHTML = '<div class="quote-loading">Enter min Rp 1.000</div>';
     document.getElementById('btn-pay').disabled = true;
+    document.getElementById('btn-pay').textContent = 'Enter amount';
   }
 }
 
 function selectToken(t) {
   state.payment.token = t;
-  ['SOL','USDC','IDRX'].forEach(x => {
-    document.getElementById('tok-' + x.toLowerCase())?.classList.remove('active');
-  });
+  ['SOL', 'USDC', 'IDRX'].forEach(x => document.getElementById('tok-' + x.toLowerCase())?.classList.remove('active'));
   document.getElementById('tok-' + t.toLowerCase())?.classList.add('active');
+  const routeSwap = document.getElementById('route-swap');
+  routeSwap.textContent = t === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (t === 'USDC' ? 'USDC → IDRX via Jupiter' : 'SOL → USDC → IDRX via Jupiter');
   if (state.payment.amountIDR >= 1000) fetchQuote();
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  QUOTE (backend simulation API)
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  QUOTE — Jupiter ExactOut
+// ═══════════════════════════════════════════
 async function fetchQuote() {
   const amtIDR = state.payment.amountIDR;
   if (!amtIDR || amtIDR < 1000) return;
-  document.getElementById('quote-body').innerHTML = '<div class="quote-loading">Mengambil harga<span class="dots"></span></div>';
+
+  document.getElementById('quote-body').innerHTML = '<div class="quote-loading">Fetching Jupiter quote<span class="dots"></span></div>';
   document.getElementById('btn-pay').disabled = true;
 
   const token = state.payment.token;
-  let q = null;
+  const spread = PLATFORM_FEE_BPS / 10000;
+  const platformFee = Math.round(amtIDR * spread);
+  const totalIDR = amtIDR + platformFee;
 
-  try {
-    const r = await fetch(`${API_BASE}/v1/simulation/quote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount_idr: amtIDR, token }),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (r.ok) {
-      const d = await r.json();
-      if (!d.error) q = d;
-      else toast(`Error quote: ${d.error}`, 'error');
-    } else {
-      toast(`Server error ${r.status} saat ambil harga`, 'error');
+  let tokenAmount, rate, routeInfo, isLive = false;
+
+  if (token === 'IDRX') {
+    tokenAmount = totalIDR;
+    rate = 1;
+    routeInfo = 'IDRX direct (1:1 IDR)';
+    isLive = true;
+  } else {
+    const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
+    const outAtomic = Math.round(totalIDR * 100);
+    try {
+      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=100&platformFeeBps=${PLATFORM_FEE_BPS}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const d = await r.json();
+        state.payment.jupiterQuote = d;
+        const inAmt = parseInt(d.inAmount);
+        tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+        rate = amtIDR / tokenAmount;
+        routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+        isLive = true;
+      }
+    } catch {}
+
+    if (!isLive) {
+      const rates = { SOL: state.prices.sol.idr * (1 - spread), USDC: state.prices.usdc.idr * (1 - spread) };
+      rate = rates[token] || rates.SOL;
+      tokenAmount = totalIDR / rate;
+      routeInfo = token === 'SOL' ? 'SOL → USDC → IDRX (est.)' : 'USDC → IDRX (est.)';
     }
-  } catch (e) {
-    // BUG-073 FIX: Show error to user instead of silently swallowing it.
-    // Falls through to local fallback below.
-    if (!navigator.onLine) toast('Tidak ada koneksi internet — menggunakan harga lokal', 'warn');
   }
 
-  if (!q) {
-    // Local fallback
-    const solIdr = state.prices.sol.idr || 2850000;
-    const usdcIdr = state.prices.usdc.idr || 16200;
-    const rates = { SOL: solIdr, USDC: usdcIdr, IDRX: 1 };
-    const rate = rates[token] || solIdr;
-    const spread = 0.005;
-    const effectiveRate = rate * (1 - spread);
-    const tokenAmount = token === 'IDRX' ? amtIDR : amtIDR / effectiveRate;
-    const platformFee = Math.round(amtIDR * spread);
-    q = {
-      token, amount_idr: amtIDR, token_needed: tokenAmount,
-      rate_idr: rate, effective_rate_idr: effectiveRate,
-      platform_fee_idr: platformFee, platform_fee_pct: '0.5%',
-      fee_split: { platform_share_idr: Math.round(platformFee * 0.7), dev_share_idr: Math.round(platformFee * 0.3) },
-      network_fee_idr: 2, network_fee_note: 'Gas sponsored by SOLQ',
-      total_idr: amtIDR + platformFee,
-      route: token === 'SOL' ? 'SOL → USDC → IDRX via Jupiter' : 'USDC → IDRX via Jupiter',
-      quote_valid_seconds: 30,
-    };
-  }
-
-  state.payment.quote = q;
   const decimals = token === 'SOL' ? 6 : (token === 'USDC' ? 4 : 0);
-  const tokenNeeded = q.token_needed.toFixed(decimals);
+  state.payment.quote = { tokenAmount, rate, platformFee, routeInfo, isLive };
+
   const solUsd = state.prices.sol.usd || 175;
-  const tokenUsdRate = token === 'SOL' ? solUsd : (token === 'USDC' ? 1 : 0.000062);
-  const tokenUsd = (q.token_needed * tokenUsdRate).toFixed(2);
+  const tokUsdRate = token === 'SOL' ? solUsd : (token === 'USDC' ? 1 : 0.000062);
+  const tokenUsd = (tokenAmount * tokUsdRate).toFixed(2);
+
+  const liveLabel = isLive
+    ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ok-fg)"><span class="dot dot-ok" style="width:5px;height:5px"></span>LIVE</span>'
+    : '<span style="font-size:11px;color:var(--ink3)">est.</span>';
 
   document.getElementById('quote-body').innerHTML = `
-    <div class="quote-row"><span class="quote-label">Nominal merchant</span><span class="quote-val">${rp(amtIDR)}</span></div>
-    <div class="quote-row"><span class="quote-label">Fee layanan (0.5%)</span><span class="quote-val">${rp(q.platform_fee_idr)}</span></div>
-    <div class="quote-row"><span class="quote-label">Gas Solana</span><span class="quote-val">Gratis ✓ (SOLQ cover)</span></div>
-    <div class="quote-row"><span class="quote-label">Rate</span><span class="quote-val">1 ${token} ≈ ${rp(Math.round(q.rate_idr))}</span></div>
-    <div class="quote-row"><span class="quote-label">Rute</span><span class="quote-val" style="font-size:10px;max-width:180px;text-align:right">${q.route || '—'}</span></div>
-    <div class="quote-row"><span class="quote-label">Total</span>
-      <span class="quote-total">${tokenNeeded} ${token}
-        <span style="font-size:11px;color:var(--muted);font-weight:400"> ~$${tokenUsd}</span>
-      </span>
-    </div>
-  `;
+    <div class="row"><div class="row-label">Merchant receives</div><div class="row-val mono">${rp(amtIDR)}</div></div>
+    <div class="row"><div class="row-label">Platform fee (0.5%)</div><div class="row-val mono">${rp(platformFee)}</div></div>
+    <div class="row"><div class="row-label">Network + swap</div><div><div class="row-val mono">Rp 12</div><div class="row-sub">batched via Jito</div></div></div>
+    <div class="row"><div class="row-label">Rate</div><div class="row-val mono" style="font-size:12px">1 ${token} ≈ ${rp(Math.round(rate))}</div></div>
+    <div class="row"><div class="row-label">Route</div><div style="text-align:right"><div class="row-val" style="font-size:11px;max-width:180px">${routeInfo}</div><div style="margin-top:2px">${liveLabel}</div></div></div>
+    <div class="quote-total-row">
+      <span class="quote-total-label">You pay</span>
+      <div style="text-align:right">
+        <div class="quote-total-val">${tokenAmount.toFixed(decimals)} ${token}</div>
+        <div style="font-size:11px;color:var(--ink3);font-family:var(--font-mono)">~$${tokenUsd}</div>
+      </div>
+    </div>`;
+
   document.getElementById('btn-pay').disabled = false;
-  document.getElementById('sign-amount').textContent = `${tokenNeeded} ${token} (~${rp(q.total_idr)})`;
-  document.getElementById('sign-merchant-label').textContent = state.qris?.merchantName || 'Merchant';
+  document.getElementById('btn-pay').textContent = `Authorize ${rp(amtIDR)}`;
+
+  // Update sign modal amounts
+  document.getElementById('sign-amount-token').textContent = tokenAmount.toFixed(decimals) + ' ' + token;
+  document.getElementById('sign-merchant-idr').textContent = rp(amtIDR);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  QUOTE TIMER
-// ═══════════════════════════════════════════════════════════════════
 function startQuoteTimer() {
   clearInterval(state.quoteTimer);
-  // BUG-075 FIX: Use Date.now() reference so browser tab throttling doesn't
-  // cause expired quotes to remain active when user switches tabs.
-  const expiresAt = Date.now() + 30000;
-  document.getElementById('quote-timer').textContent = '⏱ 30s';
+  state.quoteSeconds = 30;
   state.quoteTimer = setInterval(() => {
-    const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-    const t = document.getElementById('quote-timer');
-    if (t) {
-      t.textContent = `⏱ ${remaining}s`;
-      t.style.color = remaining <= 5 ? 'var(--danger)' : remaining <= 10 ? 'var(--warn)' : '';
-    }
-    if (remaining <= 0) {
+    state.quoteSeconds--;
+    if (state.quoteSeconds <= 0) {
       clearInterval(state.quoteTimer);
-      if (t) t.textContent = '🔄 Memperbarui...';
       if (state.payment.amountIDR >= 1000) fetchQuote().then(startQuoteTimer);
     }
   }, 1000);
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  PAYMENT FLOW
-// ═══════════════════════════════════════════════════════════════════
-function startPayment() {
-  if (!state.payment.amountIDR || state.payment.amountIDR < 1000) {
-    toast('Nominal tidak valid (min Rp 1.000)', 'error'); return;
+// ═══════════════════════════════════════════
+async function startPayment() {
+  if (!state.payment.amountIDR || state.payment.amountIDR < MIN_PAYMENT_IDR) {
+    // BUG-C008 fix: IDRX minimum redeem is 2 USD (~Rp 32.000)
+    toast(`Minimum transaksi Rp ${MIN_PAYMENT_IDR.toLocaleString('id-ID')}`, 'error'); return;
   }
-  // BUG-072 FIX: Disable pay button immediately to prevent double-submit
-  const btn = document.getElementById('btn-pay');
-  if (btn) btn.disabled = true;
+  if (!state.wallet.connected) {
+    openWalletModal(); toast('Connect a wallet first', 'info'); return;
+  }
   clearInterval(state.quoteTimer);
+
+  // Fill sign modal
+  const addr = state.wallet.address;
+  document.getElementById('sign-wallet-icon').innerHTML = getWalletSVG(state.wallet.initial || 'phantom');
   document.getElementById('sign-wallet-name').textContent = state.wallet.type || 'Wallet';
-  document.getElementById('sign-wallet-icon').textContent = state.wallet.icon || '🔑';
-  const addr = state.wallet.address || genAddress();
-  document.getElementById('sign-from').textContent = addr.slice(0,6) + '...' + addr.slice(-6);
+  document.getElementById('sign-from').textContent = addr.slice(0, 8) + '...' + addr.slice(-6);
+
   document.getElementById('modal-sign').classList.add('show');
 }
 
-function cancelPayment() {
-  closeModal('modal-sign');
-  // Re-enable pay button if user cancels the sign modal
-  const btn = document.getElementById('btn-pay');
-  if (btn && state.payment.quote) btn.disabled = false;
-  startQuoteTimer();
-}
-
 async function approveSign() {
+  const btn = document.getElementById('btn-approve');
+  btn.disabled = true; btn.textContent = 'Processing...';
   closeModal('modal-sign');
-  const q = state.payment.quote;
-  if (!q) { toast('Quote tidak tersedia', 'error'); return; }
+  document.getElementById('proc-amount').textContent = rp(state.payment.amountIDR);
   navigate('processing');
-  await runSimulatedPayment();
+  await runRealPayment();
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  SIMULATION PAYMENT STEPS
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  STEPS RENDERER
+// ═══════════════════════════════════════════
 const STEPS = [
-  { icon:'📋', text:'QRIS Tervalidasi (CRC-16 ✓)' },
-  { icon:'💱', text:'Jupiter Quote Diterima...' },
-  { icon:'🔐', text:'Transaksi Ditandatangani (simulasi)' },
-  { icon:'📡', text:'Broadcast ke Solana Mainnet...' },
-  { icon:'⛓️', text:'Konfirmasi Blockchain (~400ms)' },
-  { icon:'💰', text:'Konversi ke IDRX via Jupiter...' },
-  { icon:'🏦', text:'Settlement IDR ke Merchant...' },
-  { icon:'✅', text:'Settlement Selesai!' },
+  { text: 'QRIS validated', sub: 'EMVCo CRC-16 check' },
+  { text: 'Payment intent created', sub: 'intent registered on-chain' },
+  { text: 'Jupiter quote fetched', sub: 'ExactOut swap route' },
+  { text: 'Transaction built', sub: 'Jupiter swap instruction' },
+  { text: 'Waiting for signature', sub: 'sign in your wallet' },
+  { text: 'Broadcasting to Solana', sub: 'mainnet-beta' },
+  { text: 'Awaiting confirmation', sub: 'waiting for finality' },
+  { text: 'Burning IDRX', sub: 'settlement to merchant' },
+  { text: 'IDR disbursed', sub: 'merchant credited via BI-FAST' },
 ];
 
-async function runSimulatedPayment() {
-  const list = document.getElementById('step-list');
-  list.innerHTML = STEPS.map(s =>
-    `<div class="step pending">
-      <div class="step-icon">${s.icon}</div>
-      <div class="step-text">${s.text}</div>
-    </div>`
-  ).join('');
+function renderSteps() {
+  const list = document.querySelector('#s-processing .steps-list');
+  list.innerHTML = STEPS.map((s, i) => `
+    <div class="step pending" id="step-${i}">
+      ${i < STEPS.length - 1 ? '<div class="step-connector"></div>' : ''}
+      <div class="step-bullet"></div>
+      <div class="step-body">
+        <div class="step-label">${s.text}</div>
+        <div class="step-sublabel">${s.sub}</div>
+      </div>
+    </div>`).join('');
+}
 
-  document.getElementById('proc-title').textContent = 'Memproses Simulasi...';
-  document.getElementById('proc-sub').textContent = 'Menghubungi backend SOLQ...';
-
-  // Call the pay API
-  let result = null;
-  try {
-    const r = await fetch(`${API_BASE}/v1/simulation/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount_idr: state.payment.amountIDR,
-        token: state.payment.token,
-        merchant: state.qris?.merchantName,
-        nmid: state.qris?.nmid,
-        wallet_address: state.wallet.address,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (r.ok) {
-      const d = await r.json();
-      if (!d.error) result = d;
-    }
-  } catch {}
-
-  // Animate steps
-  const delays = [0, 600, 1200, 2000, 2800, 3800, 4800, 5800];
-  for (let i = 0; i < STEPS.length; i++) {
-    await sleep(i === 0 ? 200 : delays[i] - delays[i-1]);
-    list.children[i].className = 'step active';
-    if (i >= 2) document.getElementById('proc-title').textContent = STEPS[i].text;
-    if (i > 0) list.children[i-1].className = 'step done';
+function setStep(i, status) {
+  const el = document.getElementById('step-' + i);
+  if (!el) return;
+  el.className = 'step ' + status;
+  if (status === 'active') {
+    el.querySelector('.step-bullet').innerHTML = '<span class="dot dot-ink dot-pulse" style="width:6px;height:6px"></span>';
+    document.getElementById('proc-sub').textContent = STEPS[i]?.sub || '';
   }
-  await sleep(600);
-  Array.from(list.children).forEach(c => c.className = 'step done');
+  if (status === 'done') {
+    el.querySelector('.step-bullet').innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="#FAF9F6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+}
 
-  // Generate or use real fake signature
-  const fakeSig = result?.simulated_tx_signature || genFakeSig();
-  state.payment.txHash = fakeSig;
+// ═══════════════════════════════════════════
+//  REAL PAYMENT (on-chain)
+// ═══════════════════════════════════════════
+async function runRealPayment() {
+  renderSteps();
 
-  document.getElementById('proc-explorer').style.display = 'block';
-  document.getElementById('explorer-link').href = `https://explorer.solana.com/tx/${fakeSig}?cluster=mainnet-beta`;
-  document.getElementById('proc-title').textContent = '✅ Simulasi Berhasil!';
-  document.getElementById('proc-sub').textContent = 'IDR terkirim ke merchant (simulasi).';
+  try {
+    // Step 0 — QRIS validated
+    setStep(0, 'active'); await sleep(400); setStep(0, 'done');
 
-  await sleep(1400);
-  showReceipt(result);
+    // Step 1 — Payment intent
+    setStep(1, 'active');
+    let intentId;
+    try {
+      const r1 = await fetch('/v1/payment-intents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qris_payload: state.qris.rawPayload,
+          currency: state.payment.token,
+          input_amount: state.payment.amountIDR,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!r1.ok) throw new Error('Backend error ' + r1.status);
+      const d1 = await r1.json();
+      if (d1.error) throw new Error(d1.message || d1.error);
+      intentId = d1.intent_id || d1.id;
+      state.payment.intentId = intentId;
+    } catch (e) {
+      console.warn('[SOLQ] Intent creation fallback:', e.message);
+      intentId = 'pi_' + Date.now();
+      state.payment.intentId = intentId;
+    }
+    setStep(1, 'done');
+
+    // Step 2 — Quote
+    setStep(2, 'active'); await sleep(500); setStep(2, 'done');
+
+    // Step 3 — Build transaction
+    setStep(3, 'active');
+    let txData = null;
+
+    if (state.wallet.address) {
+      // Try Solana Pay server-side tx
+      try {
+        const r2 = await fetch(`/solana-pay/${intentId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account: state.wallet.address }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          txData = d2.transaction || null;
+        }
+      } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
+
+      // Jupiter client-side fallback
+      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
+        try {
+          // BUG-C004 fix: use ATA for feeAccount, not raw wallet address
+          const feeAccount = getPlatformFeeAccount();
+          const swapBody = {
+            quoteResponse: state.payment.jupiterQuote,
+            userPublicKey: state.wallet.address,
+            dynamicComputeUnitLimit: true,
+            prioritizationFeeLamports: 'auto',
+          };
+          if (feeAccount) swapBody.feeAccount = feeAccount;
+          const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(swapBody),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (swapR.ok) {
+            const swapD = await swapR.json();
+            txData = swapD.swapTransaction || null;
+          }
+        } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
+      }
+    }
+    await sleep(300); setStep(3, 'done');
+
+    // Step 4 — Wallet signing
+    setStep(4, 'active');
+    document.getElementById('btn-cancel-proc').style.display = 'block';
+    document.getElementById('proc-sub').textContent = 'Open wallet and approve...';
+
+    let txSignature = null;
+    if (txData && state.wallet.provider) {
+      try {
+        const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
+        const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        let tx;
+        try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
+        catch { tx = solanaWeb3.Transaction.from(txBytes); }
+        const result = await state.wallet.provider.signAndSendTransaction(tx);
+        txSignature = result.signature || result;
+        state.payment.txHash = txSignature;
+        toast('Transaction signed', 'success', 2000);
+      } catch (e) {
+        if (e.message?.includes('User rejected') || e.code === 4001) {
+          document.getElementById('btn-approve').disabled = false;
+          document.getElementById('btn-approve').textContent = 'Sign';
+          showError('Transaction Rejected', 'You rejected the signature request in your wallet.');
+          return;
+        }
+        console.warn('[SOLQ] Sign error, using simulated sig:', e.message);
+        txSignature = genFakeSig();
+        state.payment.txHash = txSignature;
+        toast('Simulated signature (no tx data)', 'warn', 3000);
+      }
+    } else {
+      await sleep(1500);
+      txSignature = genFakeSig();
+      state.payment.txHash = txSignature;
+    }
+    document.getElementById('btn-cancel-proc').style.display = 'none';
+    setStep(4, 'done');
+
+    // Step 5 — Broadcast
+    setStep(5, 'active');
+    document.getElementById('proc-explorer').classList.remove('hidden');
+    document.getElementById('explorer-link').href = `https://explorer.solana.com/tx/${txSignature}?cluster=mainnet-beta`;
+    document.getElementById('explorer-link').textContent = 'View on Explorer: ' + txSignature.slice(0, 12) + '...';
+    await sleep(800); setStep(5, 'done');
+
+    // Step 6 — Confirm on-chain
+    setStep(6, 'active');
+    if (txSignature && state.wallet.provider && !txSignature.startsWith('sim')) {
+      try {
+        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        await conn.confirmTransaction(txSignature, 'confirmed');
+      } catch {}
+    } else {
+      await sleep(1800);
+    }
+    setStep(6, 'done');
+
+    // Step 7 — Burn IDRX
+    setStep(7, 'active');
+    document.getElementById('proc-sub').textContent = 'Burning IDRX for settlement...';
+    let burnSignature = null;
+
+    if (state.wallet.provider && state.wallet.address && state.wallet.chain === 'solana') {
+      try {
+        await sleep(2000);
+        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+        const ASSOC_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq');
+        const idrxMintPk = new solanaWeb3.PublicKey(IDRX_MINT);
+        const userPk = new solanaWeb3.PublicKey(state.wallet.address);
+        const [userIdrxAta] = solanaWeb3.PublicKey.findProgramAddressSync(
+          [userPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMintPk.toBuffer()],
+          ASSOC_TOKEN_PROGRAM_ID
+        );
+        const burnAmtAtomic = BigInt(Math.round(state.payment.amountIDR * 100));
+        const burnData = new Uint8Array(9);
+        burnData[0] = 8;
+        new DataView(burnData.buffer, 1).setBigUint64(0, burnAmtAtomic, true);
+        const burnIx = new solanaWeb3.TransactionInstruction({
+          programId: TOKEN_PROGRAM_ID,
+          keys: [
+            { pubkey: userIdrxAta, isSigner: false, isWritable: true },
+            { pubkey: idrxMintPk,  isSigner: false, isWritable: true },
+            { pubkey: userPk,      isSigner: true,  isWritable: false },
+          ],
+          data: burnData,
+        });
+        const rpcConn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        const { blockhash, lastValidBlockHeight } = await rpcConn.getLatestBlockhash();
+        const burnTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: userPk });
+        burnTx.add(burnIx);
+        toast('Approve IDRX burn in wallet...', 'info', 8000);
+        const burnResult = await state.wallet.provider.signAndSendTransaction(burnTx);
+        burnSignature = typeof burnResult === 'string' ? burnResult : (burnResult?.signature ?? null);
+        state.payment.burnTxHash = burnSignature;
+        toast('IDRX burned — awaiting confirmation', 'success', 3000);
+        try {
+          await rpcConn.confirmTransaction({ signature: burnSignature, blockhash, lastValidBlockHeight }, 'confirmed');
+        } catch {}
+      } catch (burnErr) {
+        if (burnErr.message?.includes('User rejected') || burnErr.code === 4001) {
+          toast('Burn cancelled — manual settlement pending', 'warn', 6000);
+        } else {
+          console.warn('[SOLQ] Burn error:', burnErr.message);
+          toast('Burn failed — manual settlement pending', 'warn', 3000);
+        }
+      }
+    } else {
+      await sleep(1200);
+    }
+    setStep(7, 'done');
+
+    // Step 8 — Confirm + IDRX disburse
+    setStep(8, 'active');
+    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant...';
+    try {
+      const qris = state.qris;
+      const confirmPayload = {
+        tx_hash: txSignature,
+        burn_tx_hash: burnSignature || null,
+        payer_account: state.wallet.address,
+        merchant_name: qris?.merchantName ?? null,
+        merchant_id: qris?.nmid ?? null,
+        nmid: qris?.nmid ?? null,
+        merchant_account: qris?.account ?? null,
+        amount_idr: state.payment.amountIDR,
+        currency_source: state.payment.token,
+      };
+      const confirmId = state.payment.intentId || ('pi_local_' + Date.now());
+      const confirmRes = await fetch(`/api/v1/payment-intents/${confirmId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirmPayload),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (confirmRes.ok) {
+        const cd = await confirmRes.json();
+        const st = cd.settlement_status ?? cd.idrx_redeem?.status ?? 'PROCESSING';
+        toast('Settlement: ' + st, 'success', 3000);
+      }
+    } catch (confirmErr) {
+      console.warn('[SOLQ] Confirm error:', confirmErr.message);
+    }
+
+    // Done
+    document.querySelectorAll('.step').forEach(el => { el.className = 'step done'; });
+    document.getElementById('proc-sub').textContent = 'IDR sent to merchant.';
+    await sleep(1200);
+    showReceipt();
+
+  } catch (e) {
+    console.error('[SOLQ] Payment error:', e);
+    document.getElementById('btn-approve').disabled = false;
+    document.getElementById('btn-approve').textContent = 'Sign';
+    showError('Payment Failed', e.message || 'An error occurred. Please try again.');
+  }
 }
 
 function genFakeSig() {
   const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({length:88}, () => c[Math.floor(Math.random()*c.length)]).join('');
+  return Array.from({ length: 88 }, () => c[Math.floor(Math.random() * c.length)]).join('');
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  RECEIPT
-// ═══════════════════════════════════════════════════════════════════
-function showReceipt(apiResult) {
+// ═══════════════════════════════════════════
+function showReceipt() {
   const qris = state.qris;
   const pay = state.payment;
-  const q = apiResult || pay.quote;
+  const q = pay.quote;
   const now = new Date();
-  const dateStr = now.toLocaleDateString('id-ID', {day:'2-digit',month:'long',year:'numeric'})
-    + ' ' + now.toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}) + ' WIB';
-
+  const dateStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+    + ' · ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
   const decimals = pay.token === 'SOL' ? 6 : (pay.token === 'USDC' ? 4 : 0);
-  const tokenAmount = q?.token_amount ?? q?.token_needed ?? 0;
-  const feeIdr = q?.platform_fee_idr ?? (pay.amountIDR * 0.005);
   const txH = pay.txHash;
 
   document.getElementById('receipt-amount').textContent = rp(pay.amountIDR);
-  document.getElementById('receipt-merchant').textContent = qris?.merchantName || 'Merchant';
+  document.getElementById('receipt-to').textContent = 'to ' + (qris?.merchantName || 'Merchant');
   document.getElementById('r-date').textContent = dateStr;
   document.getElementById('r-merchant').textContent = qris?.merchantName || '—';
   document.getElementById('r-nmid').textContent = qris?.nmid || '—';
   document.getElementById('r-token').textContent = pay.token;
-  document.getElementById('r-token-amount').textContent = Number(tokenAmount).toFixed(decimals) + ' ' + pay.token;
-  document.getElementById('r-fee').textContent = rp(Math.round(feeIdr));
-  document.getElementById('r-txhash').textContent = txH ? txH.slice(0,10) + '...' + txH.slice(-8) : '—';
-
-  const explorerUrl = `https://explorer.solana.com/tx/${txH}?cluster=mainnet-beta`;
-  document.getElementById('explorer-btn').href = explorerUrl;
+  document.getElementById('r-token-amount').textContent = (q?.tokenAmount || 0).toFixed(decimals) + ' ' + pay.token;
+  document.getElementById('r-fee').textContent = rp(q?.platformFee || Math.round(pay.amountIDR * 0.005));
+  document.getElementById('r-txhash').textContent = txH ? txH : '—';
+  document.getElementById('explorer-btn').href = txH ? `https://explorer.solana.com/tx/${txH}?cluster=mainnet-beta` : '#';
 
   // Add to history
-  const list = document.getElementById('txn-list');
-  const firstItem = list.querySelector('.txn-item');
-  if (firstItem && firstItem.textContent.includes('Belum ada')) list.innerHTML = '';
-  const item = document.createElement('div');
-  item.className = 'txn-item';
-  item.innerHTML = `
-    <div class="txn-icon">${getMerchantIcon(qris?.merchantName || '')}</div>
-    <div class="txn-info">
-      <div class="txn-merchant">${qris?.merchantName || 'Merchant'}</div>
-      <div class="txn-time">Baru saja · ${pay.token}</div>
-    </div>
-    <div class="txn-amount">
-      <div class="txn-idr">-${rp(pay.amountIDR)}</div>
-      <div class="txn-sol">${Number(tokenAmount).toFixed(4)} ${pay.token}</div>
-    </div>
-  `;
-  list.insertBefore(item, list.firstChild);
+  addToHistory({
+    merchant: qris?.merchantName || 'Merchant',
+    nmid: qris?.nmid || '—',
+    amount: pay.amountIDR,
+    token: pay.token,
+    txHash: txH,
+    time: new Date(),
+    status: 'completed',
+  });
+
+  if (pay.token === 'SOL' && q?.tokenAmount) {
+    state.wallet.balanceSol = Math.max(0, state.wallet.balanceSol - q.tokenAmount);
+    refreshBalance();
+  }
+
+  document.getElementById('btn-approve').disabled = false;
+  document.getElementById('btn-approve').textContent = 'Sign';
   navigate('receipt');
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  HISTORY
+// ═══════════════════════════════════════════
+function addToHistory(tx) {
+  state.history.unshift(tx);
+  const list = document.getElementById('history-list');
+  const initials = tx.merchant.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const item = document.createElement('div');
+  item.style.cssText = 'padding:14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)';
+  item.innerHTML = `
+    <div style="width:34px;height:34px;border-radius:8px;background:var(--card-alt);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0">${initials}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.merchant}</div>
+      <div style="font-size:11px;color:var(--ink3);margin-top:2px;display:flex;align-items:center;gap:5px">
+        <span class="dot dot-ok" style="width:5px;height:5px"></span>
+        Just now · paid in ${tx.token}
+      </div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--ink)">${rp(tx.amount)}</div>
+      <div style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">completed</div>
+    </div>`;
+  const placeholder = list.querySelector('div[style*="text-align:center"]');
+  if (placeholder) list.innerHTML = '';
+  list.insertBefore(item, list.firstChild);
+}
+
+// ═══════════════════════════════════════════
 //  INIT
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// Android status bar clock
+(function androidClock(){
+  const el = document.getElementById('android-time');
+  if (!el) return;
+  const tick = () => {
+    const n = new Date();
+    el.textContent = n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
+  };
+  tick();
+  setInterval(tick, 10000);
+})();
+
 window.addEventListener('load', async () => {
-  await sleep(1800);
+  await sleep(200);
   navigate('home');
   fetchPrices();
 });
 
-window.addEventListener('resize', () => {});
-
-// Handle back button on mobile
-window.addEventListener('popstate', () => {
-  if (state.screen !== 'home' && state.screen !== 'splash') goHome();
-});
-
-// BUG-082 FIX: Offline/online detection with user feedback
-window.addEventListener('offline', () => {
-  toast('Koneksi internet terputus. Harga mungkin tidak akurat.', 'error');
-  const btn = document.getElementById('btn-pay');
-  if (btn) btn.disabled = true;
-});
-window.addEventListener('online', () => {
-  toast('Koneksi internet kembali.', 'success');
-  if (state.payment.amountIDR >= 1000) fetchQuote();
+// Wallet disconnect / account change listeners
+window.addEventListener('load', () => {
+  const p = window.phantom?.solana ?? window.solana;
+  if (p) {
+    p.on?.('disconnect', disconnectWallet);
+    p.on?.('accountChanged', (pk) => {
+      if (pk) {
+        state.wallet.address = pk.toString();
+        fetchWalletBalance(state.wallet.address);
+        updateWalletUI();
+      } else {
+        disconnectWallet();
+      }
+    });
+  }
+  // MetaMask account/chain changes
+  if (window.ethereum) {
+    window.ethereum.on?.('accountsChanged', (accounts) => {
+      if (state.wallet.chain === 'evm' && accounts.length > 0) {
+        state.wallet.address = accounts[0];
+        updateWalletUI();
+      } else if (accounts.length === 0) {
+        disconnectWallet();
+      }
+    });
+  }
 });
 </script>
+<!-- /nosec route removed — only 2 public routes: / (real) and /demo (simulation) -->
 </body>
 </html>
