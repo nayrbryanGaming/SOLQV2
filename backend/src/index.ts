@@ -180,20 +180,50 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     next();
 });
 
-// Rate limiter (60 req/min/IP)
-const hits = new Map<string, { n: number; t: number }>();
+// BUG-NEW-003 FIX: Rate limiter — use Redis when available (survives cold starts),
+// fall back to in-memory Map (resets per instance, acceptable for low-traffic MVP).
+// Redis key: ratelimit:<ip> with TTL 60s (sliding window via INCR+EXPIRE).
 const RATE_LIMIT_PER_MIN = Math.max(0, Number(process.env.RATE_LIMIT_PER_MIN || '60'));
 const DISABLE_RATE_LIMIT = process.env.DISABLE_RATE_LIMIT === '1';
+const hits = new Map<string, { n: number; t: number }>();
+
+let rateLimitRedis: any = null;
+if (process.env.REDIS_URL && !DISABLE_RATE_LIMIT) {
+    try {
+        const { Redis: RedisClient } = require('ioredis');
+        rateLimitRedis = new RedisClient(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            enableReadyCheck: false,
+            lazyConnect: true,
+        });
+        rateLimitRedis.connect().catch(() => { rateLimitRedis = null; });
+        console.log('[STARTUP] Rate limiter: Redis backend');
+    } catch {
+        console.warn('[STARTUP] Rate limiter: ioredis unavailable, using in-memory fallback');
+    }
+} else {
+    if (!DISABLE_RATE_LIMIT) console.warn('[STARTUP] Rate limiter: in-memory (resets on cold start). Set REDIS_URL for persistent rate limiting.');
+}
 
 function isLocalIp(ip: string): boolean {
     return ip.includes('127.0.0.1') || ip.includes('::1') || ip.includes('::ffff:127.0.0.1');
 }
 
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use(async (req: Request, res: Response, next: NextFunction) => {
     const ip = req.ip || 'x';
     if (DISABLE_RATE_LIMIT || RATE_LIMIT_PER_MIN <= 0 || isLocalIp(ip)) {
         return next();
     }
+    try {
+        if (rateLimitRedis) {
+            const key = `ratelimit:${ip}`;
+            const count = await rateLimitRedis.incr(key);
+            if (count === 1) await rateLimitRedis.expire(key, 60);
+            if (count > RATE_LIMIT_PER_MIN) return res.status(429).json({ error: 'Rate limit' });
+            return next();
+        }
+    } catch { /* Redis error — fall through to in-memory */ }
+
     const now = Date.now();
     const e = hits.get(ip);
     if (!e || now > e.t) { hits.set(ip, { n: 1, t: now + 60000 }); return next(); }

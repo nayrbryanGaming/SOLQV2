@@ -219,9 +219,10 @@ export class QRISDecoder {
     }
 
     private static normalizeMerchantName(raw?: string): string {
-        const name = (raw || '').trim();
+        const name = (raw || '').trim().replace(/\s+/g, ' ');
         if (!name) return 'UNKNOWN MERCHANT';
-        return name.replace(/\s+/g, ' ');
+        // BUG-NEW-018 FIX: EMVCo spec limits Tag 59 merchant name to 25 characters max.
+        return name.length > 25 ? name.substring(0, 25).trimEnd() : name;
     }
 
     /**

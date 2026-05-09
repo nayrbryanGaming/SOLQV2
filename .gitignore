@@ -57,3 +57,8 @@ backend/.env
 *.pem
 credentials.json
 .vercel
+
+# Android signing (never commit keystore or properties with real passwords to git)
+android/app/key.jks
+android/key.properties
+keystore_base64.txt

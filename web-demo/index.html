@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080514">
 <meta name="description" content="SOLQ Demo — Simulasi pembayaran QRIS dengan Solana. Scan QRIS merchant manapun.">
 <title>SOLQ Demo — Solana × QRIS Simulator</title>
-<link rel="icon" type="image/png" href="/logo_full.png">
+<link rel="icon" type="image/png" href="/assets/logos/solq_icon.png">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -376,6 +376,50 @@ textarea.qris-manual:focus{border-color:var(--purple)}
 @keyframes dots{0%{content:'.'}40%{content:'..'}80%,100%{content:'...'}}
 ::-webkit-scrollbar{width:0}
 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── Android Phone Chrome (desktop only) ── */
+.android-sb{
+  display:none;
+  height:28px;background:var(--bg);
+  padding:0 20px;
+  flex-direction:row;align-items:center;justify-content:space-between;
+  flex-shrink:0;z-index:50;
+  font-size:11px;font-weight:700;color:#fff;letter-spacing:-.3px;
+  user-select:none;pointer-events:none;
+}
+@media(min-width:900px){.android-sb{display:flex}}
+.android-sb-icons{display:flex;align-items:center;gap:5px;opacity:.75}
+
+.android-nb{
+  display:none;
+  height:36px;background:var(--bg);
+  flex-direction:row;align-items:center;justify-content:space-around;
+  flex-shrink:0;padding:0 48px;z-index:50;
+  border-top:1px solid rgba(255,255,255,.07);
+}
+@media(min-width:900px){.android-nb{display:flex}}
+.android-nb-btn{
+  width:30px;height:30px;
+  display:flex;align-items:center;justify-content:center;
+  opacity:.38;cursor:pointer;transition:opacity .15s;color:#fff;
+}
+.android-nb-btn:hover{opacity:.72}
+
+/* Desktop: phone side buttons */
+@media(min-width:900px){
+  .phone::before{
+    content:'';position:absolute;
+    left:-3px;top:120px;width:3px;height:56px;
+    background:rgba(255,255,255,.12);border-radius:2px 0 0 2px;
+    pointer-events:none;
+  }
+  .phone::after{
+    content:'';position:absolute;
+    right:-3px;top:140px;width:3px;height:80px;
+    background:rgba(255,255,255,.12);border-radius:0 2px 2px 0;
+    pointer-events:none;
+  }
+}
 </style>
 </head>
 <body>
@@ -384,7 +428,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div class="desktop-info">
   <div class="di-badge">🎮 DEMO / SIMULASI</div>
   <div class="di-logo">
-    <img src="/logo_q.png" alt="SOLQ" style="height:52px;object-fit:contain;display:block;filter:drop-shadow(0 2px 12px rgba(139,46,232,.4))">
+    <img src="/assets/logos/solq_wordmark.png" alt="SOLQ" style="max-width:180px;height:auto;object-fit:contain;display:block;background:#fff;border-radius:10px;padding:6px 12px">
   </div>
   <p class="di-desc">Simulasi pembayaran QRIS dengan aset Solana.<br>
     Scan QRIS merchant mana pun — merchant name dan NMID otomatis terbaca.</p>
@@ -409,12 +453,12 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="di-feat-desc">Platform 70% + Dev 30% split, gas ditanggung SOLQ</div></div>
   </div>
   <div class="di-wallets">
-    <span class="di-wallet-chip">👻 Phantom</span>
-    <span class="di-wallet-chip">☀️ Solflare</span>
-    <span class="di-wallet-chip">🎒 Backpack</span>
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none" style="vertical-align:middle;margin-right:3px"><rect width="44" height="44" rx="8" fill="#AB9FF2"/><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/></svg>Phantom</span>
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none" style="vertical-align:middle;margin-right:3px"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>Solflare</span>
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none" style="vertical-align:middle;margin-right:3px"><rect width="44" height="44" rx="8" fill="#1A1F2E"/><rect x="13" y="20" width="18" height="13" rx="3" fill="white" fill-opacity="0.88"/></svg>Backpack</span>
     <span class="di-wallet-chip">◎ SOL</span>
     <span class="di-wallet-chip">$ USDC</span>
-    <span class="di-wallet-chip">🇮🇩 IDRX</span>
+    <span class="di-wallet-chip">IDRX</span>
   </div>
   <div class="di-api">
     <span style="color:var(--purple3)">API Endpoints:</span><br>
@@ -430,13 +474,23 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- Phone App -->
 <div class="phone">
 
+<!-- Android status bar — desktop phone frame only -->
+<div class="android-sb" id="android-sb">
+  <span id="android-time">9:41</span>
+  <div class="android-sb-icons">
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><rect x="0" y="8" width="3" height="3"/><rect x="4" y="5" width="3" height="6"/><rect x="8" y="2" width="3" height="9"/><rect x="12" y="0" width="3" height="11"/></svg>
+    <svg width="14" height="11" viewBox="0 0 14 11" fill="currentColor"><circle cx="7" cy="10" r="1.2"/><path d="M4.2 7.3A3.9 3.9 0 0 1 7 6.2c1.1 0 2.1.4 2.8 1.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M1.8 5A6.5 6.5 0 0 1 7 3c2 0 3.8.8 5.2 2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+    <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2" stroke="currentColor" stroke-opacity=".5"/><rect x="2" y="2" width="13" height="7" rx="1" fill="currentColor"/><path d="M20 3.5v4a1.5 1.5 0 0 0 0-4z" fill="currentColor" fill-opacity=".4"/></svg>
+  </div>
+</div>
+
 <!-- SPLASH -->
 <div id="s-splash" class="screen active">
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
     background:linear-gradient(160deg,#0A0320 0%,#1A0640 60%,#0A0320 100%)">
     <div class="splash-logo-wrap">
-      <img src="/logo_q.png" alt="SOLQ"
-        style="width:260px;max-width:80vw;object-fit:contain;filter:drop-shadow(0 4px 24px rgba(139,46,232,.6))">
+      <img src="/assets/logos/solq_wordmark.png" alt="SOLQ"
+        style="width:240px;max-width:80vw;object-fit:contain;background:#fff;border-radius:14px;padding:10px 18px">
       <div class="splash-demo-pill" style="margin-top:20px">⚡ MODE SIMULASI</div>
     </div>
   </div>
@@ -446,7 +500,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="s-home" class="screen">
   <div class="topbar">
     <div class="topbar-logo">
-      <img src="/logo_full.png" alt="SOLQ" style="height:32px;object-fit:contain">
+      <img src="/assets/logos/solq_icon.png" alt="SOLQ" style="height:32px;width:32px;object-fit:contain;background:#fff;border-radius:8px;padding:2px">
       <span class="sim-tag">DEMO</span>
     </div>
     <button class="btn-connect" id="btn-wallet-top" onclick="openWalletModal()">Connect Wallet</button>
@@ -626,8 +680,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- PROCESSING -->
 <div id="s-processing" class="screen">
   <div class="proc-content">
-    <img src="/logo_full.png" alt="SOLQ" class="proc-logo"
-      style="width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 16px rgba(139,46,232,.6))">
+    <img src="/assets/logos/solq_icon.png" alt="SOLQ" class="proc-logo"
+      style="width:80px;height:80px;object-fit:contain;background:#fff;border-radius:16px;padding:6px">
     <div class="proc-title" id="proc-title">Memproses Simulasi</div>
     <div class="proc-sub" id="proc-sub">Mohon tunggu sebentar...</div>
     <div class="step-list" id="step-list"></div>
@@ -674,17 +728,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="modal-sub">Pilih wallet untuk demo</div>
     <div class="modal-body">
       <div class="wallet-option" onclick="connectWallet('Phantom')">
-        <div class="wallet-logo">👻</div>
+        <div class="wallet-logo"><svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="10" fill="#AB9FF2"/><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/><circle cx="18.5" cy="21" r="2" fill="#AB9FF2"/><circle cx="25.5" cy="21" r="2" fill="#AB9FF2"/></svg></div>
         <div><div class="wallet-name">Phantom</div><div class="wallet-desc">Wallet Solana terpopuler</div></div>
         <div class="wallet-arrow">›</div>
       </div>
       <div class="wallet-option" onclick="connectWallet('Solflare')">
-        <div class="wallet-logo">☀️</div>
+        <div class="wallet-logo"><svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="10" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg></div>
         <div><div class="wallet-name">Solflare</div><div class="wallet-desc">Native Solana wallet</div></div>
         <div class="wallet-arrow">›</div>
       </div>
       <div class="wallet-option" onclick="connectWallet('Backpack')">
-        <div class="wallet-logo">🎒</div>
+        <div class="wallet-logo"><svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="10" fill="#1A1F2E"/><rect x="13" y="20" width="18" height="13" rx="3" fill="white" fill-opacity="0.88"/><path d="M17 20V18A5 5 0 0127 18V20" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.88"/><rect x="18" y="23" width="8" height="4" rx="2" fill="#1A1F2E"/></svg></div>
         <div><div class="wallet-name">Backpack</div><div class="wallet-desc">xNFT Wallet</div></div>
         <div class="wallet-arrow">›</div>
       </div>
@@ -697,7 +751,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div class="modal-backdrop" id="modal-sign">
   <div class="modal-sheet">
     <div class="sign-header">
-      <div class="sign-logo" id="sign-wallet-icon">👻</div>
+      <div class="sign-logo" id="sign-wallet-icon"><svg width="36" height="36" viewBox="0 0 44 44" fill="none"><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/><circle cx="18.5" cy="21" r="2" fill="rgba(255,255,255,0.3)"/><circle cx="25.5" cy="21" r="2" fill="rgba(255,255,255,0.3)"/></svg></div>
       <div style="font-size:15px;font-weight:700" id="sign-wallet-name">Phantom</div>
       <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:4px">SOLQ meminta konfirmasi simulasi</div>
     </div>
@@ -721,6 +775,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- Android nav bar — 3 gesture buttons, desktop only -->
+<div class="android-nb">
+  <div class="android-nb-btn" title="Back">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4L6 9l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="android-nb-btn" title="Home">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="2"/></svg>
+  </div>
+  <div class="android-nb-btn" title="Recents">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 4V3a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </div>
+</div>
+
 </div><!-- .phone -->
 
 <script>
@@ -739,7 +806,7 @@ const API_BASE = (() => {
 // ═══════════════════════════════════════════════════════════════════
 const state = {
   screen: 'splash',
-  wallet: { connected: false, address: null, type: null, icon: '👻', balanceSol: 0 },
+  wallet: { connected: false, address: null, type: null, icon: null, balanceSol: 0 },
   prices: { sol: { idr: 0, usd: 0, change24h: 0 }, usdc: { idr: 16200 }, loaded: false },
   qris: null,
   payment: { amountIDR: 0, token: 'SOL', quote: null, txHash: null },
@@ -800,7 +867,12 @@ function genAddress() {
   return Array.from({length:44}, () => c[Math.floor(Math.random()*c.length)]).join('');
 }
 
-const WALLET_ICONS = { Phantom:'👻', Solflare:'☀️', Backpack:'🎒', 'OKX Web3':'⭕' };
+const WALLET_ICONS = {
+  Phantom:  '<svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#AB9FF2"/><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/><circle cx="18.5" cy="21" r="2" fill="#AB9FF2"/><circle cx="25.5" cy="21" r="2" fill="#AB9FF2"/></svg>',
+  Solflare: '<svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>',
+  Backpack: '<svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#1A1F2E"/><rect x="13" y="20" width="18" height="13" rx="3" fill="white" fill-opacity="0.88"/><path d="M17 20V18A5 5 0 0127 18V20" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.88"/><rect x="18" y="23" width="8" height="4" rx="2" fill="#1A1F2E"/></svg>',
+  'OKX Web3': '<svg width="36" height="36" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#111"/><text x="22" y="27" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="12" fill="white">OKX</text></svg>',
+};
 
 function connectWallet(type) {
   closeModal('modal-wallet');
@@ -808,7 +880,7 @@ function connectWallet(type) {
   setTimeout(() => {
     state.wallet.connected = true;
     state.wallet.type = type;
-    state.wallet.icon = WALLET_ICONS[type] || '🔑';
+    state.wallet.icon = WALLET_ICONS[type] || WALLET_ICONS.Phantom;
     state.wallet.address = genAddress();
     state.wallet.balanceSol = parseFloat((Math.random() * 8 + 0.5).toFixed(4));
     updateWalletButton();
@@ -1520,7 +1592,7 @@ function startPayment() {
   if (btn) btn.disabled = true;
   clearInterval(state.quoteTimer);
   document.getElementById('sign-wallet-name').textContent = state.wallet.type || 'Wallet';
-  document.getElementById('sign-wallet-icon').textContent = state.wallet.icon || '🔑';
+  document.getElementById('sign-wallet-icon').innerHTML = state.wallet.icon || WALLET_ICONS.Phantom;
   const addr = state.wallet.address || genAddress();
   document.getElementById('sign-from').textContent = addr.slice(0,6) + '...' + addr.slice(-6);
   document.getElementById('modal-sign').classList.add('show');
@@ -1671,6 +1743,17 @@ function showReceipt(apiResult) {
 // ═══════════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════════
+// Android status bar clock
+(function androidClock(){
+  const el = document.getElementById('android-time');
+  if (!el) return;
+  const tick = () => {
+    const n = new Date();
+    el.textContent = n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
+  };
+  tick(); setInterval(tick, 10000);
+})();
+
 window.addEventListener('load', async () => {
   await sleep(1800);
   navigate('home');
