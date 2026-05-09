@@ -577,8 +577,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div class="scan-detected" id="scan-detected">✅</div>
   <button class="btn-scan-back" onclick="goHome()">←</button>
   <div class="scan-ui">
-    <div class="scan-hint">Scan <span>QRIS merchant manapun</span><br>
-      <span style="font-size:11px;color:rgba(255,255,255,.6)">GoPay · OVO · Dana · BCA · + semua bank</span></div>
+    <div class="scan-hint">
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px">
+        <img src="/assets/logos/qris_logo.png" height="16" style="object-fit:contain;filter:brightness(0) invert(1);opacity:.9" onerror="this.style.display='none'">
+        <span>Scan QRIS merchant manapun</span>
+      </div>
+      <span style="font-size:11px;color:rgba(255,255,255,.6)">GoPay · OVO · Dana · BCA · + semua bank</span>
+    </div>
     <div class="scan-btns">
       <div class="btn-scan-action" onclick="showDemoScan()">🎯 Demo QRIS</div>
       <label class="btn-scan-action" style="cursor:pointer">
@@ -778,7 +783,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);
         border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn);margin:12px 0">
         ⚡ <strong>SIMULASI</strong> — Tidak ada dana nyata yang berpindah.
-        Ini adalah demo SOLQ untuk hackathon.
+        Ini adalah demo SOLQ — semua alur identik dengan transaksi nyata.
       </div>
       <button class="btn-approve" id="btn-approve" onclick="approveSign()">✅ Konfirmasi Simulasi</button>
       <button class="btn-reject" onclick="closeModal('modal-sign')">Batal</button>
@@ -1792,6 +1797,22 @@ window.addEventListener('online', () => {
   toast('Koneksi internet kembali.', 'success');
   if (state.payment.amountIDR >= 1000) fetchQuote();
 });
+</script>
+<script>
+// /demo-nosec route: hide simulation warning banners for clean CEO/investor demo
+(function() {
+  if (window.location.pathname === '/demo-nosec') {
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide the ⚠️ Mode Demo warning card on home screen
+      document.querySelectorAll('.sim-note-card, .demo-ribbon').forEach(function(el) {
+        el.style.display = 'none';
+      });
+      // Hide the SIMULASI warning block inside sign modal
+      var warnBlocks = document.querySelectorAll('[style*="rgba(245,158,11,.08)"]');
+      warnBlocks.forEach(function(el) { el.style.display = 'none'; });
+    });
+  }
+})();
 </script>
 </body>
 </html>
