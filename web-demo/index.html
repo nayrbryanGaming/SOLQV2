@@ -426,29 +426,29 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <!-- Desktop info sidebar -->
 <div class="desktop-info">
-  <div class="di-badge">🎮 DEMO / SIMULASI</div>
+  <div class="di-badge">DEMO / SIMULASI</div>
   <div class="di-logo">
     <img src="/assets/logos/solq_wordmark.png" alt="SOLQ" style="max-width:180px;height:auto;object-fit:contain;display:block;background:#fff;border-radius:10px;padding:6px 12px">
   </div>
   <p class="di-desc">Simulasi pembayaran QRIS dengan aset Solana.<br>
     Scan QRIS merchant mana pun — merchant name dan NMID otomatis terbaca.</p>
   <div class="di-feature">
-    <span class="di-feat-icon">📷</span>
+    <span class="di-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 4V3.5A.5.5 0 0 1 7 3h4a.5.5 0 0 1 .5.5V4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
     <div><div class="di-feat-title">Scan QRIS Nyata</div>
     <div class="di-feat-desc">Gunakan kamera device untuk scan QRIS merchant Indonesia mana pun</div></div>
   </div>
   <div class="di-feature">
-    <span class="di-feat-icon">🔍</span>
+    <span class="di-feat-icon"><img src="/assets/logos/qris_logo.png" height="18" style="object-fit:contain;filter:brightness(0) invert(.7)" onerror="this.outerHTML='<svg width=&quot;18&quot; height=&quot;18&quot; viewBox=&quot;0 0 18 18&quot; fill=&quot;none&quot;><circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.5&quot;/><path d=&quot;M12 12l3 3&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.5&quot; stroke-linecap=&quot;round&quot;/></svg>'"></span>
     <div><div class="di-feat-title">Parser EMVCo Real</div>
     <div class="di-feat-desc">CRC-16/CCITT validasi, ekstrak nama toko, NMID, bank acquirer</div></div>
   </div>
   <div class="di-feature">
-    <span class="di-feat-icon">⚡</span>
+    <span class="di-feat-icon"><img src="/assets/logos/solana.png" width="18" height="18" style="border-radius:50%;object-fit:cover;display:block" onerror="this.style.display='none'"></span>
     <div><div class="di-feat-title">Simulasi Lengkap</div>
     <div class="di-feat-desc">Flow pembayaran penuh: QRIS → Jupiter Quote → TX → Settlement</div></div>
   </div>
   <div class="di-feature">
-    <span class="di-feat-icon">💰</span>
+    <span class="di-feat-icon"><img src="/assets/logos/usdc.png" width="18" height="18" style="border-radius:50%;object-fit:cover;display:block" onerror="this.style.display='none'"></span>
     <div><div class="di-feat-title">Fee 0.5% Transparan</div>
     <div class="di-feat-desc">Platform 70% + Dev 30% split, gas ditanggung SOLQ</div></div>
   </div>
@@ -491,7 +491,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="splash-logo-wrap">
       <img src="/assets/logos/solq_wordmark.png" alt="SOLQ"
         style="width:240px;max-width:80vw;object-fit:contain;background:#fff;border-radius:14px;padding:10px 18px">
-      <div class="splash-demo-pill" style="margin-top:20px">⚡ MODE SIMULASI</div>
+      <div class="splash-demo-pill" style="margin-top:20px">MODE SIMULASI</div>
     </div>
   </div>
 </div>
@@ -514,14 +514,14 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
 
     <div class="sim-note-card">
-      ⚠️ <strong>Mode Demo:</strong> Semua transaksi disimulasikan. Tidak ada dana nyata yang berpindah.
+      <strong>Mode Demo:</strong> Semua transaksi disimulasikan. Tidak ada dana nyata yang berpindah.
       Scan QRIS merchant manapun — nama toko & NMID otomatis terbaca dari QR.
     </div>
 
     <div class="price-card">
       <div class="price-row">
         <div class="price-token">
-          <div class="price-icon">◎</div>
+          <div class="price-icon" style="background:transparent;padding:0;overflow:hidden"><img src="/assets/logos/solana.png" width="36" height="36" style="border-radius:50%;object-fit:cover;display:block" onerror="this.outerHTML='<div style=&quot;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9945FF,#14F195);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>S</div>'"></div>
           <div><div class="price-name">Solana</div><div class="price-symbol">SOL / IDR</div></div>
         </div>
         <div class="price-right">
@@ -534,7 +534,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="price-card" style="margin-top:0">
       <div class="price-row">
         <div class="price-token">
-          <div class="price-icon" style="background:linear-gradient(135deg,#2775CA,#5BADFF)">$</div>
+          <div class="price-icon" style="background:transparent;padding:0;overflow:hidden"><img src="/assets/logos/usdc.png" width="36" height="36" style="border-radius:50%;object-fit:cover;display:block" onerror="this.outerHTML='<div style=&quot;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#2775CA,#5BADFF);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff&quot;>$</div>'"></div>
           <div><div class="price-name">USDC</div><div class="price-symbol">USDC / IDR</div></div>
         </div>
         <div class="price-right">
@@ -574,7 +574,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
     <div class="scan-bottom"></div>
   </div>
-  <div class="scan-detected" id="scan-detected">✅</div>
+  <div class="scan-detected" id="scan-detected"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="oklch(0.72 0.16 145)"/><path d="M9 16l5 5 9-9" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   <button class="btn-scan-back" onclick="goHome()">←</button>
   <div class="scan-ui">
     <div class="scan-hint">
@@ -595,7 +595,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   </div>
   <!-- Camera error fallback -->
   <div class="cam-error hidden" id="cam-error">
-    <div class="cam-error-icon">📷</div>
+    <div class="cam-error-icon"><svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="4" y="10" width="32" height="24" rx="4" stroke="rgba(250,249,246,.5)" stroke-width="2"/><circle cx="20" cy="22" r="6" stroke="rgba(250,249,246,.5)" stroke-width="2"/><path d="M15 10V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1" stroke="rgba(250,249,246,.5)" stroke-width="2" stroke-linecap="round"/></svg></div>
     <div class="cam-error-title">Kamera tidak tersedia</div>
     <div class="cam-error-sub">Gunakan HTTPS atau localhost untuk akses kamera browser.<br>Coba pilihan berikut:</div>
     <div class="manual-input-wrap">
@@ -691,7 +691,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="proc-sub" id="proc-sub">Mohon tunggu sebentar...</div>
     <div class="step-list" id="step-list"></div>
     <div class="sim-disclaimer" id="proc-explorer" style="display:none">
-      ⚡ <strong>Mode Simulasi</strong> — Transaksi ini tidak nyata.<br>
+      <strong>Mode Simulasi</strong> — Transaksi ini tidak nyata.<br>
       <a id="explorer-link" href="#" target="_blank" style="color:var(--purple2);text-decoration:none">Lihat di Solana Explorer (simulasi) →</a>
     </div>
   </div>
@@ -701,9 +701,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="s-receipt" class="screen">
   <div class="receipt-card">
     <div class="receipt-top">
-      <div class="receipt-check">✅</div>
+      <div class="receipt-check"><img src="/assets/logos/icon_success.png" width="48" height="48" style="object-fit:contain;display:block" onerror="this.outerHTML='<svg width=&quot;48&quot; height=&quot;48&quot; viewBox=&quot;0 0 48 48&quot; fill=&quot;none&quot;><circle cx=&quot;24&quot; cy=&quot;24&quot; r=&quot;22&quot; fill=&quot;oklch(0.72 0.16 145)&quot;/><path d=&quot;M14 24l7 7 13-14&quot; stroke=&quot;white&quot; stroke-width=&quot;3&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/></svg>'"></div>
       <div class="receipt-success">Simulasi Berhasil!</div>
-      <div class="receipt-sim-badge">⚡ MODE SIMULASI — Tidak ada dana nyata</div>
+      <div class="receipt-sim-badge">MODE SIMULASI — Tidak ada dana nyata</div>
       <div class="receipt-amount" id="receipt-amount">Rp 0</div>
       <div class="receipt-merchant" id="receipt-merchant">Merchant</div>
     </div>
@@ -716,10 +716,10 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div class="receipt-row"><span class="r-label">Fee Layanan (0.5%)</span><span class="r-val" id="r-fee">—</span></div>
       <div class="receipt-row"><span class="r-label">Gas Solana</span><span class="r-val">Gratis ✓ (SOLQ cover)</span></div>
       <div class="receipt-row"><span class="r-label">Tx Hash (sim)</span><span class="r-val addr green" id="r-txhash">—</span></div>
-      <div class="receipt-row"><span class="r-label">Status</span><span class="r-val green">✅ Simulated Complete</span></div>
+      <div class="receipt-row"><span class="r-label">Status</span><span class="r-val green">Simulated Complete</span></div>
     </div>
     <div class="receipt-actions">
-      <a class="btn-explorer" id="explorer-btn" href="#" target="_blank">🔍 Lihat di Solana Explorer</a>
+      <a class="btn-explorer" id="explorer-btn" href="#" target="_blank">Lihat di Solana Explorer</a>
       <button class="btn-done" onclick="goHome()">Selesai</button>
     </div>
   </div>
@@ -782,10 +782,10 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div class="sign-row"><span class="sign-label">Gas</span><span class="sign-val">Gratis ✓ (SOLQ cover)</span></div>
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);
         border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn);margin:12px 0">
-        ⚡ <strong>SIMULASI</strong> — Tidak ada dana nyata yang berpindah.
-        Ini adalah demo SOLQ — semua alur identik dengan transaksi nyata.
+        <strong>SIMULASI</strong> — Tidak ada dana nyata yang berpindah.
+        Semua alur identik dengan transaksi nyata.
       </div>
-      <button class="btn-approve" id="btn-approve" onclick="approveSign()">✅ Konfirmasi Simulasi</button>
+      <button class="btn-approve" id="btn-approve" onclick="approveSign()">Konfirmasi Simulasi</button>
       <button class="btn-reject" onclick="closeModal('modal-sign')">Batal</button>
     </div>
   </div>
@@ -905,7 +905,7 @@ function connectWallet(type) {
     state.wallet.balanceSol = parseFloat((Math.random() * 8 + 0.5).toFixed(4));
     updateWalletButton();
     refreshBalance();
-    toast(`✅ ${type} terhubung (simulasi)`, 'success');
+    toast(`${type} terhubung (simulasi)`, 'success');
   }, 1200);
 }
 
@@ -1213,7 +1213,7 @@ async function startCamera() {
 
   // Show explanation toast only when asking for the first time
   if (permState === 'prompt') {
-    toast('📷 SOLQ butuh akses kamera untuk scan QRIS. Izinkan ketika browser meminta.', 'info', 4000);
+    toast('SOLQ butuh akses kamera untuk scan QRIS. Izinkan ketika browser meminta.', 'info', 4000);
     await new Promise(r => setTimeout(r, 800)); // brief pause so toast is visible
   }
 
@@ -1294,7 +1294,7 @@ async function handleQRDetected(rawData) {
       stopCamera();
       showConfirmScreen(enriched);
     } catch (e) {
-      toast('❌ ' + e.message, 'error', 5000);
+      toast(e.message, 'error', 5000);
       state.scanning = true;
       requestAnimationFrame(scanFrame);
     }
@@ -1346,7 +1346,7 @@ function handleImageUpload(e) {
     if (typeof jsQR !== 'undefined') {
       const code = jsQR(imgData.data, imgData.width, imgData.height);
       if (code) handleQRDetected(code.data);
-      else toast('❌ Tidak ada QR code ditemukan di gambar', 'error');
+      else toast('Tidak ada QR code ditemukan di gambar', 'error');
     }
   };
   img.src = url;
@@ -1419,7 +1419,7 @@ function getMerchantIcon(name) {
   if (n.includes('hotel') || n.includes('inn')) return '🏨';
   if (n.includes('bensin') || n.includes('spbu') || n.includes('pertamina')) return '⛽';
   if (n.includes('buah') || n.includes('sayur') || n.includes('segar')) return '🥦';
-  if (n.includes('solq') || n.includes('demo')) return '⚡';
+  if (n.includes('solq') || n.includes('demo')) return 'S';
   return '🏪';
 }
 
@@ -1442,7 +1442,7 @@ function showConfirmScreen(qris) {
     badge.style.color = 'var(--cyan)';
     badge.style.border = '1px solid rgba(0,212,255,0.3)';
   } else if (qris.isDynamic) {
-    badge.textContent = '⚡ QR Dinamis'; badge.className = 'badge badge-dynamic';
+    badge.textContent = 'QR Dinamis'; badge.className = 'badge badge-dynamic';
     badge.style = '';
   } else {
     badge.textContent = '📌 QR Statis'; badge.className = 'badge badge-static';
@@ -1638,14 +1638,14 @@ async function approveSign() {
 //  SIMULATION PAYMENT STEPS
 // ═══════════════════════════════════════════════════════════════════
 const STEPS = [
-  { icon:'📋', text:'QRIS Tervalidasi (CRC-16 ✓)' },
-  { icon:'💱', text:'Jupiter Quote Diterima...' },
-  { icon:'🔐', text:'Transaksi Ditandatangani (simulasi)' },
-  { icon:'📡', text:'Broadcast ke Solana Mainnet...' },
-  { icon:'⛓️', text:'Konfirmasi Blockchain (~400ms)' },
-  { icon:'💰', text:'Konversi ke IDRX via Jupiter...' },
-  { icon:'🏦', text:'Settlement IDR ke Merchant...' },
-  { icon:'✅', text:'Settlement Selesai!' },
+  { icon:'1', text:'QRIS Tervalidasi (CRC-16)' },
+  { icon:'2', text:'Jupiter Quote Diterima...' },
+  { icon:'3', text:'Transaksi Ditandatangani (simulasi)' },
+  { icon:'4', text:'Broadcast ke Solana Mainnet...' },
+  { icon:'5', text:'Konfirmasi Blockchain (~400ms)' },
+  { icon:'6', text:'Konversi ke IDRX via Jupiter...' },
+  { icon:'7', text:'Settlement IDR ke Merchant...' },
+  { icon:'8', text:'Settlement Selesai!' },
 ];
 
 async function runSimulatedPayment() {
@@ -1698,7 +1698,7 @@ async function runSimulatedPayment() {
 
   document.getElementById('proc-explorer').style.display = 'block';
   document.getElementById('explorer-link').href = `https://explorer.solana.com/tx/${fakeSig}?cluster=mainnet-beta`;
-  document.getElementById('proc-title').textContent = '✅ Simulasi Berhasil!';
+  document.getElementById('proc-title').textContent = 'Simulasi Berhasil!';
   document.getElementById('proc-sub').textContent = 'IDR terkirim ke merchant (simulasi).';
 
   await sleep(1400);
