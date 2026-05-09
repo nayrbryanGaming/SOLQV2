@@ -1,5 +1,12 @@
 // IDRX offramp — burn IDRX on-chain then call redeem API to settle IDR to merchant bank
+//
+// BUG-C001: IDRX Redeem only supports EVM chains: Polygon, Base, BNB, WorldChain, Lisk, Kaia.
+// Solana is NOT supported. For Solana → IDR, use Xendit disbursement (see api/utils/xendit.js).
+// IDRX EVM bridge (Wormhole/deBridge) is on roadmap; not yet implemented.
 import { createHmac } from 'crypto';
+
+// Chains actually supported by IDRX Redeem (verified from docs.idrx.co)
+const IDRX_SUPPORTED_CHAINS = ['polygon', 'base', 'bsc', 'worldchain', 'lisk', 'kaia'];
 
 const IDRX_BASE = 'https://idrx.co';
 const IDRX_API_KEY = process.env.IDRX_API_KEY ?? 'dfcdee9f7b182552';
@@ -39,6 +46,14 @@ export async function submitRedeemRequest({
   bankAccountName,
   walletAddress = '',
 }) {
+  // BUG-C001 guard: fail fast with clear error before hitting IDRX API with unsupported chain
+  if (!IDRX_SUPPORTED_CHAINS.includes(String(networkChainId).toLowerCase())) {
+    throw new Error(
+      `IDRX: chain '${networkChainId}' not supported for redeem. ` +
+      `Supported: ${IDRX_SUPPORTED_CHAINS.join(', ')}. ` +
+      `For Solana, use Xendit disbursement.`
+    );
+  }
   const mappedCode = mapBankCode(bankCode);
   if (!mappedCode) throw new Error(`Unsupported bank code: ${bankCode}`);
   if (!burnTxHash) throw new Error('burnTxHash required — burn IDRX on-chain first');
