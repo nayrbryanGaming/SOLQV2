@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAF9F6">
+<title>Download SOLQ APK — Solana × QRIS</title>
+<meta name="description" content="Download SOLQ Android APK — bayar QRIS pakai SOL/USDC/IDRX, terima Rupiah real-time. Tersedia varian Live dan Demo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FAF9F6;--ink:#0E0E0C;--ink2:#3A3A36;--ink3:#76766E;
+  --line:#E6E4DD;--card:#FFFFFF;--card-alt:#F2F0E8;
+  --green:oklch(0.72 0.16 145);--green2:oklch(0.42 0.14 145);
+  --green-soft:oklch(0.95 0.04 145);
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+a{text-decoration:none;color:inherit}
+
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(250,249,246,.92);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{max-width:900px;margin:0 auto;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between}
+.nav-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:-.5px}
+.nav-mark{width:32px;height:32px;border-radius:9px;background:var(--ink);color:var(--bg);font-family:var(--mono);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.nav-back{font-size:13px;color:var(--ink3);display:flex;align-items:center;gap:6px;transition:.15s}
+.nav-back:hover{color:var(--ink)}
+
+.hero{max-width:900px;margin:0 auto;padding:64px 24px 48px;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--green-soft);border:1px solid var(--green);border-radius:20px;padding:6px 14px;font-size:11px;font-weight:700;color:var(--green2);letter-spacing:.6px;margin-bottom:20px}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+h1{font-size:clamp(32px,5vw,48px);font-weight:900;letter-spacing:-1.5px;line-height:1.1;margin-bottom:16px}
+h1 em{color:var(--green2);font-style:normal}
+.hero-sub{font-size:16px;color:var(--ink3);line-height:1.7;max-width:480px;margin:0 auto 40px}
+
+.apk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;max-width:900px;margin:0 auto;padding:0 24px}
+@media(max-width:420px){.apk-grid{grid-template-columns:1fr;padding:0 16px}}
+
+.apk-card{
+  background:var(--card);border:2px solid var(--line);
+  border-radius:20px;overflow:hidden;transition:.2s;
+}
+.apk-card:hover{transform:translateY(-3px);box-shadow:0 16px 48px rgba(0,0,0,.1)}
+.apk-card.live{border-color:var(--ink)}
+.apk-card.demo-card{border-color:var(--green)}
+
+.apk-header{
+  padding:28px 28px 20px;
+  display:flex;align-items:flex-start;gap:16px;
+}
+.apk-header.live-bg{background:var(--ink);color:var(--bg)}
+.apk-header.demo-bg{background:var(--green-soft)}
+.apk-emoji{font-size:36px;flex-shrink:0;line-height:1}
+.apk-title{font-size:20px;font-weight:800;letter-spacing:-.3px;margin-bottom:4px}
+.apk-subtitle{font-size:12px;opacity:.6;font-weight:500}
+
+.apk-body{padding:20px 28px 28px;display:flex;flex-direction:column;gap:16px}
+.apk-desc{font-size:14px;color:var(--ink3);line-height:1.7}
+.apk-meta{display:flex;gap:8px;flex-wrap:wrap}
+.apk-tag{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  padding:4px 10px;border-radius:6px;
+  background:var(--card-alt);border:1px solid var(--line);color:var(--ink2);
+}
+
+.dl-variants{display:flex;flex-direction:column;gap:10px}
+.dl-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-radius:10px;
+  border:1.5px solid var(--line);background:var(--bg);
+  transition:.15s;
+}
+.dl-row:hover{border-color:var(--ink3);background:var(--card-alt)}
+.dl-row-info{display:flex;flex-direction:column;gap:2px}
+.dl-row-name{font-size:13px;font-weight:600;color:var(--ink)}
+.dl-row-size{font-size:11px;color:var(--ink3);font-family:var(--mono)}
+.dl-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;
+  white-space:nowrap;transition:.15s;
+}
+.dl-btn-dark{background:var(--ink);color:var(--bg)}
+.dl-btn-dark:hover{opacity:.85}
+.dl-btn-green{background:var(--green2);color:#fff}
+.dl-btn-green:hover{opacity:.9}
+.dl-btn-outline{border:1.5px solid var(--line);color:var(--ink2)}
+.dl-btn-outline:hover{border-color:var(--ink3);color:var(--ink)}
+
+.install-guide{max-width:900px;margin:40px auto 0;padding:0 24px 64px}
+.guide-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
+.guide-title{font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.guide-steps{display:flex;flex-direction:column;gap:10px}
+.guide-step{display:flex;gap:12px;align-items:flex-start}
+.guide-step-n{
+  width:24px;height:24px;border-radius:6px;background:var(--ink);
+  color:var(--bg);font-size:11px;font-weight:700;font-family:var(--mono);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;
+}
+.guide-step p{font-size:13px;color:var(--ink2);line-height:1.6}
+.guide-step strong{color:var(--ink)}
+
+.compat{max-width:900px;margin:0 auto;padding:0 24px 32px}
+.compat-inner{background:var(--card-alt);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:13px;color:var(--ink3);line-height:1.7}
+.compat-inner strong{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <div class="nav-mark">SQ</div>
+      SOLQ
+    </a>
+    <a href="/" class="nav-back">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Kembali
+    </a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge"><span class="badge-dot"></span> FLUTTER ANDROID · PILOT RELEASE</div>
+  <h1>Download SOLQ <em>APK</em></h1>
+  <p class="hero-sub">Pilih varian yang sesuai. Untuk demo tanpa risiko gunakan <strong>Demo APK</strong>. Untuk transaksi nyata gunakan <strong>Live APK</strong>.</p>
+</div>
+
+<div class="apk-grid">
+
+  <!-- LIVE APK -->
+  <div class="apk-card live">
+    <div class="apk-header live-bg">
+      <div class="apk-emoji">🚀</div>
+      <div>
+        <div class="apk-title">SOLQ Live</div>
+        <div class="apk-subtitle">Mainnet · Transaksi Nyata</div>
+      </div>
+    </div>
+    <div class="apk-body">
+      <p class="apk-desc">APK production untuk transaksi nyata. Hubungkan Phantom / Solflare / Backpack, scan QRIS, bayar dengan SOL/USDC/IDRX — merchant terima Rupiah otomatis.</p>
+      <div class="apk-meta">
+        <span class="apk-tag">Solana Mainnet</span>
+        <span class="apk-tag">Jupiter Swap</span>
+        <span class="apk-tag">Fee 0.5%</span>
+      </div>
+      <div class="dl-variants">
+        <a href="https://github.com/nayrbryanGaming/SOLQV2/releases/latest/download/solq-live-arm64.apk" class="dl-row">
+          <div class="dl-row-info">
+            <div class="dl-row-name">ARM64-v8a (Direkomendasikan)</div>
+            <div class="dl-row-size">~18 MB · Android 7.0+</div>
+          </div>
+          <span class="dl-btn dl-btn-dark">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M7 9l-2.5-2.5M7 9l2.5-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Download
+          </span>
+        </a>
+        <a href="https://github.com/nayrbryanGaming/SOLQV2/releases/latest/download/solq-live-universal.apk" class="dl-row">
+          <div class="dl-row-info">
+            <div class="dl-row-name">Universal (Semua Arsitektur)</div>
+            <div class="dl-row-size">~25 MB · ARM32 + ARM64</div>
+          </div>
+          <span class="dl-btn dl-btn-outline">Download</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMO APK -->
+  <div class="apk-card demo-card">
+    <div class="apk-header demo-bg">
+      <div class="apk-emoji">🎮</div>
+      <div>
+        <div class="apk-title">SOLQ Demo</div>
+        <div class="apk-subtitle">Simulasi · Tidak Ada Dana Nyata</div>
+      </div>
+    </div>
+    <div class="apk-body">
+      <p class="apk-desc">APK simulasi untuk testing dan demo. Scan QRIS manapun, lihat flow transaksi lengkap tanpa mengeluarkan uang. Ideal untuk presentasi dan evaluasi produk.</p>
+      <div class="apk-meta">
+        <span class="apk-tag">Simulasi Penuh</span>
+        <span class="apk-tag">Tanpa Biaya</span>
+        <span class="apk-tag">Untuk Demo</span>
+      </div>
+      <div class="dl-variants">
+        <a href="https://github.com/nayrbryanGaming/SOLQV2/releases/latest/download/solq-demo-arm64.apk" class="dl-row">
+          <div class="dl-row-info">
+            <div class="dl-row-name">ARM64-v8a (Direkomendasikan)</div>
+            <div class="dl-row-size">~17 MB · Android 7.0+</div>
+          </div>
+          <span class="dl-btn dl-btn-green">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M7 9l-2.5-2.5M7 9l2.5-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Download
+          </span>
+        </a>
+        <a href="https://github.com/nayrbryanGaming/SOLQV2/releases/latest/download/solq-demo-universal.apk" class="dl-row">
+          <div class="dl-row-info">
+            <div class="dl-row-name">Universal (Semua Arsitektur)</div>
+            <div class="dl-row-size">~24 MB · ARM32 + ARM64</div>
+          </div>
+          <span class="dl-btn dl-btn-outline">Download</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Install guide -->
+<div class="install-guide">
+  <div class="guide-card">
+    <div class="guide-title">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4M8 5.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Cara Install APK Android
+    </div>
+    <div class="guide-steps">
+      <div class="guide-step">
+        <div class="guide-step-n">1</div>
+        <p>Download APK yang sesuai dengan perangkat Anda (ARM64 untuk HP modern, Universal untuk semua).</p>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-n">2</div>
+        <p>Buka <strong>Pengaturan → Keamanan → Install aplikasi dari sumber tidak dikenal</strong> (atau "Unknown Sources"). Aktifkan untuk browser/file manager yang digunakan.</p>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-n">3</div>
+        <p>Buka file APK yang sudah didownload. Ketuk <strong>"Install"</strong> dan tunggu selesai.</p>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-n">4</div>
+        <p>Untuk <strong>SOLQ Live</strong>: pastikan Phantom / Solflare / Backpack sudah terinstall. Untuk <strong>SOLQ Demo</strong>: langsung bisa digunakan tanpa wallet.</p>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-n">5</div>
+        <p>Buka SOLQ, arahkan kamera ke QRIS manapun, dan ikuti alur pembayaran.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="compat">
+  <div class="compat-inner">
+    <strong>Kompatibilitas:</strong> Android 7.0 (Nougat) ke atas · ARM64 atau ARMv7 ·
+    Kamera diperlukan untuk scan QRIS · Wallet Solana (Phantom/Solflare/Backpack) diperlukan untuk Live APK ·
+    Semua versi tersedia di <a href="https://github.com/nayrbryanGaming/SOLQV2/releases" target="_blank" style="color:var(--ink);text-decoration:underline">GitHub Releases</a>.
+    Segera hadir di <strong>Google Play Store</strong>.
+  </div>
+</div>
+
+</body>
+</html>

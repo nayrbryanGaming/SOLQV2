@@ -26,6 +26,10 @@
     { "source": "/api/v1/merchants", "destination": "/api/v1/merchants" },
     { "source": "/v1/(.*)", "destination": "/api/v1/$1" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/app/(.*)", "destination": "/app/$1" },
+    { "source": "/app", "destination": "/app/index.html" },
+    { "source": "/download/(.*)", "destination": "/download/$1" },
+    { "source": "/download", "destination": "/download/index.html" },
     { "source": "/demo/(.*)", "destination": "/demo/$1" },
     { "source": "/demo", "destination": "/demo/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
