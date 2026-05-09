@@ -376,6 +376,50 @@ textarea.qris-manual:focus{border-color:var(--purple)}
 @keyframes dots{0%{content:'.'}40%{content:'..'}80%,100%{content:'...'}}
 ::-webkit-scrollbar{width:0}
 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── Android Phone Chrome (desktop only) ── */
+.android-sb{
+  display:none;
+  height:28px;background:var(--bg);
+  padding:0 20px;
+  flex-direction:row;align-items:center;justify-content:space-between;
+  flex-shrink:0;z-index:50;
+  font-size:11px;font-weight:700;color:#fff;letter-spacing:-.3px;
+  user-select:none;pointer-events:none;
+}
+@media(min-width:900px){.android-sb{display:flex}}
+.android-sb-icons{display:flex;align-items:center;gap:5px;opacity:.75}
+
+.android-nb{
+  display:none;
+  height:36px;background:var(--bg);
+  flex-direction:row;align-items:center;justify-content:space-around;
+  flex-shrink:0;padding:0 48px;z-index:50;
+  border-top:1px solid rgba(255,255,255,.07);
+}
+@media(min-width:900px){.android-nb{display:flex}}
+.android-nb-btn{
+  width:30px;height:30px;
+  display:flex;align-items:center;justify-content:center;
+  opacity:.38;cursor:pointer;transition:opacity .15s;color:#fff;
+}
+.android-nb-btn:hover{opacity:.72}
+
+/* Desktop: phone side buttons */
+@media(min-width:900px){
+  .phone::before{
+    content:'';position:absolute;
+    left:-3px;top:120px;width:3px;height:56px;
+    background:rgba(255,255,255,.12);border-radius:2px 0 0 2px;
+    pointer-events:none;
+  }
+  .phone::after{
+    content:'';position:absolute;
+    right:-3px;top:140px;width:3px;height:80px;
+    background:rgba(255,255,255,.12);border-radius:0 2px 2px 0;
+    pointer-events:none;
+  }
+}
 </style>
 </head>
 <body>
@@ -429,6 +473,16 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <!-- Phone App -->
 <div class="phone">
+
+<!-- Android status bar — desktop phone frame only -->
+<div class="android-sb" id="android-sb">
+  <span id="android-time">9:41</span>
+  <div class="android-sb-icons">
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><rect x="0" y="8" width="3" height="3"/><rect x="4" y="5" width="3" height="6"/><rect x="8" y="2" width="3" height="9"/><rect x="12" y="0" width="3" height="11"/></svg>
+    <svg width="14" height="11" viewBox="0 0 14 11" fill="currentColor"><circle cx="7" cy="10" r="1.2"/><path d="M4.2 7.3A3.9 3.9 0 0 1 7 6.2c1.1 0 2.1.4 2.8 1.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M1.8 5A6.5 6.5 0 0 1 7 3c2 0 3.8.8 5.2 2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+    <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2" stroke="currentColor" stroke-opacity=".5"/><rect x="2" y="2" width="13" height="7" rx="1" fill="currentColor"/><path d="M20 3.5v4a1.5 1.5 0 0 0 0-4z" fill="currentColor" fill-opacity=".4"/></svg>
+  </div>
+</div>
 
 <!-- SPLASH -->
 <div id="s-splash" class="screen active">
@@ -720,6 +774,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- Android nav bar — 3 gesture buttons, desktop only -->
+<div class="android-nb">
+  <div class="android-nb-btn" title="Back">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4L6 9l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="android-nb-btn" title="Home">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="2"/></svg>
+  </div>
+  <div class="android-nb-btn" title="Recents">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 4V3a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </div>
+</div>
 
 </div><!-- .phone -->
 
@@ -1676,6 +1743,17 @@ function showReceipt(apiResult) {
 // ═══════════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════════
+// Android status bar clock
+(function androidClock(){
+  const el = document.getElementById('android-time');
+  if (!el) return;
+  const tick = () => {
+    const n = new Date();
+    el.textContent = n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
+  };
+  tick(); setInterval(tick, 10000);
+})();
+
 window.addEventListener('load', async () => {
   await sleep(1800);
   navigate('home');

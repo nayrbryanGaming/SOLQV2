@@ -182,21 +182,159 @@ function pickBestMerchantAccount(nestedTlv) {
   return null;
 }
 
+// QRIS acquirer/institution lookup tables (Bank Indonesia NMID prefix + globalId keywords)
+// Covers 100+ Indonesian banks, e-wallets, and payment acquirers per BI QRIS spec.
+const GLOBAL_ID_MAP = [
+  // ── E-Wallets ──────────────────────────────────────────────────────────────
+  ['GOPAY',       ['GOPAY','GO-PAY','GOJEK']],
+  ['SHOPEEPAY',   ['SHOPEE','SHOPEEPAY','SEA MONEY','SEAMONEY','AIRPAY']],
+  ['DANA',        ['DANA','EMTEK']],
+  ['OVO',         ['OVO','VISIONET']],
+  ['LINKAJA',     ['AIRCASH','LINKAJA','LINK AJA','TELKOMSEL','TCASH']],
+  ['JENIUS',      ['JENIUS','BTPN JENIUS']],
+  ['DOKU',        ['DOKU','NUSA SATU']],
+  ['KREDIVO',     ['KREDIVO','FINACCEL']],
+  ['AKULAKU',     ['AKULAKU']],
+  ['INDODANA',    ['INDODANA']],
+  ['JAGO',        ['JAGO','BANK JAGO','ARTHA GRAHA INTERNASIONAL']],
+  ['SEABANK',     ['SEABANK','SEA BANK','PT BANK SEABANK']],
+  ['BLU',         ['BLU','BCA DIGITAL']],
+  ['NEOBANK',     ['NEOBANK','NEO COMMERCE','BANK NEO']],
+  ['MOTION',      ['MOTION BANKING','MNC BANK','MEDIA NUSANTARA CITRA']],
+  ['BYOND',       ['BYOND','BANK KB BUKOPIN']],
+  ['SUPERBANK',   ['SUPERBANK','GRAB FINANCIAL']],
+  ['LIVIN',       ['LIVIN','MANDIRI LIVIN']],
+  ['BRIMO',       ['BRIMO','BRI MOBILE']],
+  ['SAKUKU',      ['SAKUKU','BCA SAKUKU']],
+  ['ISAKU',       ['ISAKU','INDOSAT']],
+  ['PAYTREN',     ['PAYTREN']],
+  ['FLIP',        ['FLIP','PT FLIPTECH']],
+  ['ESPAY',       ['ESPAY','PT ESPAY']],
+  ['FASPAY',      ['FASPAY','PT BIMASAKTI']],
+  ['NICEPAY',     ['NICEPAY','INFONOX']],
+  ['MIDTRANS',    ['MIDTRANS','GOJEK MIDTRANS']],
+  ['XENDIT',      ['XENDIT']],
+  // ── Government / BI ────────────────────────────────────────────────────────
+  ['BI-FAST',     ['BIFAST','BI-FAST','BANK INDONESIA','SKNBI']],
+  // ── State-Owned Banks (BUMN) ───────────────────────────────────────────────
+  ['BRI',         ['BRI','BANK RAKYAT INDONESIA','BRILINK']],
+  ['BNI',         ['BNI','BANK NEGARA INDONESIA']],
+  ['MANDIRI',     ['MANDIRI','BANK MANDIRI']],
+  ['BTN',         ['BTN','BANK TABUNGAN NEGARA']],
+  ['BCA',         ['BCA','BANK CENTRAL ASIA']],
+  ['BSI',         ['BSI','BANK SYARIAH INDONESIA','BRISYARIAH','BNIS','MANDIRISYARIAH']],
+  // ── Regional Development Banks (BPD) ──────────────────────────────────────
+  ['BANK_ACEH',       ['BANK ACEH','BPD ACEH']],
+  ['BANK_SUMUT',      ['BANK SUMUT','BPD SUMATERA UTARA']],
+  ['BANK_NAGARI',     ['BANK NAGARI','BPD SUMATERA BARAT']],
+  ['BANK_RIAU',       ['BANK RIAU','BPD RIAU']],
+  ['BANK_JAMBI',      ['BANK JAMBI','BPD JAMBI']],
+  ['BANK_SUMSEL',     ['BANK SUMSEL','BANK SUMSELBABEL','BPD SUMSEL']],
+  ['BANK_BENGKULU',   ['BANK BENGKULU','BPD BENGKULU']],
+  ['BANK_LAMPUNG',    ['BANK LAMPUNG','BPD LAMPUNG']],
+  ['BANK_DKI',        ['BANK DKI','BPD DKI JAKARTA']],
+  ['BANK_BJB',        ['BJB','BANK JABAR','BANK BANTEN','BPD JABAR']],
+  ['BANK_JATENG',     ['BANK JATENG','BPD JAWA TENGAH','BANK JAWA TENGAH']],
+  ['BANK_BPD_DIY',    ['BPD DIY','BANK DIY','BANK DAERAH ISTIMEWA']],
+  ['BANK_JATIM',      ['BANK JATIM','BPD JAWA TIMUR']],
+  ['BANK_NTB',        ['BANK NTB','BPD NTB']],
+  ['BANK_NTT',        ['BANK NTT','BPD NTT']],
+  ['BANK_KALBAR',     ['BANK KALBAR','BPD KALIMANTAN BARAT']],
+  ['BANK_KALSEL',     ['BANK KALSEL','BPD KALIMANTAN SELATAN']],
+  ['BANK_KALTIM',     ['BANK KALTIM','BPD KALTIM KALTARA']],
+  ['BANK_KALTENG',    ['BANK KALTENG','BPD KALIMANTAN TENGAH']],
+  ['BANK_SULUT',      ['BANK SULUT','BANK SULUTGO','BPD SULUT']],
+  ['BANK_SULTENG',    ['BANK SULTENG','BPD SULAWESI TENGAH']],
+  ['BANK_SULSEL',     ['BANK SULSEL','BANK SULSELBAR','BPD SULSEL']],
+  ['BANK_SULTRA',     ['BANK SULTRA','BPD SULAWESI TENGGARA']],
+  ['BANK_MALUKU',     ['BANK MALUKU','BPD MALUKU']],
+  ['BANK_PAPUA',      ['BANK PAPUA','BPD PAPUA']],
+  ['BANK_BALI',       ['BANK BPD BALI','BPD BALI']],
+  // ── Private National Banks ─────────────────────────────────────────────────
+  ['CIMB',        ['CIMB','CIMB NIAGA','LIPPO BANK']],
+  ['PERMATA',     ['PERMATA','PERMATABANK','STANDARD CHARTERED PERMATA']],
+  ['PANIN',       ['PANIN','PAN INDONESIA']],
+  ['DANAMON',     ['DANAMON','BANK DANAMON']],
+  ['MAYBANK',     ['MAYBANK','BANK INTERNASIONAL INDONESIA','BII']],
+  ['OCBC',        ['OCBC','OCBC NISP','BANK NISP']],
+  ['HSBC',        ['HSBC','HONGKONG SHANGHAI']],
+  ['CITIBANK',    ['CITI','CITIBANK']],
+  ['MEGA',        ['MEGA','BANK MEGA']],
+  ['SINARMAS',    ['SINARMAS','BANK SINARMAS']],
+  ['BUANA',       ['BUANA','MAS BUANA']],
+  ['BUKOPIN',     ['BUKOPIN','BANK BUKOPIN','KB BUKOPIN']],
+  ['BTPN',        ['BTPN','BANK TABUNGAN PENSIUNAN']],
+  ['MUAMALAT',    ['MUAMALAT','BANK MUAMALAT']],
+  ['MAYAPADA',    ['MAYAPADA','BANK MAYAPADA']],
+  ['UOB',         ['UOB','UNITED OVERSEAS']],
+  ['COMMONWEALTH',['COMMONWEALTH','BANK COMMONWEALTH']],
+  ['RESONA',      ['RESONA','BANK RESONA PERDANIA']],
+  ['DBS',         ['DBS','BANK DBS INDONESIA']],
+  ['ANZ',         ['ANZ','BANK ANZ']],
+  ['DEUTSCHE',    ['DEUTSCHE','DEUTSCHE BANK']],
+  ['WOORI',       ['WOORI','BANK WOORI']],
+  ['SHINHAN',     ['SHINHAN','BANK SHINHAN']],
+  ['IBK',         ['IBK','BANK IBK INDONESIA']],
+  ['CHINA_CONST', ['CHINA CONSTRUCTION','CCB']],
+  ['ICBC',        ['ICBC','INDUSTRIAL COMMERCIAL CHINA']],
+  ['BOC',         ['BANK OF CHINA','BOC']],
+  ['SUMITOMO',    ['SUMITOMO','MITSUI BANKING','SMBC']],
+  ['MIZUHO',      ['MIZUHO','BANK OF TOKYO']],
+  ['MUFG',        ['MUFG','MITSUBISHI UFJ']],
+  ['NOBU',        ['NOBU','BANK NOBU','NATIONALNOBU']],
+  ['ARTHA',       ['ARTHA GRAHA','BANK ARTHA']],
+  ['BUMI_ARTHA',  ['BUMI ARTA','BANK BUMI ARTA']],
+  ['VICTORIA',    ['VICTORIA','BANK VICTORIA']],
+  ['FAMA',        ['FAMA','BANK FAMA']],
+  ['JTRUST',      ['JTRUST','J-TRUST','BANK JTRUST']],
+  ['INA',         ['BANK INA','MAYORA']],
+  ['SAHABAT',     ['SAHABAT SAMPOERNA','BANK SAHABAT']],
+  ['MULTIARTA',   ['MULTIARTA','BANK MULTIARTA']],
+  ['MESTIKA',     ['MESTIKA','BANK MESTIKA']],
+  ['QNB',         ['QNB','BANK QNB KESAWAN']],
+  ['KROM',        ['KROM','BANK KROM']],
+  ['ALLO',        ['ALLO BANK','ALLO']],
+];
+
+// NMID prefix → institution (6-digit BI acquirer code)
+const NMID_PREFIX_MAP = {
+  'ID1002': 'BRI',     'ID1007': 'BTN',     'ID1008': 'MANDIRI',
+  'ID1009': 'BNI',     'ID1011': 'BCA',     'ID1013': 'PERMATA',
+  'ID1016': 'MAYBANK', 'ID1019': 'PANIN',   'ID1022': 'CIMB',
+  'ID1023': 'OVO',     'ID1025': 'GOPAY',   'ID1028': 'DANAMON',
+  'ID1049': 'DANA',    'ID1076': 'OCBC',    'ID1200': 'BSI',
+  'ID7016': 'LINKAJA', 'ID9009': 'SHOPEEPAY','ID9010': 'JAGO',
+  'ID9012': 'SEABANK', 'ID9013': 'NEOBANK', 'ID9015': 'ALLO',
+  'ID9020': 'DOKU',    'ID9025': 'FLIP',    'ID9030': 'XENDIT',
+};
+
 function detectBank(decoded) {
-  const account26 = decoded.merchantAccountInfo['26'] || {};
-  const account27 = decoded.merchantAccountInfo['27'] || {};
-  const globalId = String(account26['00'] || account27['00'] || '').toUpperCase();
+  // 1. Scan globalId strings across all merchant account info tags
+  const allGlobalIds = [];
+  for (let tag = 26; tag <= 51; tag++) {
+    const nested = decoded.merchantAccountInfo[String(tag)] || {};
+    const gid = String(nested['00'] || '').toUpperCase();
+    if (gid) allGlobalIds.push(gid);
+  }
+  const combinedGlobalId = allGlobalIds.join(' ');
 
-  if (globalId.includes('GOPAY')) return 'GOPAY';
-  if (globalId.includes('SHOPEE')) return 'SHOPEE';
-  if (globalId.includes('DANA')) return 'DANA';
-  if (globalId.includes('OVO')) return 'OVO';
-  if (globalId.includes('AIRCASH')) return 'LINKAJA';
-  if (globalId.includes('BCA')) return 'BCA';
+  for (const [bank, keywords] of GLOBAL_ID_MAP) {
+    for (const kw of keywords) {
+      if (combinedGlobalId.includes(kw)) return bank;
+    }
+  }
 
-  const account = decoded.merchantAccount;
-  if (typeof account === 'string' && account.startsWith('ID1011')) return 'BCA';
-  if (typeof account === 'string' && account.startsWith('ID1025')) return 'GOPAY';
+  // 2. NMID prefix lookup
+  const nmid = String(decoded.merchantId || '').toUpperCase();
+  for (const [prefix, bank] of Object.entries(NMID_PREFIX_MAP)) {
+    if (nmid.startsWith(prefix)) return bank;
+  }
+
+  // 3. Merchant account prefix fallback
+  const account = String(decoded.merchantAccount || '').toUpperCase();
+  for (const [prefix, bank] of Object.entries(NMID_PREFIX_MAP)) {
+    if (account.startsWith(prefix)) return bank;
+  }
 
   return 'UNKNOWN';
 }

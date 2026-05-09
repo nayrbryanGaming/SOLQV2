@@ -1,8 +1,14 @@
+// SOLQ — NO-SECURITY ENTRY POINT
+// Build: flutter build apk --dart-define=APP_ENV=nosec --target=lib/main_nosec.dart
+//
+// Intended for: live demo, investor presentation, CEO/presiden walkthrough.
+// ALL security checks (root detection, developer-mode gate, screenshot prevention)
+// are intentionally removed so the APK runs on ANY Android device without
+// interference. Real mainnet transactions still apply — this is NOT a simulation.
+
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 
 import 'services/solana_service.dart';
 import 'services/orchestrator_service.dart';
@@ -17,25 +23,11 @@ import 'widgets/wallet_picker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // BUG-034 FIX: Block only genuinely rooted devices.
-  // developerMode check removed — causes false positives on Xiaomi/OPPO/Vivo.
-  if (!kDebugMode) {
-    try {
-      final isJailbroken = await FlutterJailbreakDetection.jailbroken;
-      if (isJailbroken) {
-        runApp(const _BlockedDeviceApp());
-        return;
-      }
-    } catch (_) {
-      // Detection failure is non-fatal — proceed normally.
-    }
-  }
+  // No jailbreak / root / developer-mode check in this build.
 
   final lang = LanguageService();
   await lang.init();
 
-  // Pre-warm singleton scanner (eliminates first-open black screen)
   ScannerService.instance.initialize();
 
   final orchestrator = OrchestratorService();
@@ -70,35 +62,6 @@ class SOLQApp extends StatelessWidget {
   }
 }
 
-// BUG-034: Shown when app detects rooted/jailbroken device
-class _BlockedDeviceApp extends StatelessWidget {
-  const _BlockedDeviceApp();
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.security, color: Colors.redAccent, size: 64),
-                SizedBox(height: 24),
-                Text('DEVICE NOT SUPPORTED', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                SizedBox(height: 16),
-                Text('SOLQ cannot run on rooted or jailbroken devices for security reasons.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 13)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class MainOrchestrator extends StatefulWidget {
   const MainOrchestrator({super.key});
 
@@ -106,13 +69,14 @@ class MainOrchestrator extends StatefulWidget {
   State<MainOrchestrator> createState() => _MainOrchestratorState();
 }
 
-class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBindingObserver {
+class _MainOrchestratorState extends State<MainOrchestrator>
+    with WidgetsBindingObserver {
   final _solana = SolanaService();
   final _orchestrator = OrchestratorService();
 
   int _selectedIndex = 0;
   bool _isScanning = false;
-  bool _isCreatingIntent = false; // BUG-027: Loading overlay while fetching quote
+  bool _isCreatingIntent = false;
   PaymentIntent? _activeIntent;
   String _settlementTrack = 'standard';
   double _solBalance = 0.0;
@@ -126,10 +90,10 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
     _refreshBalance();
   }
 
-  // BUG-NEW-002 FIX: Pause/resume session timeout timer with app lifecycle.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _solana.pauseSessionTimeout();
     } else if (state == AppLifecycleState.resumed) {
       _solana.resumeSessionTimeout();
@@ -140,7 +104,8 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
     _intentSub = _orchestrator.stream.listen((intent) {
       setState(() {
         _activeIntent = intent;
-        if (intent.state != PaymentState.completed && intent.state != PaymentState.failed) {
+        if (intent.state != PaymentState.completed &&
+            intent.state != PaymentState.failed) {
           _isScanning = false;
         }
       });
@@ -154,7 +119,8 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
       } else if (event == 'DISCONNECTED' || event == 'DISCONNECT') {
         if (mounted) setState(() => _solBalance = 0.0);
       } else if (event == 'CONNECT_FAILED') {
-        _showError('Wallet tidak dapat terhubung. Pastikan Phantom/Solflare sudah terpasang dan coba lagi.');
+        _showError(
+            'Wallet tidak dapat terhubung. Pastikan Phantom/Solflare sudah terpasang dan coba lagi.');
       } else if (event == 'WAITING_BROWSER') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -190,7 +156,7 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageService>();
-    
+
     return Scaffold(
       body: Stack(
         children: [
@@ -205,13 +171,19 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
           if (_isScanning)
             ScannerView(
               onDetect: (code) async {
-                setState(() { _isScanning = false; _isCreatingIntent = true; });
+                setState(() {
+                  _isScanning = false;
+                  _isCreatingIntent = true;
+                });
                 await _orchestrator.createIntent(code);
                 if (mounted) setState(() => _isCreatingIntent = false);
               },
-              onCancel: () => setState(() { _isScanning = false; _isCreatingIntent = false; }),
+              onCancel: () =>
+                  setState(() {
+                    _isScanning = false;
+                    _isCreatingIntent = false;
+                  }),
             ),
-          // BUG-027 FIX: Loading overlay while backend fetches quote after scan
           if (_isCreatingIntent)
             Container(
               color: Colors.black87,
@@ -219,9 +191,12 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Color(0xFF00FF94), strokeWidth: 2),
+                    CircularProgressIndicator(
+                        color: Color(0xFF00FF94), strokeWidth: 2),
                     SizedBox(height: 20),
-                    Text('Fetching quote...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    Text('Fetching quote...',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 14)),
                   ],
                 ),
               ),
@@ -239,9 +214,15 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
               showSelectedLabels: true,
               showUnselectedLabels: false,
               items: [
-                BottomNavigationBarItem(icon: const Icon(Icons.payment), label: lang.t('pay')),
-                BottomNavigationBarItem(icon: const Icon(Icons.history), label: lang.t('history')),
-                BottomNavigationBarItem(icon: const Icon(Icons.settings), label: lang.t('settings')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.payment),
+                    label: lang.t('pay')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.history),
+                    label: lang.t('history')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.settings),
+                    label: lang.t('settings')),
               ],
             ),
     );
@@ -273,10 +254,10 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
         }
       },
       onPickGallery: () {
-         if (!_solana.isConnected) {
+        if (!_solana.isConnected) {
           WalletPicker.show(context);
         } else {
-          setState(() => _isScanning = true); // ScannerView handles gallery pick
+          setState(() => _isScanning = true);
         }
       },
     );
@@ -287,7 +268,9 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(lang.t('settings'), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(lang.t('settings'),
+              style: const TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 32),
           ListTile(
             title: Text(lang.t('language')),
@@ -295,18 +278,27 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
               value: lang.currentLanguage,
               onChanged: (l) => lang.setLanguage(l!),
               items: const [
-                DropdownMenuItem(value: AppLanguage.en, child: Text("English")),
-                DropdownMenuItem(value: AppLanguage.id, child: Text("Indonesia")),
+                DropdownMenuItem(
+                    value: AppLanguage.en, child: Text("English")),
+                DropdownMenuItem(
+                    value: AppLanguage.id, child: Text("Indonesia")),
               ],
             ),
           ),
           const Divider(indent: 20, endIndent: 20, color: Colors.white10),
           ListTile(
             title: const Text("Wallet"),
-            subtitle: Text(_solana.isConnected ? _solana.connectedAddress! : lang.t('connect_wallet')),
-            trailing: _solana.isConnected 
-              ? IconButton(icon: const Icon(Icons.logout), onPressed: () => setState(() => _solana.disconnect()))
-              : ElevatedButton(onPressed: () => WalletPicker.show(context), child: const Text("CONNECT")),
+            subtitle: Text(_solana.isConnected
+                ? _solana.connectedAddress!
+                : lang.t('connect_wallet')),
+            trailing: _solana.isConnected
+                ? IconButton(
+                    icon: const Icon(Icons.logout),
+                    onPressed: () =>
+                        setState(() => _solana.disconnect()))
+                : ElevatedButton(
+                    onPressed: () => WalletPicker.show(context),
+                    child: const Text("CONNECT")),
           ),
         ],
       ),
