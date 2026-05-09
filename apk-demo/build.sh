@@ -4,6 +4,8 @@
 # IMPORTANT: APK built with this script MUST show SIMULASI badge — no real funds move.
 
 set -e
+cd "$(dirname "$0")/.."   # run from repo root regardless of CWD
+mkdir -p ./debug-info      # BUG-C005 fix: required by --split-debug-info
 
 echo "Building SOLQ DEMO APK (SIMULATION mode)..."
 
