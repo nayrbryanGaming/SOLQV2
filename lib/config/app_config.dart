@@ -13,6 +13,10 @@ class AppConfig {
   static const bool isDevnet =
       bool.fromEnvironment('DEVNET', defaultValue: false);
 
+  /// true → simulation mode (demo / no real funds), false → real mainnet
+  static const bool isSimulation =
+      bool.fromEnvironment('IS_SIMULATION', defaultValue: false);
+
   static const String cluster = isDevnet ? 'devnet' : 'mainnet-beta';
 
   static const String appUrl = 'https://solq.my.id';

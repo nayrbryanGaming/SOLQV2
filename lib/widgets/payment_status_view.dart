@@ -7,6 +7,21 @@ import '../models/payment_intent.dart';
 import '../services/language_service.dart';
 import '../services/orchestrator_service.dart';
 
+// Cream design tokens
+const _kBg      = Color(0xFFFAF9F6);
+const _kInk     = Color(0xFF0E0E0C);
+const _kInk2    = Color(0xFF3A3A36);
+const _kInk3    = Color(0xFF76766E);
+const _kLine    = Color(0xFFE6E4DD);
+const _kCard    = Color(0xFFFFFFFF);
+const _kCardAlt = Color(0xFFF2F0E8);
+const _kGreen   = Color(0xFF52A876);
+const _kGreenSoft = Color(0xFFEBF5F0);
+const _kWarn    = Color(0xFFD97706);
+const _kWarnSoft = Color(0xFFFEF3C7);
+const _kErr     = Color(0xFFB91C1C);
+const _kErrSoft = Color(0xFFFEE2E2);
+
 class PaymentStatusView extends StatefulWidget {
   final PaymentIntent intent;
   final String settlementTrack;
@@ -28,7 +43,6 @@ class PaymentStatusView extends StatefulWidget {
 class _PaymentStatusViewState extends State<PaymentStatusView> {
   String _manualAmount = "";
 
-  // BUG-023: Quote countdown
   static const int _quoteLifetimeSeconds = 30;
   Timer? _quoteTimer;
   int _quoteSecondsLeft = _quoteLifetimeSeconds;
@@ -102,137 +116,185 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     if (widget.intent.state == PaymentState.failed) {
       return _buildFailedView(widget.intent, lang);
     }
-
     return _buildProcessView(widget.intent, lang);
   }
 
   Widget _buildProcessView(PaymentIntent intent, LanguageService lang) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32.0),
-      child: Column(
-        children: [
-          _buildStatusHeader(intent),
-          const SizedBox(height: 32),
-          Text(intent.merchantName.toUpperCase(),
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          const SizedBox(height: 4),
-          Text(lang.t('merchant_detected'),
-              style: const TextStyle(fontSize: 10, color: Colors.white38, letterSpacing: 1)),
-          
-          const SizedBox(height: 24),
-          if (intent.state == PaymentState.pendingAmount)
-            _buildAmountInput(intent, lang)
-          else
-            _buildAmountDisplay(intent),
+    return Container(
+      color: _kBg,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildStatusBadge(intent),
+            const SizedBox(height: 28),
 
-          const SizedBox(height: 32),
-          if (intent.state == PaymentState.created && intent.amountIdr != "0")
-            _buildSettlementTrackPicker(intent, lang)
-          else
-            const SizedBox.shrink(),
+            Text(intent.merchantName.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: _kInk,
+                  letterSpacing: -0.3,
+                )),
+            const SizedBox(height: 2),
+            Text(lang.t('merchant_detected'),
+                style: const TextStyle(fontSize: 11, color: _kInk3, letterSpacing: 0.3)),
 
-          const SizedBox(height: 24),
-          if (intent.state == PaymentState.created && intent.amountIdr != "0")
-            _buildActionButtons(intent, lang),
-
-          if (intent.state == PaymentState.authorizationRequested)
-            _buildWaitingWallet(intent),
-
-          if (intent.state == PaymentState.awaitingSettlement || intent.state == PaymentState.authorized)
-            const Column(
-              children: [
-                CircularProgressIndicator(color: Color(0xFF00FF94), strokeWidth: 2),
-                SizedBox(height: 16),
-                Text("Verifying on-chain...", style: TextStyle(color: Colors.white38, fontSize: 12)),
-              ],
+            const SizedBox(height: 28),
+            Container(
+              height: 1,
+              color: _kLine,
             ),
+            const SizedBox(height: 28),
 
-          const SizedBox(height: 24),
-          if (intent.state != PaymentState.completed)
-            TextButton(
-                onPressed: widget.onReset,
-                child: Text(lang.t('cancel'),
-                    style: const TextStyle(color: Colors.white24, fontSize: 12, letterSpacing: 2))),
-          
-          const SizedBox(height: 32),
-          _buildSafetyWarning(lang),
-        ],
+            if (intent.state == PaymentState.pendingAmount)
+              _buildAmountInput(intent, lang)
+            else
+              _buildAmountDisplay(intent),
+
+            const SizedBox(height: 28),
+            if (intent.state == PaymentState.created && intent.amountIdr != "0")
+              _buildSettlementTrackPicker(intent, lang),
+
+            const SizedBox(height: 24),
+            if (intent.state == PaymentState.created && intent.amountIdr != "0")
+              _buildActionButtons(intent, lang),
+
+            if (intent.state == PaymentState.authorizationRequested)
+              _buildWaitingWallet(intent),
+
+            if (intent.state == PaymentState.awaitingSettlement ||
+                intent.state == PaymentState.authorized)
+              Column(
+                children: [
+                  const LinearProgressIndicator(
+                    color: _kGreen,
+                    backgroundColor: _kLine,
+                  ),
+                  const SizedBox(height: 16),
+                  Text("Verifying on-chain...",
+                      style: const TextStyle(color: _kInk3, fontSize: 12)),
+                ],
+              ),
+
+            const SizedBox(height: 24),
+            if (intent.state != PaymentState.completed)
+              Center(
+                child: TextButton(
+                  onPressed: widget.onReset,
+                  child: Text(lang.t('cancel'),
+                      style: const TextStyle(
+                          color: _kInk3, fontSize: 12, letterSpacing: 0.5)),
+                ),
+              ),
+
+            const SizedBox(height: 28),
+            _buildSafetyWarning(lang),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatusHeader(PaymentIntent intent) {
-    String text = "";
-    Color color = Colors.white;
+  Widget _buildStatusBadge(PaymentIntent intent) {
+    String text = "PROCESSING";
+    Color bg = _kCardAlt;
+    Color fg = _kInk2;
 
     switch (intent.state) {
-      case PaymentState.created: text = "READY TO SWAP"; color = Colors.greenAccent; break;
-      case PaymentState.pendingAmount: text = "ENTER AMOUNT"; color = Colors.blueAccent; break;
-      case PaymentState.authorizationRequested: text = "WAITING FOR WALLET"; color = Colors.amberAccent; break;
-      case PaymentState.authorized: text = "AUTHORIZED"; color = Colors.amberAccent; break;
-      case PaymentState.awaitingSettlement: text = "SETTLING..."; color = Colors.blueAccent; break;
-      default: text = "PROCESSING";
+      case PaymentState.created:
+        text = "READY TO SWAP"; bg = _kGreenSoft; fg = _kGreen; break;
+      case PaymentState.pendingAmount:
+        text = "ENTER AMOUNT"; bg = const Color(0xFFEFF6FF); fg = const Color(0xFF1D4ED8); break;
+      case PaymentState.authorizationRequested:
+        text = "WAITING FOR WALLET"; bg = _kWarnSoft; fg = _kWarn; break;
+      case PaymentState.authorized:
+        text = "AUTHORIZED"; bg = _kWarnSoft; fg = _kWarn; break;
+      case PaymentState.awaitingSettlement:
+        text = "SETTLING..."; bg = const Color(0xFFEFF6FF); fg = const Color(0xFF1D4ED8); break;
+      default: break;
     }
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withOpacity(0.25)),
       ),
-      child: Text(text, textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color, letterSpacing: 2)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(text,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                  letterSpacing: 0.8)),
+        ],
+      ),
     );
   }
 
   Widget _buildAmountDisplay(PaymentIntent intent) {
     final lang = context.read<LanguageService>();
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text('AMOUNT',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                color: _kInk3, letterSpacing: 1.5)),
+        const SizedBox(height: 6),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
-            const Icon(Icons.lock, size: 14, color: Colors.greenAccent),
-            const SizedBox(width: 8),
+            const Icon(Icons.lock_outline, size: 14, color: _kGreen),
+            const SizedBox(width: 6),
             Text('Rp ${intent.amountIdr}',
-                style: const TextStyle(fontSize: 32, color: Colors.greenAccent, fontWeight: FontWeight.w900)),
+                style: const TextStyle(
+                  fontSize: 36,
+                  color: _kInk,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -1,
+                )),
           ],
         ),
         if (intent.estimatedCryptoAmount != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text("~ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0) / 100).toStringAsFixed(2)} IDRX",
-                style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              "≈ ${((double.tryParse(intent.estimatedCryptoAmount ?? "0") ?? 0) / 100).toStringAsFixed(2)} IDRX",
+              style: const TextStyle(color: _kInk3, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ),
-        // BUG-023 FIX: Quote expiry countdown
         if (intent.state == PaymentState.created && (intent.amountIdr != '0'))
           Padding(
-            padding: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.only(top: 10),
             child: _isRefreshingQuote
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(width: 12, height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber)),
-                      const SizedBox(width: 8),
-                      Text(lang.t('refreshing_quote'),
-                          style: const TextStyle(color: Colors.amber, fontSize: 11)),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.timer_outlined, size: 12, color: Colors.white38),
-                      const SizedBox(width: 4),
-                      Text('${lang.t('quote_expires_in')} ${_quoteSecondsLeft}s',
-                          style: TextStyle(
-                            color: _quoteSecondsLeft <= 5 ? Colors.redAccent : Colors.white38,
-                            fontSize: 11,
-                          )),
-                    ],
-                  ),
+                ? Row(children: [
+                    const SizedBox(width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: _kWarn)),
+                    const SizedBox(width: 8),
+                    Text(lang.t('refreshing_quote'),
+                        style: const TextStyle(color: _kWarn, fontSize: 11)),
+                  ])
+                : Row(children: [
+                    const Icon(Icons.timer_outlined, size: 12, color: _kInk3),
+                    const SizedBox(width: 4),
+                    Text('${lang.t('quote_expires_in')} ${_quoteSecondsLeft}s',
+                        style: TextStyle(
+                          color: _quoteSecondsLeft <= 5 ? _kErr : _kInk3,
+                          fontSize: 11,
+                        )),
+                  ]),
           ),
       ],
     );
@@ -242,7 +304,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     return Column(
       children: [
         Text('Rp ${_manualAmount.isEmpty ? "0" : _manualAmount}',
-            style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold)),
+            style: const TextStyle(fontSize: 40, color: _kInk, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         GridView.count(
           shrinkWrap: true,
@@ -254,7 +316,6 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
             else if (index == 9) val = "CLR";
             else if (index == 10) val = "0";
             else if (index == 11) val = "OK";
-
             return TextButton(
               onPressed: () {
                 setState(() {
@@ -269,7 +330,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
                   }
                 });
               },
-              child: Text(val, style: const TextStyle(color: Colors.white, fontSize: 18)),
+              child: Text(val, style: const TextStyle(color: _kInk, fontSize: 18, fontWeight: FontWeight.w500)),
             );
           }),
         ),
@@ -281,50 +342,79 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(lang.t('settlement_track'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white54, letterSpacing: 2)),
+        Text(lang.t('settlement_track'),
+            style: const TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, color: _kInk3, letterSpacing: 1.5)),
         const SizedBox(height: 12),
-        _trackOption(id: 'instant', icon: Icons.bolt, title: 'INSTANT', color: Colors.amberAccent, lang: lang),
+        _trackOption(id: 'instant', icon: Icons.bolt, title: 'INSTANT',
+            fgColor: _kWarn, bgColor: _kWarnSoft, lang: lang),
         const SizedBox(height: 8),
-        _trackOption(id: 'standard', icon: Icons.swap_horiz, title: 'STANDARD', color: const Color(0xFF00FF94), isRecommended: true, lang: lang),
+        _trackOption(id: 'standard', icon: Icons.swap_horiz, title: 'STANDARD',
+            fgColor: _kGreen, bgColor: _kGreenSoft, isRecommended: true, lang: lang),
         const SizedBox(height: 8),
-        _trackOption(id: 'economy', icon: Icons.diamond, title: 'ECONOMY', color: Colors.blueAccent, lang: lang),
+        _trackOption(id: 'economy', icon: Icons.diamond_outlined, title: 'ECONOMY',
+            fgColor: const Color(0xFF1D4ED8), bgColor: const Color(0xFFEFF6FF), lang: lang),
       ],
     );
   }
 
-  Widget _trackOption({required String id, required IconData icon, required String title, required Color color, bool isRecommended = false, required LanguageService lang}) {
+  Widget _trackOption({
+    required String id,
+    required IconData icon,
+    required String title,
+    required Color fgColor,
+    required Color bgColor,
+    bool isRecommended = false,
+    required LanguageService lang,
+  }) {
     final isSelected = widget.settlementTrack == id;
     return GestureDetector(
       onTap: () => widget.onTrackChanged(id),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? color : Colors.white10),
+          color: isSelected ? bgColor : _kCard,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? fgColor.withOpacity(0.4) : _kLine),
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? color : Colors.white24, size: 20),
+            Icon(icon, color: isSelected ? fgColor : _kInk3, size: 18),
             const SizedBox(width: 12),
-            Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white38, fontWeight: FontWeight.bold)),
+            Text(title,
+                style: TextStyle(
+                    color: isSelected ? _kInk : _kInk2,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13)),
             if (isRecommended) ...[
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                child: Text(lang.t('recommended'), style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.bold)),
+                decoration: BoxDecoration(
+                    color: fgColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4)),
+                child: Text(lang.t('recommended'),
+                    style: TextStyle(
+                        fontSize: 9, color: fgColor, fontWeight: FontWeight.w700)),
               ),
             ],
             const Spacer(),
-            if (isSelected) Icon(Icons.check_circle, color: color, size: 16),
+            if (isSelected)
+              Icon(Icons.check_circle, color: fgColor, size: 16)
+            else
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _kLine, width: 1.5)),
+              ),
           ],
         ),
       ),
     );
   }
 
-  // BUG-029 FIX: Show confirmation dialog before opening Phantom for signing.
   Future<void> _confirmAndPay(PaymentIntent intent, LanguageService lang) async {
     final idrxAmount = intent.estimatedCryptoAmount != null
         ? ((double.tryParse(intent.estimatedCryptoAmount!) ?? 0) / 100).toStringAsFixed(2)
@@ -334,10 +424,10 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141414),
+        backgroundColor: _kCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(lang.t('confirm_payment'),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+            style: const TextStyle(color: _kInk, fontWeight: FontWeight.w700)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,7 +435,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
             _confirmRow(lang.t('merchant'), intent.merchantName),
             const SizedBox(height: 8),
             _confirmRow(lang.t('amount'), 'Rp ${intent.amountIdr}',
-                valueColor: const Color(0xFF00FF94)),
+                valueColor: _kGreen),
             if (idrxAmount != null) ...[
               const SizedBox(height: 8),
               _confirmRow('IDRX', '≈ $idrxAmount IDRX'),
@@ -354,13 +444,13 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(0.08),
+                color: _kErrSoft,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                border: Border.all(color: _kErr.withOpacity(0.2)),
               ),
               child: Text(lang.t('warning_real_money'),
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 11,
-                      fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      color: _kErr, fontSize: 11, fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -368,16 +458,18 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(lang.t('cancel'),
-                style: const TextStyle(color: Colors.white38)),
+                style: const TextStyle(color: _kInk3)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00FF94),
-              foregroundColor: Colors.black,
+              backgroundColor: _kInk,
+              foregroundColor: const Color(0xFFFAF9F6),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: Text(lang.t('pay_now'),
-                style: const TextStyle(fontWeight: FontWeight.w900)),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -392,13 +484,13 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(label, style: const TextStyle(color: _kInk3, fontSize: 12)),
         Flexible(
           child: Text(value,
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: valueColor ?? Colors.white,
-                fontWeight: FontWeight.bold,
+                color: valueColor ?? _kInk,
+                fontWeight: FontWeight.w600,
                 fontSize: 13,
               )),
         ),
@@ -411,13 +503,16 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: _isRefreshingQuote ? null : () => _confirmAndPay(intent, lang),
-        icon: const Icon(Icons.payment, color: Colors.black),
-        label: Text(lang.t('pay_now'), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        icon: const Icon(Icons.payment),
+        label: Text(lang.t('pay_now'),
+            style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.5)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00FF94),
-          disabledBackgroundColor: Colors.white12,
+          backgroundColor: _kInk,
+          foregroundColor: const Color(0xFFFAF9F6),
+          disabledBackgroundColor: _kLine,
           padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
         ),
       ),
     );
@@ -426,12 +521,18 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
   Widget _buildWaitingWallet(PaymentIntent intent) {
     return Column(
       children: [
-        const LinearProgressIndicator(color: Color(0xFF00FF94), backgroundColor: Colors.white10),
+        const LinearProgressIndicator(color: _kGreen, backgroundColor: _kLine),
         const SizedBox(height: 16),
-        ElevatedButton(
+        OutlinedButton(
           onPressed: () => OrchestratorService().requestAuthorization(intent.intentId),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.white10, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-          child: const Text("OPEN WALLET", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _kInk,
+            side: const BorderSide(color: _kLine),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text("OPEN WALLET",
+              style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1)),
         ),
       ],
     );
@@ -440,17 +541,24 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
   Widget _buildSafetyWarning(LanguageService lang) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.1))),
+      decoration: BoxDecoration(
+          color: _kErrSoft,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _kErr.withOpacity(0.15))),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 12),
+          const Icon(Icons.warning_amber_rounded, color: _kErr, size: 16),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(lang.t('warning_real_money'), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                Text(lang.t('warning_deduction'), style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.4))),
+                Text(lang.t('warning_real_money'),
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700, color: _kErr)),
+                Text(lang.t('warning_deduction'),
+                    style: TextStyle(
+                        fontSize: 9, color: _kErr.withOpacity(0.7))),
               ],
             ),
           ),
@@ -461,60 +569,128 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
 
   Widget _buildSuccessReceipt(PaymentIntent intent, LanguageService lang) {
     final txHash = intent.settlementReference ?? '';
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const Icon(Icons.check_circle, color: Color(0xFF00FF94), size: 64),
-          const SizedBox(height: 16),
-          Text(lang.t('payment_success'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF00FF94))),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
-            child: Column(
-              children: [
-                Text(intent.merchantName.toUpperCase(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const Divider(height: 32, color: Colors.white10),
-                Text("Rp ${intent.amountIdr}", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 24),
-                if (txHash.isNotEmpty) ...[
-                  Text(lang.t('transaction_hash'), style: const TextStyle(fontSize: 10, color: Colors.white38)),
-                  const SizedBox(height: 8),
-                  Text(
-                    txHash.length > 14
-                        ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 6)}'
-                        : txHash,
-                    style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF00FF94)),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: () => launchUrl(Uri.parse("https://explorer.solana.com/tx/$txHash?cluster=mainnet-beta")),
-                    child: Text(lang.t('explorer')),
-                  ),
-                ],
-              ],
+    return Container(
+      color: _kBg,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 40),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(color: _kGreenSoft, shape: BoxShape.circle),
+              child: const Icon(Icons.check, color: _kGreen, size: 32),
             ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton(onPressed: widget.onReset, child: Text(lang.t('pay_again'))),
-        ],
+            const SizedBox(height: 16),
+            Text(lang.t('payment_success'),
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w700, color: _kInk)),
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _kCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _kLine),
+              ),
+              child: Column(
+                children: [
+                  Text(intent.merchantName.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700, color: _kInk)),
+                  const Divider(height: 28, color: _kLine),
+                  Text("Rp ${intent.amountIdr}",
+                      style: const TextStyle(
+                          fontSize: 32, fontWeight: FontWeight.w700, color: _kInk)),
+                  const SizedBox(height: 24),
+                  if (txHash.isNotEmpty) ...[
+                    Text(lang.t('transaction_hash'),
+                        style: const TextStyle(fontSize: 10, color: _kInk3)),
+                    const SizedBox(height: 8),
+                    Text(
+                      txHash.length > 14
+                          ? '${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 6)}'
+                          : txHash,
+                      style: const TextStyle(
+                          fontFamily: 'JetBrainsMono', color: _kGreen, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: () => launchUrl(Uri.parse(
+                          "https://explorer.solana.com/tx/$txHash?cluster=mainnet-beta")),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _kInk,
+                        side: const BorderSide(color: _kLine),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(lang.t('explorer')),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onReset,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kInk,
+                  foregroundColor: const Color(0xFFFAF9F6),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(lang.t('pay_again'),
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildFailedView(PaymentIntent intent, LanguageService lang) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
-          const SizedBox(height: 16),
-          Text(lang.t('payment_failed'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.redAccent)),
-          const SizedBox(height: 48),
-          ElevatedButton(onPressed: widget.onReset, child: Text(lang.t('try_again'))),
-        ],
+    return Container(
+      color: _kBg,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(color: _kErrSoft, shape: BoxShape.circle),
+              child: const Icon(Icons.close, color: _kErr, size: 32),
+            ),
+            const SizedBox(height: 16),
+            Text(lang.t('payment_failed'),
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w700, color: _kInk)),
+            const SizedBox(height: 48),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onReset,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kInk,
+                  foregroundColor: const Color(0xFFFAF9F6),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(lang.t('try_again'),
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

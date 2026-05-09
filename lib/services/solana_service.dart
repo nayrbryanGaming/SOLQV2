@@ -66,12 +66,23 @@ class SolanaService {
       await _storage.write(key: _keyPublicKey, value: _publicKey);
       _sigCtrl.add('CONNECTED');
     } catch (e) {
-      _sigCtrl.add('DISCONNECTED');
+      _sigCtrl.add('CONNECT_FAILED');
       rethrow;
     } finally {
       _isConnecting = false;
       await scenario?.close();
     }
+  }
+
+  /// Demo-only: connect with a hardcoded read-only address (no MWA required).
+  /// Used in IS_SIMULATION=true builds so any device can demo without Phantom.
+  Future<void> demoConnect() async {
+    const demoAddress = 'DemoWa11etSO1Q2024xxxxxxxxxxxxxxxxxxxxxxxxxx';
+    _publicKey = demoAddress;
+    _authToken = 'demo-token';
+    await _storage.write(key: _keyAuthToken, value: _authToken);
+    await _storage.write(key: _keyPublicKey, value: _publicKey);
+    _sigCtrl.add('CONNECTED');
   }
 
   Future<void> disconnect() async {

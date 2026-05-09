@@ -60,8 +60,13 @@ class SOLQApp extends StatelessWidget {
       title: 'SOLQ',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0D0D0D),
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFFAF9F6),
+        colorScheme: ColorScheme.light(
+          primary: const Color(0xFF0E0E0C),
+          surface: const Color(0xFFFAF9F6),
+          onSurface: const Color(0xFF0E0E0C),
+        ),
         fontFamily: 'Inter',
         useMaterial3: true,
       ),
@@ -160,7 +165,7 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
           const SnackBar(
             content: Text('Menunggu konfirmasi di wallet...'),
             duration: Duration(seconds: 3),
-            backgroundColor: Color(0xFF1A1A2E),
+            backgroundColor: Color(0xFF0E0E0C),
           ),
         );
       }
@@ -214,14 +219,15 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
           // BUG-027 FIX: Loading overlay while backend fetches quote after scan
           if (_isCreatingIntent)
             Container(
-              color: Colors.black87,
+              color: const Color(0xFFFAF9F6).withOpacity(0.92),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Color(0xFF00FF94), strokeWidth: 2),
+                    CircularProgressIndicator(color: Color(0xFF0E0E0C), strokeWidth: 2),
                     SizedBox(height: 20),
-                    Text('Fetching quote...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    Text('Fetching quote...',
+                        style: TextStyle(color: Color(0xFF76766E), fontSize: 14)),
                   ],
                 ),
               ),
@@ -233,9 +239,9 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
           : BottomNavigationBar(
               currentIndex: _selectedIndex,
               onTap: (idx) => setState(() => _selectedIndex = idx),
-              backgroundColor: const Color(0xFF141414),
-              selectedItemColor: const Color(0xFF00FF94),
-              unselectedItemColor: Colors.white24,
+              backgroundColor: const Color(0xFFFFFFFF),
+              selectedItemColor: const Color(0xFF0E0E0C),
+              unselectedItemColor: const Color(0xFF76766E),
               showSelectedLabels: true,
               showUnselectedLabels: false,
               items: [
@@ -300,13 +306,30 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
               ],
             ),
           ),
-          const Divider(indent: 20, endIndent: 20, color: Colors.white10),
+          const Divider(indent: 20, endIndent: 20, color: Color(0xFFE6E4DD)),
           ListTile(
-            title: const Text("Wallet"),
-            subtitle: Text(_solana.isConnected ? _solana.connectedAddress! : lang.t('connect_wallet')),
-            trailing: _solana.isConnected 
-              ? IconButton(icon: const Icon(Icons.logout), onPressed: () => setState(() => _solana.disconnect()))
-              : ElevatedButton(onPressed: () => WalletPicker.show(context), child: const Text("CONNECT")),
+            title: const Text("Wallet",
+                style: TextStyle(color: Color(0xFF0E0E0C))),
+            subtitle: Text(
+              _solana.isConnected
+                  ? _solana.connectedAddress!
+                  : lang.t('connect_wallet'),
+              style: const TextStyle(color: Color(0xFF76766E)),
+            ),
+            trailing: _solana.isConnected
+                ? IconButton(
+                    icon: const Icon(Icons.logout, color: Color(0xFF76766E)),
+                    onPressed: () => setState(() => _solana.disconnect()))
+                : ElevatedButton(
+                    onPressed: () => WalletPicker.show(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0E0E0C),
+                      foregroundColor: const Color(0xFFFAF9F6),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text("CONNECT")),
           ),
         ],
       ),
