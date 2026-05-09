@@ -1,0 +1,131 @@
+name: Build & Release APKs
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 * * * *'  # Every hour, 24/7
+
+jobs:
+  build-apks:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Live ARM64 APK
+        run: |
+          mkdir -p ./debug-info
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --dart-define=APP_ENV=live \
+            --dart-define=API_BASE=https://solq.vercel.app \
+            --dart-define=RPC_ENDPOINT=https://api.mainnet-beta.solana.com \
+            --dart-define=IS_SIMULATION=false \
+            --dart-define=SOLANA_CLUSTER=mainnet-beta
+          cp build/app/outputs/flutter-apk/app-release.apk solq-live-arm64.apk
+
+      - name: Build Demo ARM64 APK
+        run: |
+          flutter clean
+          mkdir -p ./debug-info
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --dart-define=APP_ENV=demo \
+            --dart-define=API_BASE=https://solq.vercel.app \
+            --dart-define=RPC_ENDPOINT=https://api.devnet.solana.com \
+            --dart-define=IS_SIMULATION=true \
+            --dart-define=SOLANA_CLUSTER=devnet
+          cp build/app/outputs/flutter-apk/app-release.apk solq-demo-arm64.apk
+
+      - name: Build Live Universal APK
+        run: |
+          flutter clean
+          mkdir -p ./debug-info
+          flutter build apk \
+            --release \
+            --dart-define=APP_ENV=live \
+            --dart-define=API_BASE=https://solq.vercel.app \
+            --dart-define=RPC_ENDPOINT=https://api.mainnet-beta.solana.com \
+            --dart-define=IS_SIMULATION=false \
+            --dart-define=SOLANA_CLUSTER=mainnet-beta
+          cp build/app/outputs/flutter-apk/app-release.apk solq-live-universal.apk
+
+      - name: Build Demo Universal APK
+        run: |
+          flutter clean
+          mkdir -p ./debug-info
+          flutter build apk \
+            --release \
+            --dart-define=APP_ENV=demo \
+            --dart-define=API_BASE=https://solq.vercel.app \
+            --dart-define=RPC_ENDPOINT=https://api.devnet.solana.com \
+            --dart-define=IS_SIMULATION=true \
+            --dart-define=SOLANA_CLUSTER=devnet
+          cp build/app/outputs/flutter-apk/app-release.apk solq-demo-universal.apk
+
+      - name: Verify APK files
+        run: |
+          ls -lh solq-*.apk || echo "ERROR: APK files not found"
+          file solq-*.apk
+
+      - name: Create/Update Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: 'Latest APKs'
+          body: |
+            # SOLQ Latest APKs
+            
+            **Live (ARM64)** - Production, Solana Mainnet
+            **Demo (ARM64)** - Simulation mode, Solana Devnet
+            **Live (Universal)** - Production, all ARM devices
+            **Demo (Universal)** - Simulation mode, all ARM devices
+            
+            Auto-built: ${{ github.event.head_commit.timestamp || 'scheduled' }}
+            Commit: ${{ github.sha }}
+          allowUpdates: true
+          draft: false
+          prerelease: false
+
+      - name: Upload APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: |
+            solq-live-arm64.apk
+            solq-demo-arm64.apk
+            solq-live-universal.apk
+            solq-demo-universal.apk
+          fail_on_unmatched_files: true
+          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/
+          retention-days: 3
