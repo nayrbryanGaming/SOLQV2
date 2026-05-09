@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:bs58/bs58.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -47,7 +46,7 @@ class SolanaService {
     LocalAssociationScenario? scenario;
     try {
       scenario = await LocalAssociationScenario.create(
-        portRange: Uint16Range(8900, 9000),
+        portRange: const Uint16Range(8900, 9000),
       );
       scenario.startActivityForResult(null, null);
       final client = await scenario.start().timeout(const Duration(seconds: 60));
@@ -101,7 +100,7 @@ class SolanaService {
     LocalAssociationScenario? scenario;
     try {
       scenario = await LocalAssociationScenario.create(
-        portRange: Uint16Range(8900, 9000),
+        portRange: const Uint16Range(8900, 9000),
       );
       scenario.startActivityForResult(null, null);
       final client = await scenario.start().timeout(const Duration(seconds: 60));
@@ -127,7 +126,7 @@ class SolanaService {
   }
 
   Future<bool> waitForSignature(String signature) async {
-    final rpcUrl = AppConfig.isDevnet
+    const rpcUrl = AppConfig.isDevnet
         ? 'https://api.devnet.solana.com'
         : 'https://api.mainnet-beta.solana.com';
     for (var i = 0; i < 30; i++) {
@@ -158,7 +157,7 @@ class SolanaService {
 
   Future<double> getBalance() async {
     if (_publicKey == null) return 0.0;
-    final rpcUrl = AppConfig.isDevnet
+    const rpcUrl = AppConfig.isDevnet
         ? 'https://api.devnet.solana.com'
         : 'https://api.mainnet-beta.solana.com';
     try {

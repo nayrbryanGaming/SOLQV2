@@ -63,15 +63,15 @@ class _SimSuccessScreenState extends State<SimSuccessScreen>
                 width: 96, height: 96,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF00FF94).withOpacity(0.15 * _checkAnim.value),
+                  color: const Color(0xFF00FF94).withValues(alpha: 0.15 * _checkAnim.value),
                   border: Border.all(
-                    color: const Color(0xFF00FF94).withOpacity(_checkAnim.value),
+                    color: const Color(0xFF00FF94).withValues(alpha: _checkAnim.value),
                     width: 3,
                   ),
                 ),
                 child: Icon(
                   Icons.check,
-                  color: const Color(0xFF00FF94).withOpacity(_checkAnim.value),
+                  color: const Color(0xFF00FF94).withValues(alpha: _checkAnim.value),
                   size: 52,
                 ),
               ),
@@ -100,7 +100,7 @@ class _SimSuccessScreenState extends State<SimSuccessScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF6B00).withOpacity(0.15),
+                color: const Color(0xFFFF6B00).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFFFF6B00)),
               ),

@@ -21,6 +21,7 @@ class WebhookService {
   static const int maxRequestsPerMinute = 60;
   
   // Replay Protection: Track processed nonces
+  // ignore: unused_field
   final Set<String> _processedNonces = {};
   
   // Rate Limiting: Track request counts per IP
@@ -47,6 +48,7 @@ class WebhookService {
   
   /// SECURITY: Verify HMAC Signature
   /// Prevents webhook forgery/spoofing
+  // ignore: unused_element
   bool _verifySignature(String payload, String? providedSignature) {
     if (providedSignature == null) return false;
     
@@ -63,6 +65,7 @@ class WebhookService {
   
   /// SECURITY: Rate Limiting
   /// Prevents DoS attacks
+  // ignore: unused_element
   bool _checkRateLimit(String ip) {
     final now = DateTime.now();
     

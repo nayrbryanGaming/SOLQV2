@@ -293,6 +293,7 @@ class QrisParser {
     return null;
   }
 
+  // ignore: unused_element
   static String? _pickBestMerchantId(Map<String, String> nested) {
     // Priority 1: NMID (Tag 02) - Standard for Indonesian QRIS (ASPI/BI)
     // Priority 2: Alternative Merchant Identifiers

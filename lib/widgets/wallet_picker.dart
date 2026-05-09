@@ -4,7 +4,6 @@ import '../services/solana_service.dart';
 import '../services/language_service.dart';
 import '../config/app_config.dart';
 
-const _kBg      = Color(0xFFFFFFFF);
 const _kBgSheet = Color(0xFFFAF9F6);
 const _kInk     = Color(0xFF0E0E0C);
 const _kInk3    = Color(0xFF76766E);
@@ -45,12 +44,12 @@ class _WalletPickerState extends State<WalletPicker> {
     } catch (e) {
       if (mounted) {
         setState(() => _connecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(
             'Wallet tidak dapat terhubung. Pastikan Phantom / Solflare sudah terpasang.',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: Colors.white),
           ),
-          backgroundColor: const Color(0xFFB91C1C),
+          backgroundColor: Color(0xFFB91C1C),
           behavior: SnackBarBehavior.floating,
         ));
       }

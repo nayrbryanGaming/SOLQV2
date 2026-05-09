@@ -62,10 +62,10 @@ class SOLQApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(0xFFFAF9F6),
-        colorScheme: ColorScheme.light(
-          primary: const Color(0xFF0E0E0C),
-          surface: const Color(0xFFFAF9F6),
-          onSurface: const Color(0xFF0E0E0C),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF0E0E0C),
+          surface: Color(0xFFFAF9F6),
+          onSurface: Color(0xFF0E0E0C),
         ),
         fontFamily: 'Inter',
         useMaterial3: true,
@@ -80,11 +80,11 @@ class _BlockedDeviceApp extends StatelessWidget {
   const _BlockedDeviceApp();
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
-        body: const Center(
+        backgroundColor: Color(0xFF0D0D0D),
+        body: Center(
           child: Padding(
             padding: EdgeInsets.all(32),
             child: Column(
@@ -161,13 +161,15 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
       } else if (event == 'CONNECT_FAILED') {
         _showError('Wallet tidak dapat terhubung. Pastikan Phantom/Solflare sudah terpasang dan coba lagi.');
       } else if (event == 'WAITING_BROWSER') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Menunggu konfirmasi di wallet...'),
-            duration: Duration(seconds: 3),
-            backgroundColor: Color(0xFF0E0E0C),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Menunggu konfirmasi di wallet...'),
+              duration: Duration(seconds: 3),
+              backgroundColor: Color(0xFF0E0E0C),
+            ),
+          );
+        }
       }
     });
   }
@@ -219,7 +221,7 @@ class _MainOrchestratorState extends State<MainOrchestrator> with WidgetsBinding
           // BUG-027 FIX: Loading overlay while backend fetches quote after scan
           if (_isCreatingIntent)
             Container(
-              color: const Color(0xFFFAF9F6).withOpacity(0.92),
+              color: const Color(0xFFFAF9F6).withValues(alpha: 0.92),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

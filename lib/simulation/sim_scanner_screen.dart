@@ -265,7 +265,7 @@ class _SimScannerScreenState extends State<SimScannerScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color, width: 1),
       ),
@@ -282,7 +282,7 @@ class _ScanOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColorFiltered(
-      colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.55), BlendMode.srcOut),
+      colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.55), BlendMode.srcOut),
       child: Stack(children: [
         Container(color: Colors.transparent),
         Center(

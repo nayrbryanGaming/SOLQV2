@@ -193,7 +193,7 @@ class _SimPaymentScreenState extends State<SimPaymentScreen> {
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF6B00).withOpacity(0.2),
+              color: const Color(0xFFFF6B00).withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFFF6B00)),
             ),
@@ -340,9 +340,9 @@ class _SimPaymentScreenState extends State<SimPaymentScreen> {
   Widget _tagChip(String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withOpacity(0.4)),
+      border: Border.all(color: color.withValues(alpha: 0.4)),
     ),
     child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
   );
@@ -411,7 +411,7 @@ class _ProcessingDialogState extends State<_ProcessingDialog> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF6B00).withOpacity(0.2),
+            color: const Color(0xFFFF6B00).withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFFF6B00)),
           ),

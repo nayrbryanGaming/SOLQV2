@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/payment_intent.dart';
@@ -166,15 +165,15 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
 
             if (intent.state == PaymentState.awaitingSettlement ||
                 intent.state == PaymentState.authorized)
-              Column(
+              const Column(
                 children: [
-                  const LinearProgressIndicator(
+                  LinearProgressIndicator(
                     color: _kGreen,
                     backgroundColor: _kLine,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text("Verifying on-chain...",
-                      style: const TextStyle(color: _kInk3, fontSize: 12)),
+                      style: TextStyle(color: _kInk3, fontSize: 12)),
                 ],
               ),
 
@@ -221,7 +220,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: fg.withOpacity(0.25)),
+        border: Border.all(color: fg.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -312,15 +311,21 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
           childAspectRatio: 1.8,
           children: List.generate(12, (index) {
             String val = "";
-            if (index < 9) val = "${index + 1}";
-            else if (index == 9) val = "CLR";
-            else if (index == 10) val = "0";
-            else if (index == 11) val = "OK";
+            if (index < 9) {
+              val = "${index + 1}";
+            } else if (index == 9) {
+              val = "CLR";
+            } else if (index == 10) {
+              val = "0";
+            } else if (index == 11) {
+              val = "OK";
+            }
             return TextButton(
               onPressed: () {
                 setState(() {
-                  if (val == "CLR") _manualAmount = "";
-                  else if (val == "OK") {
+                  if (val == "CLR") {
+                    _manualAmount = "";
+                  } else if (val == "OK") {
                     if (_manualAmount.isNotEmpty && _manualAmount != "0") {
                       OrchestratorService().setAmount(intent.intentId, _manualAmount);
                       _manualAmount = "";
@@ -375,7 +380,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
         decoration: BoxDecoration(
           color: isSelected ? bgColor : _kCard,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? fgColor.withOpacity(0.4) : _kLine),
+          border: Border.all(color: isSelected ? fgColor.withValues(alpha: 0.4) : _kLine),
         ),
         child: Row(
           children: [
@@ -391,7 +396,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                    color: fgColor.withOpacity(0.15),
+                    color: fgColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4)),
                 child: Text(lang.t('recommended'),
                     style: TextStyle(
@@ -446,7 +451,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
               decoration: BoxDecoration(
                 color: _kErrSoft,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _kErr.withOpacity(0.2)),
+                border: Border.all(color: _kErr.withValues(alpha: 0.2)),
               ),
               child: Text(lang.t('warning_real_money'),
                   style: const TextStyle(
@@ -544,7 +549,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
       decoration: BoxDecoration(
           color: _kErrSoft,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _kErr.withOpacity(0.15))),
+          border: Border.all(color: _kErr.withValues(alpha: 0.15))),
       child: Row(
         children: [
           const Icon(Icons.warning_amber_rounded, color: _kErr, size: 16),
@@ -558,7 +563,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
                         fontSize: 10, fontWeight: FontWeight.w700, color: _kErr)),
                 Text(lang.t('warning_deduction'),
                     style: TextStyle(
-                        fontSize: 9, color: _kErr.withOpacity(0.7))),
+                        fontSize: 9, color: _kErr.withValues(alpha: 0.7))),
               ],
             ),
           ),

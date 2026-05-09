@@ -4,10 +4,9 @@ import '../services/language_service.dart';
 import '../services/solana_service.dart';
 
 // Cream design tokens — mirrors E:\CLAUDE DESIGN\SOLQ\screens.jsx
-const _kBg       = Color(0xFFFAF9F6);
-const _kInk      = Color(0xFF0E0E0C);
-const _kInk2     = Color(0xFF3A3A36);
-const _kInk3     = Color(0xFF76766E);
+const _kBg   = Color(0xFFFAF9F6);
+const _kInk  = Color(0xFF0E0E0C);
+const _kInk3 = Color(0xFF76766E);
 const _kLine     = Color(0xFFE6E4DD);
 const _kCardAlt  = Color(0xFFF2F0E8);
 const _kGreen    = Color(0xFF52A876); // oklch(0.72 0.16 145) approx
@@ -40,7 +39,7 @@ class IdleView extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo
-                _SolqMark(size: 52),
+                const _SolqMark(size: 52),
                 const SizedBox(height: 6),
                 const Text(
                   'SOLQ',
@@ -67,7 +66,7 @@ class IdleView extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFEBF5F0),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _kGreen.withOpacity(0.35)),
+                      border: Border.all(color: _kGreen.withValues(alpha: 0.35)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,

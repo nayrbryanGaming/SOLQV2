@@ -240,7 +240,7 @@ class _ScannerViewState extends State<ScannerView> with WidgetsBindingObserver {
               IconButton(
                 onPressed: widget.onCancel,
                 icon: const Icon(Icons.close, color: Colors.white),
-                style: IconButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.5)),
+                style: IconButton.styleFrom(backgroundColor: Colors.redAccent.withValues(alpha: 0.5)),
               ),
             ],
           ),
@@ -256,7 +256,7 @@ class _ScannerViewState extends State<ScannerView> with WidgetsBindingObserver {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
+                  color: Colors.black.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(color: Colors.white24, width: 1),
                 ),
@@ -287,7 +287,7 @@ class _ScannerViewState extends State<ScannerView> with WidgetsBindingObserver {
             height: 250,
             decoration: BoxDecoration(
               border: Border.all(
-                  color: const Color(0xFF00FF94).withOpacity(0.5),
+                  color: const Color(0xFF00FF94).withValues(alpha: 0.5),
                   width: 2),
               borderRadius: BorderRadius.circular(16),
             ),

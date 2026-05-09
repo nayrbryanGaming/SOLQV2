@@ -78,7 +78,7 @@ class _PaymentHistoryViewState extends State<PaymentHistoryView> {
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEE2E2),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: _kErr.withOpacity(0.2)),
+                      border: Border.all(color: _kErr.withValues(alpha: 0.2)),
                     ),
                     child: const Text(
                       "Gagal memuat riwayat",
