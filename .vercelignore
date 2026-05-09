@@ -23,3 +23,6 @@ backend/audit_logs.jsonl
 # VCS / editor
 .git/
 .vscode/
+apk-live/*.apk
+apk-demo/*.apk
+.claude/
