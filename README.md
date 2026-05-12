@@ -213,17 +213,6 @@ graph TD
     CF --> DB
 ```
 
-### Five Build Variants
-
-| Variant | Target | Mode | Security |
-|---|---|---|---|
-| `apk-live` | Android APK | Mainnet, real tx | Root detection ON |
-| `apk-demo` | Android APK | Devnet, simulation | Root detection ON |
-| `apk-nosec` | Android APK | Mainnet, real tx | **OFF — for demo** |
-| `apk-demo-nosec` | Android APK | Devnet, simulation | **OFF — for demo** |
-| `web-live` | Browser PWA | Mainnet, Phantom extension | — |
-| `web-demo` | Browser PWA | Simulation | — |
-
 ---
 
 ## Key Features
@@ -402,7 +391,6 @@ SOLQ_FEE_WALLET=ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m
 - [x] GitHub Actions auto-mirror
 - [x] 100+ bank/e-wallet QRIS detection
 - [x] Android phone chrome on web apps (status bar + nav bar)
-- [x] apk-nosec build variant for demo
 
 ### Phase 2 — Infrastructure (In Progress)
 - [ ] PostgreSQL persistent store (replace in-memory on Vercel)
@@ -626,17 +614,6 @@ graph TD
     CF --> DB
 ```
 
-### Enam Variant Build
-
-| Variant | Target | Mode | Keamanan |
-|---|---|---|---|
-| `apk-live` | Android APK | Mainnet, TX nyata | Root detection ON |
-| `apk-demo` | Android APK | Devnet, simulasi | Root detection ON |
-| `apk-nosec` | Android APK | Mainnet, TX nyata | **OFF — untuk demo** |
-| `apk-demo-nosec` | Android APK | Devnet, simulasi | **OFF — untuk demo** |
-| `web-live` | Browser PWA | Mainnet, ekstensi Phantom | — |
-| `web-demo` | Browser PWA | Simulasi | — |
-
 ---
 
 ## Fitur Utama
@@ -816,7 +793,6 @@ SOLQ_FEE_WALLET=ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m
 - [x] GitHub Actions auto-mirror
 - [x] Deteksi QRIS 100+ bank/e-wallet
 - [x] Android phone chrome di web app (status bar + nav bar)
-- [x] Variant build apk-nosec dan apk-demo-nosec untuk demo
 
 ### Fase 2 — Infrastruktur (Dalam Pengerjaan)
 - [ ] PostgreSQL persistent store (gantikan in-memory di Vercel)
