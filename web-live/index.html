@@ -2130,8 +2130,29 @@ async function runRealPayment() {
       document.getElementById('btn-cancel-proc').style.display = 'none';
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
-      showError('Transaction Build Failed',
-        'Gagal membangun transaksi Jupiter swap. Pastikan wallet terkoneksi, saldo SOL/USDC cukup, lalu coba lagi.');
+      const errorMsg = `
+Transaksi Jupiter gagal dibangun. Kemungkinan penyebab:
+
+1. ✅ GUNAKAN DEVNET DULU UNTUK TEST:
+   → https://solq-demo.vercel.app
+   → Dapat SOL gratis di https://faucet.solana.com
+   
+2. ⚠️  Saldo tidak cukup:
+   - Perlu SOL + USDC untuk swap
+   - Plus gas fee (~0.01 SOL)
+   
+3. 💡 Coba jumlah lebih kecil
+   - ExactOut mode memerlukan liquidity cukup
+   
+4. 🔄 Jika masih error, coba:
+   - Refresh page
+   - Restart wallet
+   - Buka devnet version dulu untuk debug
+
+Konsultasi: support@solq.app
+      `.trim();
+      
+      showError('Transaction Build Failed', errorMsg);
       return;
     }
     let txSignature = null;

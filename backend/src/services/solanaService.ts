@@ -105,25 +105,80 @@ class SolanaService {
         // IDRX has 2 decimals on Mainnet
         const amountAtomic = Math.floor(amountIdr * 100);
 
-        // ── JUPITER V6 QUOTE ──
-        const quoteParams = new URLSearchParams({
-            inputMint: resolvedMint,
-            outputMint: IDRX_MINT.toBase58(),
-            amount: amountAtomic.toString(),
-            swapMode: 'ExactOut',
-            slippageBps: '100',         // 1% slippage for mainnet reliability
-            platformFeeBps: '50',       // 0.5% platform fee (PLATFORM_SPREAD_BPS=50)
-        });
+        // ── JUPITER V6 QUOTE WITH FALLBACK ──
+        // Try ExactOut first (strict output amount), fallback to ExactIn if fails
+        let quoteData: any = null;
+        let swapMode = 'ExactOut';
 
-        const quoteRes = await fetch(`${JUPITER_QUOTE_API}?${quoteParams}`);
-        const quoteData: any = await quoteRes.json();
+        // Attempt 1: ExactOut mode (strict IDRX output amount)
+        try {
+            const quoteParams = new URLSearchParams({
+                inputMint: resolvedMint,
+                outputMint: IDRX_MINT.toBase58(),
+                amount: amountAtomic.toString(),
+                swapMode: 'ExactOut',
+                slippageBps: '100',         // 1% slippage for mainnet reliability
+                platformFeeBps: '50',       // 0.5% platform fee (PLATFORM_SPREAD_BPS=50)
+            });
 
-        // Jupiter V6 returns data at root level (not nested under .data)
+            const quoteRes = await fetch(`${JUPITER_QUOTE_API}?${quoteParams}`);
+            quoteData = await quoteRes.json();
+
+            if (!quoteData.error && quoteData.inAmount && quoteData.outAmount) {
+                console.log(`[SOLANA] ✅ ExactOut quote success: ${quoteData.inAmount} → ${quoteData.outAmount}`);
+            } else {
+                quoteData = null; // Mark for fallback
+            }
+        } catch (e) {
+            console.warn(`[SOLANA] ExactOut attempt failed, trying fallback...`);
+            quoteData = null;
+        }
+
+        // Attempt 2: Fallback to ExactIn mode (exact input, variable output)
+        if (!quoteData) {
+            console.warn(`[SOLANA] ⚠️  ExactOut insufficient liquidity, trying ExactIn mode...`);
+            swapMode = 'ExactIn';
+            
+            // Estimate SOL needed for target IDR amount (rough oracle price: 1 SOL ≈ 150,000 IDR)
+            let estimatedSolLamports = Math.ceil(amountAtomic / 150000 * 1_000_000_000 * 1.05); // +5% buffer
+            
+            const fallbackParams = new URLSearchParams({
+                inputMint: resolvedMint,
+                outputMint: IDRX_MINT.toBase58(),
+                amount: estimatedSolLamports.toString(),
+                swapMode: 'ExactIn',
+                slippageBps: '200',         // 2% slippage for fallback mode (more relaxed)
+                platformFeeBps: '25',       // Reduced to 0.25% for fallback (increase success rate)
+            });
+
+            const fallbackRes = await fetch(`${JUPITER_QUOTE_API}?${fallbackParams}`);
+            quoteData = await fallbackRes.json();
+
+            if (quoteData.error || !quoteData.inAmount || !quoteData.outAmount) {
+                throw new Error(
+                    `CRITICAL: Both ExactOut and ExactIn modes failed. ` +
+                    `Jupiter Error: ${quoteData.error || 'No liquidity found'}. ` +
+                    `Please try: (1) Smaller amount, (2) Devnet for testing (solq-demo.vercel.app), ` +
+                    `(3) Ensure wallet has SOL + USDC. Details: ${JSON.stringify(quoteData).slice(0, 200)}`
+                );
+            }
+            
+            console.log(`[SOLANA] ✅ ExactIn fallback success: ${quoteData.inAmount} → ${quoteData.outAmount}`);
+        }
+
+        // Final validation
         if (quoteData.error) {
-            throw new Error(`Jupiter Quote Error: ${quoteData.error}`);
+            throw new Error(
+                `Jupiter ${swapMode} Quote Error: ${quoteData.error}. ` +
+                `Try: (1) Reduce amount, (2) Test on devnet first (https://solq-demo.vercel.app), ` +
+                `(3) Ensure wallet has SOL + USDC`
+            );
         }
         if (!quoteData.inAmount || !quoteData.outAmount) {
-            throw new Error(`Jupiter: No route found for ${resolvedMint} → IDRX`);
+            throw new Error(
+                `Jupiter: No liquidity route for ${amountAtomic} IDRX. ` +
+                `Recommended: Try smaller amount or use devnet (https://solq-demo.vercel.app)`
+            );
         }
 
         const inAmountRaw = Number(quoteData.inAmount);
