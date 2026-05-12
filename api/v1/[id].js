@@ -242,6 +242,8 @@ export default async (req, res) => {
     try {
       const txHash = String(req.body?.tx_hash || '').trim();
       const payerAccount = String(req.body?.payer_account || '').trim() || null;
+      const rawCluster = String(req.body?.cluster || req.query?.cluster || 'mainnet-beta').toLowerCase();
+      const cluster = rawCluster === 'devnet' ? 'devnet' : 'mainnet-beta';
       const recoveryContext = buildBodyRecoveryContext(req.body || {});
 
       if (!txHash) {
@@ -282,12 +284,15 @@ export default async (req, res) => {
         });
       }
 
+      const clusterParam = cluster === 'devnet' ? '?cluster=devnet' : '?cluster=mainnet-beta';
+      const buildExplorer = (sig) => `https://explorer.solana.com/tx/${sig}${clusterParam}`;
+
       if (existing.txHash && existing.txHash === txHash) {
         return res.status(200).json({
           ...existing,
           message: 'Idempotent confirm accepted',
           txHash: existing.txHash,
-          explorer: `https://explorer.solana.com/tx/${existing.txHash}?cluster=mainnet-beta`,
+          explorer: buildExplorer(existing.txHash),
         });
       }
 
@@ -300,11 +305,11 @@ export default async (req, res) => {
           message: 'Replay blocked: signature already used by another intent',
           txHash,
           conflicting_intent: replayIntent.id,
-          explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+          explorer: buildExplorer(txHash),
         });
       }
 
-      const verification = await verifyFinalizedSignature(txHash);
+      const verification = await verifyFinalizedSignature(txHash, cluster);
       if (!verification.ok) {
         const failed = await updateIntent(intentId, {
           status: 'FAILED',
@@ -317,18 +322,20 @@ export default async (req, res) => {
           status: 'FAILED',
           message: `On-chain verification failed: ${verification.reason}`,
           txHash,
-          explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+          cluster,
+          explorer: buildExplorer(txHash),
           intent: failed,
         });
       }
 
-      const facts = await fetchTransactionFacts(txHash);
+      const facts = await fetchTransactionFacts(txHash, cluster);
       if (!facts.ok) {
         return res.status(400).json({
           status: 'FAILED',
           message: `Finalized transaction details unavailable: ${facts.reason}`,
           txHash,
-          explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+          cluster,
+          explorer: buildExplorer(txHash),
         });
       }
 
@@ -343,7 +350,8 @@ export default async (req, res) => {
           status: 'FAILED',
           message: 'No positive token transfer detected for this signature',
           txHash,
-          explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+          cluster,
+          explorer: buildExplorer(txHash),
         });
       }
 
@@ -357,7 +365,8 @@ export default async (req, res) => {
             message: 'Expected token mint mismatch',
             expected_mint: existing.expected_token_mint,
             txHash,
-            explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+            cluster,
+            explorer: buildExplorer(txHash),
           });
         }
       }
@@ -372,7 +381,8 @@ export default async (req, res) => {
             message: 'Expected recipient owner mismatch',
             expected_owner: existing.expected_recipient_owner,
             txHash,
-            explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+            cluster,
+            explorer: buildExplorer(txHash),
           });
         }
       }
@@ -390,7 +400,8 @@ export default async (req, res) => {
             expected_min_atomic: String(minAtomic),
             received_atomic: String(maxDelta),
             txHash,
-            explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+            cluster,
+            explorer: buildExplorer(txHash),
           });
         }
       }
@@ -467,8 +478,9 @@ export default async (req, res) => {
         ...intent,
         status: 'COMPLETED',
         txHash,
+        cluster,
         payer_account: canonicalPayer,
-        explorer: `https://explorer.solana.com/tx/${txHash}?cluster=mainnet-beta`,
+        explorer: buildExplorer(txHash),
         verification,
         transaction_facts: {
           rpc: facts.rpc,

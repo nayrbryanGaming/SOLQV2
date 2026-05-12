@@ -1054,11 +1054,17 @@ const IDRX_MINT  = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
 const TOKEN_PROGRAM_ID_STR  = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const ASSOC_TOKEN_PROG_STR  = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq';
 const MIN_PAYMENT_IDR       = 32000; // IDRX minimum redeem: ~2 USD
-const RPC_ENDPOINTS = [
-  'https://api.mainnet-beta.solana.com',
-  'https://solana-api.projectserum.com',
-];
+// Detect cluster from URL: ?cluster=devnet enables devnet mode
+const CLUSTER = (() => {
+  const p = new URLSearchParams(location.search).get('cluster') || '';
+  return p.toLowerCase() === 'devnet' ? 'devnet' : 'mainnet-beta';
+})();
+const RPC_ENDPOINTS = CLUSTER === 'devnet'
+  ? ['https://api.devnet.solana.com']
+  : ['https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com'];
 const API_BASE = '';
+const buildExplorerUrl = (sig) =>
+  `https://explorer.solana.com/tx/${sig}?cluster=${CLUSTER}`;
 
 // BUG-C004 fix: derive USDC ATA for platform fee wallet
 // Jupiter expects feeAccount = Associated Token Account, not raw wallet address
@@ -1775,7 +1781,7 @@ const STEPS = [
   { text: 'Jupiter quote fetched', sub: 'ExactOut swap route' },
   { text: 'Transaction built', sub: 'Jupiter swap instruction' },
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
-  { text: 'Broadcasting to Solana', sub: 'mainnet-beta' },
+  { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
   { text: 'Burning IDRX', sub: 'settlement to merchant' },
   { text: 'IDR disbursed', sub: 'merchant credited via BI-FAST' },
@@ -1932,7 +1938,7 @@ async function runRealPayment() {
     // Step 5 — Broadcast
     setStep(5, 'active');
     document.getElementById('proc-explorer').classList.remove('hidden');
-    document.getElementById('explorer-link').href = `https://explorer.solana.com/tx/${txSignature}?cluster=mainnet-beta`;
+    document.getElementById('explorer-link').href = buildExplorerUrl(txSignature);
     document.getElementById('explorer-link').textContent = 'View on Explorer: ' + txSignature.slice(0, 12) + '...';
     await sleep(800); setStep(5, 'done');
 
@@ -2010,6 +2016,7 @@ async function runRealPayment() {
       const confirmPayload = {
         tx_hash: txSignature,
         burn_tx_hash: burnSignature || null,
+        cluster: CLUSTER,
         payer_account: state.wallet.address,
         merchant_name: qris?.merchantName ?? null,
         merchant_id: qris?.nmid ?? null,
@@ -2075,7 +2082,7 @@ function showReceipt() {
   document.getElementById('r-token-amount').textContent = (q?.tokenAmount || 0).toFixed(decimals) + ' ' + pay.token;
   document.getElementById('r-fee').textContent = rp(q?.platformFee || Math.round(pay.amountIDR * 0.005));
   document.getElementById('r-txhash').textContent = txH ? txH : '—';
-  document.getElementById('explorer-btn').href = txH ? `https://explorer.solana.com/tx/${txH}?cluster=mainnet-beta` : '#';
+  document.getElementById('explorer-btn').href = txH ? buildExplorerUrl(txH) : '#';
 
   // Add to history
   addToHistory({

@@ -92,7 +92,7 @@ export async function submitRedeemRequest({
   return response.json();
 }
 
-// Legacy wrapper — requires burnTxHash now (old /v1/disbursements endpoint was wrong)
+// Legacy wrapper — requires burnTxHash and a supported EVM chain (NOT solana)
 export async function createDisbursement({
   externalId,
   bankCode,
@@ -101,15 +101,23 @@ export async function createDisbursement({
   beneficiaryName,
   burnTxHash,
   walletAddress,
+  networkChainId,
 }) {
   if (!burnTxHash) {
     throw new Error(
       'IDRX requires on-chain burn TX hash. Client must burn IDRX first, then pass burn_tx_hash.',
     );
   }
+  const chain = String(networkChainId || '').toLowerCase();
+  if (!IDRX_SUPPORTED_CHAINS.includes(chain)) {
+    throw new Error(
+      `IDRX: chain '${chain || 'none'}' not supported. Supported: ${IDRX_SUPPORTED_CHAINS.join(', ')}. ` +
+      'For Solana, use Xendit disbursement (api/utils/xendit.js).',
+    );
+  }
   return submitRedeemRequest({
     burnTxHash,
-    networkChainId: 'solana',
+    networkChainId: chain,
     amountIdr,
     bankAccount: accountNumber,
     bankCode,
@@ -117,4 +125,39 @@ export async function createDisbursement({
     bankAccountName: beneficiaryName ?? 'Merchant',
     walletAddress: walletAddress ?? '',
   });
+}
+
+// Test IDRX API connectivity — calls GET /api/auth/get-bank-accounts (no burn needed)
+export async function testConnectivity() {
+  const timestamp = String(Date.now());
+  const urlPath = '/api/auth/get-bank-accounts';
+  const signature = buildSignature(timestamp, 'GET', urlPath, '');
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const response = await fetch(`${IDRX_BASE}${urlPath}`, {
+      method: 'GET',
+      headers: {
+        'idrx-api-key': IDRX_API_KEY,
+        'idrx-api-sig': signature,
+        'idrx-api-ts': timestamp,
+      },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+
+    const text = await response.text().catch(() => '');
+    let data = null;
+    try { data = JSON.parse(text); } catch (_) { data = { raw: text }; }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: response.ok ? data : null,
+      error: response.ok ? null : (data?.message || text || response.statusText),
+    };
+  } catch (err) {
+    return { ok: false, status: 0, data: null, error: String(err.message || err) };
+  }
 }

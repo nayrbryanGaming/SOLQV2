@@ -3,6 +3,14 @@ const MAINNET_RPCS = [
   'https://solana-mainnet.g.alchemy.com/v2/demo',
 ];
 
+const DEVNET_RPCS = [
+  'https://api.devnet.solana.com',
+];
+
+function getRpcs(cluster) {
+  return cluster === 'devnet' ? DEVNET_RPCS : MAINNET_RPCS;
+}
+
 async function rpcCall(rpcUrl, method, params) {
   const response = await fetch(rpcUrl, {
     method: 'POST',
@@ -33,11 +41,12 @@ export function isValidSolanaSignature(signature) {
   return /^[1-9A-HJ-NP-Za-km-z]+$/.test(signature);
 }
 
-export async function verifyFinalizedSignature(signature) {
+export async function verifyFinalizedSignature(signature, cluster = 'mainnet-beta') {
   let lastError = null;
   let notFoundCount = 0;
+  const rpcs = getRpcs(cluster);
 
-  for (const rpc of MAINNET_RPCS) {
+  for (const rpc of rpcs) {
     try {
       const result = await rpcCall(rpc, 'getSignatureStatuses', [
         [signature],
@@ -110,7 +119,7 @@ export async function verifyFinalizedSignature(signature) {
     }
   }
 
-  if (notFoundCount === MAINNET_RPCS.length) {
+  if (notFoundCount === rpcs.length) {
     return { ok: false, reason: 'SIGNATURE_NOT_FOUND' };
   }
 
@@ -195,10 +204,11 @@ function extractTokenDeltas(meta) {
   return items;
 }
 
-export async function fetchTransactionFacts(signature) {
+export async function fetchTransactionFacts(signature, cluster = 'mainnet-beta') {
   let lastError = null;
+  const rpcs = getRpcs(cluster);
 
-  for (const rpc of MAINNET_RPCS) {
+  for (const rpc of rpcs) {
     try {
       const result = await rpcCall(rpc, 'getTransaction', [
         signature,
