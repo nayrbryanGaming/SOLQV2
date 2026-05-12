@@ -984,7 +984,11 @@ input::placeholder{color:var(--ink3)}
   </div>
 
   <div class="proc-note" style="margin:16px 24px 0">
-    SOLQ never holds your funds. Each stage is event-driven — the UI advances only on real on-chain or partner confirmation.
+    SOLQ never holds your funds. Each stage advances only on real on-chain confirmation.
+  </div>
+
+  <div id="wallet-warning-note" class="proc-note hidden" style="margin:8px 24px 0;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;color:var(--warn-fg)">
+    Your wallet may show a security caution for new dApps. Review the transaction details, confirm the amount and recipient, then approve.
   </div>
 
   <button class="proc-cancel-btn" id="btn-cancel-proc" onclick="goHome()">Cancel transaction</button>
@@ -2133,7 +2137,7 @@ async function runRealPayment() {
             fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
             const serialized = fallTx.serialize({ requireAllSignatures: false });
             txData = btoa(String.fromCharCode(...serialized));
-            toast('Jupiter route busy — using SOL direct transfer', 'info', 3500);
+            toast('Processing via direct transfer', 'info', 2500);
           }
         } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
       }
@@ -2149,7 +2153,7 @@ async function runRealPayment() {
           testTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports: 10000 }));
           const serialized = testTx.serialize({ requireAllSignatures: false });
           txData = btoa(String.fromCharCode(...serialized));
-          toast('[DEVNET] Test TX: native SOL transfer', 'info', 3000);
+          toast('Devnet test transaction ready', 'info', 2500);
         } catch (e) { console.warn('[SOLQ] Devnet fallback TX:', e.message); }
       }
     }
@@ -2159,34 +2163,10 @@ async function runRealPayment() {
     setStep(4, 'active');
     document.getElementById('btn-cancel-proc').style.display = 'block';
     document.getElementById('proc-sub').textContent = 'Open wallet and approve...';
+    document.getElementById('wallet-warning-note')?.classList.remove('hidden');
 
-    // REAL TX ONLY — no fake signatures allowed
     if (!txData) {
-      document.getElementById('btn-approve').disabled = false;
-      document.getElementById('btn-approve').textContent = 'Sign';
-      const errorMsg = `
-Transaksi Jupiter gagal dibangun. Kemungkinan penyebab:
-
-1. ✅ GUNAKAN DEVNET DULU UNTUK TEST:
-   → https://solq-demo.vercel.app
-   → Dapat SOL gratis di https://faucet.solana.com
-   
-2. ⚠️  Saldo tidak cukup:
-   - Perlu SOL + USDC untuk swap
-   - Plus gas fee (~0.01 SOL)
-   
-3. 💡 Coba jumlah lebih kecil
-   - ExactOut mode memerlukan liquidity cukup
-   
-4. 🔄 Jika masih error, coba:
-   - Refresh page
-   - Restart wallet
-   - Buka devnet version dulu untuk debug
-
-Konsultasi: support@solq.app
-      `.trim();
-      
-      showError('Transaction Build Failed', errorMsg);
+      showError('Transaction Unavailable', 'Jupiter liquidity route is temporarily unavailable for this amount. Please try a smaller amount, or use the demo at solq-demo.vercel.app to test the full flow. Contact support@solq.app if this persists.');
       return;
     }
     let txSignature = null;
@@ -2202,7 +2182,8 @@ Konsultasi: support@solq.app
         throw new Error('Wallet tidak mengembalikan signature yang valid.');
       }
       state.payment.txHash = txSignature;
-      toast('Transaksi berhasil disign & dikirim', 'success', 2000);
+      document.getElementById('wallet-warning-note')?.classList.add('hidden');
+      toast('Transaction signed and submitted', 'success', 2000);
     } catch (e) {
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
