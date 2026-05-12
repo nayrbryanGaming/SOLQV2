@@ -1302,7 +1302,7 @@ function getPlatformFeeAccount() {
 const state = {
   screen: 'home',
   wallet: { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0 },
-  prices: { sol: { idr: 2850000, usd: 175, change24h: 0 }, usdc: { idr: 16200 }, loaded: false },
+  prices: { sol: { idr: 0, usd: 0, change24h: 0 }, usdc: { idr: 0 }, loaded: false },
   qris: null,
   payment: { amountIDR: 0, token: 'SOL', quote: null, jupiterQuote: null, intentId: null, txHash: null },
   quoteTimer: null, quoteSeconds: 30,
@@ -1526,15 +1526,16 @@ async function fetchWalletBalance(address) {
 
 function refreshBalance() {
   if (!state.wallet.connected) return;
-  const idr = state.prices.sol.idr || 2850000;
+  const idr = state.prices.sol.idr;
   document.getElementById('bal-sol').textContent = state.wallet.balanceSol.toFixed(4) + ' SOL';
-  document.getElementById('bal-idr').textContent = '≈ ' + rp(Math.round(state.wallet.balanceSol * idr));
+  document.getElementById('bal-idr').textContent = idr ? '≈ ' + rp(Math.round(state.wallet.balanceSol * idr)) : '≈ —';
 }
 
 // ═══════════════════════════════════════════
 //  PRICES
 // ═══════════════════════════════════════════
 async function fetchPrices() {
+  // Source 1: CoinGecko
   try {
     const r = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=solana,usd-coin&vs_currencies=idr,usd&include_24hr_change=true',
@@ -1542,14 +1543,52 @@ async function fetchPrices() {
     );
     if (!r.ok) throw new Error();
     const d = await r.json();
-    state.prices.sol = { idr: d.solana?.idr || 0, usd: d.solana?.usd || 0, change24h: d.solana?.idr_24h_change || 0 };
-    state.prices.usdc = { idr: d['usd-coin']?.idr || 16200 };
-    state.prices.loaded = true;
-  } catch {
-    state.prices.loaded = true;
-  }
-  updatePriceUI();
-  refreshBalance();
+    const solIdr = d.solana?.idr;
+    const usdcIdr = d['usd-coin']?.idr;
+    if (solIdr && usdcIdr) {
+      state.prices.sol = { idr: solIdr, usd: d.solana?.usd || 0, change24h: d.solana?.idr_24h_change || 0 };
+      state.prices.usdc = { idr: usdcIdr };
+      state.prices.loaded = true;
+      updatePriceUI(); refreshBalance(); return;
+    }
+  } catch (_) {}
+
+  // Source 2: ExchangeRate-API + Jupiter
+  try {
+    const [fxRes, jupRes] = await Promise.all([
+      fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(8000) }),
+      fetch('https://price.jup.ag/v6/price?ids=SOL', { signal: AbortSignal.timeout(8000) }),
+    ]);
+    if (!fxRes.ok || !jupRes.ok) throw new Error();
+    const fx = await fxRes.json(); const jup = await jupRes.json();
+    const usdIdr = fx?.rates?.IDR; const solUsd = jup?.data?.SOL?.price;
+    if (usdIdr && solUsd) {
+      state.prices.sol = { idr: Math.round(solUsd * usdIdr), usd: solUsd, change24h: 0 };
+      state.prices.usdc = { idr: Math.round(usdIdr) };
+      state.prices.loaded = true;
+      updatePriceUI(); refreshBalance(); return;
+    }
+  } catch (_) {}
+
+  // Source 3: Frankfurter + Jupiter
+  try {
+    const [fxRes, jupRes] = await Promise.all([
+      fetch('https://api.frankfurter.app/latest?from=USD&to=IDR', { signal: AbortSignal.timeout(8000) }),
+      fetch('https://price.jup.ag/v6/price?ids=SOL', { signal: AbortSignal.timeout(8000) }),
+    ]);
+    if (!fxRes.ok || !jupRes.ok) throw new Error();
+    const fx = await fxRes.json(); const jup = await jupRes.json();
+    const usdIdr = fx?.rates?.IDR; const solUsd = jup?.data?.SOL?.price;
+    if (usdIdr && solUsd) {
+      state.prices.sol = { idr: Math.round(solUsd * usdIdr), usd: solUsd, change24h: 0 };
+      state.prices.usdc = { idr: Math.round(usdIdr) };
+      state.prices.loaded = true;
+      updatePriceUI(); refreshBalance(); return;
+    }
+  } catch (_) {}
+
+  state.prices.loaded = true;
+  updatePriceUI(); refreshBalance();
 }
 
 function updatePriceUI() {
@@ -1914,7 +1953,14 @@ async function fetchQuote() {
     }
 
     if (!isLive) {
-      const rates = { SOL: state.prices.sol.idr * (1 - spread), USDC: state.prices.usdc.idr * (1 - spread) };
+      const solIdr = state.prices.sol.idr;
+      const usdcIdr = state.prices.usdc.idr;
+      if (!solIdr || !usdcIdr) {
+        document.getElementById('quote-body').innerHTML = '<div class="quote-error">Price data unavailable. Please wait a moment and try again.</div>';
+        document.getElementById('btn-pay').disabled = false;
+        return;
+      }
+      const rates = { SOL: solIdr * (1 - spread), USDC: usdcIdr * (1 - spread) };
       rate = rates[token] || rates.SOL;
       tokenAmount = totalIDR / rate;
       routeInfo = token === 'SOL' ? 'SOL → USDC → IDRX (est.)' : 'USDC → IDRX (est.)';
@@ -1924,7 +1970,7 @@ async function fetchQuote() {
   const decimals = token === 'SOL' ? 6 : (token === 'USDC' ? 4 : 0);
   state.payment.quote = { tokenAmount, rate, platformFee, routeInfo, isLive };
 
-  const solUsd = state.prices.sol.usd || 175;
+  const solUsd = state.prices.sol.usd;
   const tokUsdRate = token === 'SOL' ? solUsd : (token === 'USDC' ? 1 : 0.000062);
   const tokenUsd = (tokenAmount * tokUsdRate).toFixed(2);
 
