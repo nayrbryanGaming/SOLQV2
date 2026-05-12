@@ -1783,8 +1783,7 @@ const STEPS = [
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
-  { text: 'Burning IDRX', sub: 'settlement to merchant' },
-  { text: 'IDR disbursed', sub: 'merchant credited via BI-FAST' },
+  { text: 'IDR disbursed', sub: 'merchant credited via Xendit BI-FAST' },
 ];
 
 function renderSteps() {
@@ -1903,34 +1902,39 @@ async function runRealPayment() {
     document.getElementById('btn-cancel-proc').style.display = 'block';
     document.getElementById('proc-sub').textContent = 'Open wallet and approve...';
 
+    // REAL TX ONLY — no fake signatures allowed
+    if (!txData) {
+      document.getElementById('btn-cancel-proc').style.display = 'none';
+      document.getElementById('btn-approve').disabled = false;
+      document.getElementById('btn-approve').textContent = 'Sign';
+      showError('Transaction Build Failed',
+        'Gagal membangun transaksi Jupiter swap. Pastikan wallet terkoneksi, saldo SOL/USDC cukup, lalu coba lagi.');
+      return;
+    }
     let txSignature = null;
-    if (txData && state.wallet.provider) {
-      try {
-        const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
-        const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        let tx;
-        try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
-        catch { tx = solanaWeb3.Transaction.from(txBytes); }
-        const result = await state.wallet.provider.signAndSendTransaction(tx);
-        txSignature = result.signature || result;
-        state.payment.txHash = txSignature;
-        toast('Transaction signed', 'success', 2000);
-      } catch (e) {
-        if (e.message?.includes('User rejected') || e.code === 4001) {
-          document.getElementById('btn-approve').disabled = false;
-          document.getElementById('btn-approve').textContent = 'Sign';
-          showError('Transaction Rejected', 'You rejected the signature request in your wallet.');
-          return;
-        }
-        console.warn('[SOLQ] Sign error, using simulated sig:', e.message);
-        txSignature = genFakeSig();
-        state.payment.txHash = txSignature;
-        toast('Simulated signature (no tx data)', 'warn', 3000);
+    try {
+      const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
+      const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+      let tx;
+      try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
+      catch { tx = solanaWeb3.Transaction.from(txBytes); }
+      const result = await state.wallet.provider.signAndSendTransaction(tx);
+      txSignature = result.signature || result;
+      if (typeof txSignature !== 'string' || txSignature.length < 80) {
+        throw new Error('Wallet tidak mengembalikan signature yang valid.');
       }
-    } else {
-      await sleep(1500);
-      txSignature = genFakeSig();
       state.payment.txHash = txSignature;
+      toast('Transaksi berhasil disign & dikirim', 'success', 2000);
+    } catch (e) {
+      document.getElementById('btn-cancel-proc').style.display = 'none';
+      document.getElementById('btn-approve').disabled = false;
+      document.getElementById('btn-approve').textContent = 'Sign';
+      if (e.message?.includes('User rejected') || e.code === 4001) {
+        showError('Transaksi Dibatalkan', 'Kamu membatalkan permintaan tanda tangan di wallet.');
+      } else {
+        showError('Signing Gagal', e.message || 'Wallet signing gagal. Coba lagi.');
+      }
+      return;
     }
     document.getElementById('btn-cancel-proc').style.display = 'none';
     setStep(4, 'done');
@@ -1942,80 +1946,21 @@ async function runRealPayment() {
     document.getElementById('explorer-link').textContent = 'View on Explorer: ' + txSignature.slice(0, 12) + '...';
     await sleep(800); setStep(5, 'done');
 
-    // Step 6 — Confirm on-chain
+    // Step 6 — Awaiting on-chain confirmation
     setStep(6, 'active');
-    if (txSignature && state.wallet.provider && !txSignature.startsWith('sim')) {
-      try {
-        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        await conn.confirmTransaction(txSignature, 'confirmed');
-      } catch {}
-    } else {
-      await sleep(1800);
-    }
+    try {
+      const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+      await conn.confirmTransaction(txSignature, 'confirmed');
+    } catch { await sleep(1500); }
     setStep(6, 'done');
 
-    // Step 7 — Burn IDRX
+    // Step 7 — Backend confirm + Xendit disbursement (IDR ke bank merchant)
     setStep(7, 'active');
-    document.getElementById('proc-sub').textContent = 'Burning IDRX for settlement...';
-    let burnSignature = null;
-
-    if (state.wallet.provider && state.wallet.address && state.wallet.chain === 'solana') {
-      try {
-        await sleep(2000);
-        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-        const ASSOC_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq');
-        const idrxMintPk = new solanaWeb3.PublicKey(IDRX_MINT);
-        const userPk = new solanaWeb3.PublicKey(state.wallet.address);
-        const [userIdrxAta] = solanaWeb3.PublicKey.findProgramAddressSync(
-          [userPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMintPk.toBuffer()],
-          ASSOC_TOKEN_PROGRAM_ID
-        );
-        const burnAmtAtomic = BigInt(Math.round(state.payment.amountIDR * 100));
-        const burnData = new Uint8Array(9);
-        burnData[0] = 8;
-        new DataView(burnData.buffer, 1).setBigUint64(0, burnAmtAtomic, true);
-        const burnIx = new solanaWeb3.TransactionInstruction({
-          programId: TOKEN_PROGRAM_ID,
-          keys: [
-            { pubkey: userIdrxAta, isSigner: false, isWritable: true },
-            { pubkey: idrxMintPk,  isSigner: false, isWritable: true },
-            { pubkey: userPk,      isSigner: true,  isWritable: false },
-          ],
-          data: burnData,
-        });
-        const rpcConn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        const { blockhash, lastValidBlockHeight } = await rpcConn.getLatestBlockhash();
-        const burnTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: userPk });
-        burnTx.add(burnIx);
-        toast('Approve IDRX burn in wallet...', 'info', 8000);
-        const burnResult = await state.wallet.provider.signAndSendTransaction(burnTx);
-        burnSignature = typeof burnResult === 'string' ? burnResult : (burnResult?.signature ?? null);
-        state.payment.burnTxHash = burnSignature;
-        toast('IDRX burned — awaiting confirmation', 'success', 3000);
-        try {
-          await rpcConn.confirmTransaction({ signature: burnSignature, blockhash, lastValidBlockHeight }, 'confirmed');
-        } catch {}
-      } catch (burnErr) {
-        if (burnErr.message?.includes('User rejected') || burnErr.code === 4001) {
-          toast('Burn cancelled — manual settlement pending', 'warn', 6000);
-        } else {
-          console.warn('[SOLQ] Burn error:', burnErr.message);
-          toast('Burn failed — manual settlement pending', 'warn', 3000);
-        }
-      }
-    } else {
-      await sleep(1200);
-    }
-    setStep(7, 'done');
-
-    // Step 8 — Confirm + IDRX disburse
-    setStep(8, 'active');
-    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant...';
+    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via Xendit...';
     try {
       const qris = state.qris;
       const confirmPayload = {
         tx_hash: txSignature,
-        burn_tx_hash: burnSignature || null,
         cluster: CLUSTER,
         payer_account: state.wallet.address,
         merchant_name: qris?.merchantName ?? null,
@@ -2053,11 +1998,6 @@ async function runRealPayment() {
     document.getElementById('btn-approve').textContent = 'Sign';
     showError('Payment Failed', e.message || 'An error occurred. Please try again.');
   }
-}
-
-function genFakeSig() {
-  const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({ length: 88 }, () => c[Math.floor(Math.random() * c.length)]).join('');
 }
 
 // ═══════════════════════════════════════════

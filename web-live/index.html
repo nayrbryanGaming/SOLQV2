@@ -59,6 +59,61 @@ input::placeholder{color:var(--ink3)}
   .frame{min-height:auto;height:812px;border-radius:40px;box-shadow:0 40px 80px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.06);overflow:hidden}
 }
 
+/* ── Landing sidebar ── */
+.desktop-info{color:var(--ink);padding:24px 20px 48px}
+.di-badge{display:inline-flex;align-items:center;gap:8px;background:var(--ok-soft);
+  border:1px solid var(--ok);border-radius:20px;padding:6px 14px;
+  font-size:11px;font-weight:700;color:var(--ok-fg);margin-bottom:28px;letter-spacing:.6px}
+.di-badge-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:di-pulse 1.5s ease-in-out infinite}
+@keyframes di-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.di-logo{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.di-mark{width:44px;height:44px;border-radius:12px;background:var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-weight:700;font-size:16px;color:var(--bg);flex-shrink:0}
+.di-brand{font-size:36px;font-weight:900;letter-spacing:-.5px;color:var(--ink);line-height:1}
+.di-brand-sub{font-size:13px;color:var(--ink3);font-weight:400}
+.di-headline{font-size:28px;font-weight:700;color:var(--ink);letter-spacing:-.5px;line-height:1.25;margin-bottom:12px}
+@media(min-width:1280px){.di-headline{font-size:34px}}
+.di-headline em{color:var(--ok-fg);font-style:normal}
+.di-desc{font-size:15px;color:var(--ink3);line-height:1.7;margin-bottom:32px}
+.di-steps{margin-bottom:32px}
+.di-steps-title{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+.di-step{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}
+.di-step-num{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--bg);
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--font-mono)}
+.di-step-title{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.di-step-desc{font-size:12px;color:var(--ink3);line-height:1.5}
+.di-feature{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;
+  padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line)}
+.di-feat-icon{flex-shrink:0;margin-top:1px;color:var(--ink2)}
+.di-feat-title{font-size:13px;font-weight:600;margin-bottom:2px;color:var(--ink)}
+.di-feat-desc{font-size:11px;color:var(--ink3);line-height:1.5}
+.di-chips-title{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.8px;margin:20px 0 10px}
+.di-wallets{display:flex;gap:6px;flex-wrap:wrap}
+.di-wallet-chip{padding:5px 10px;border-radius:16px;border:1px solid var(--line);
+  font-size:11px;color:var(--ink3);background:var(--card-alt);display:flex;align-items:center;gap:4px}
+.di-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:20px 0}
+.di-stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.di-stat-val{font-size:18px;font-weight:700;color:var(--ink);font-family:var(--font-mono);letter-spacing:-.5px}
+.di-stat-lbl{font-size:10px;color:var(--ink3);margin-top:2px;letter-spacing:.3px}
+.di-compliance{margin-top:24px;padding:12px 14px;border-radius:10px;
+  background:var(--ok-soft);border:1px solid oklch(0.88 0.06 145);
+  font-size:11px;color:var(--ok-fg);line-height:1.6}
+.di-compliance strong{color:oklch(0.42 0.14 145)}
+/* Mobile: phone fills viewport, landing content scrolls below */
+@media(max-width:899px){
+  html,body{height:auto;overflow-y:auto}
+  body{display:flex!important;flex-direction:column;min-height:100dvh;padding:0!important}
+  .frame{height:100dvh;min-height:0;flex-shrink:0;border-radius:0!important;box-shadow:none!important;margin:0!important}
+}
+/* Desktop 900px+: landing left, phone right */
+@media(min-width:900px){
+  body{flex-direction:row;justify-content:center;align-items:flex-start;padding:32px 40px!important;gap:56px;overflow-y:auto;height:auto;min-height:100dvh}
+  .desktop-info{flex:1;max-width:420px;padding:48px 32px 60px}
+  .frame{height:min(860px,92dvh)!important;margin:0!important;flex-shrink:0}
+}
+@media(min-width:1280px){.desktop-info{max-width:480px;padding:56px 40px 60px}}
+
 /* ── Screens ── */
 .screen{display:none;flex-direction:column;flex:1;overflow-y:auto;overflow-x:hidden}
 .screen.active{display:flex}
@@ -543,6 +598,91 @@ input::placeholder{color:var(--ink3)}
 </style>
 </head>
 <body>
+
+<!-- ═══ LANDING SIDEBAR — LEFT on desktop, BELOW phone on mobile ═══ -->
+<div class="desktop-info">
+
+  <div class="di-badge"><span class="di-badge-dot"></span> LIVE · MAINNET</div>
+
+  <div class="di-logo">
+    <div class="di-mark">SQ</div>
+    <div>
+      <div class="di-brand">SOLQ</div>
+      <div class="di-brand-sub">Solana × QRIS Payment</div>
+    </div>
+  </div>
+
+  <h1 class="di-headline">Bayar QRIS pakai SOL,<br>terima <em>Rupiah</em> real-time</h1>
+  <p class="di-desc">Non-custodial orchestrator: scan QRIS merchant Indonesia mana pun, swap SOL/USDC via Jupiter, settlement BI-FAST ke rekening merchant dalam detik.</p>
+
+  <div class="di-steps">
+    <div class="di-steps-title">Cara Kerja</div>
+    <div class="di-step">
+      <div class="di-step-num">1</div>
+      <div>
+        <div class="di-step-title">Scan QRIS Merchant</div>
+        <div class="di-step-desc">Kamera baca EMVCo TLV — ekstrak nama toko, NMID, bank acquirer otomatis</div>
+      </div>
+    </div>
+    <div class="di-step">
+      <div class="di-step-num">2</div>
+      <div>
+        <div class="di-step-title">Jupiter Swap ExactOut</div>
+        <div class="di-step-desc">SOL/USDC→IDRX dengan quote terbaik, fee 0.5% transparan, gas ditanggung platform</div>
+      </div>
+    </div>
+    <div class="di-step">
+      <div class="di-step-num">3</div>
+      <div>
+        <div class="di-step-title">Settlement BI-FAST</div>
+        <div class="di-step-desc">Disbursement IDR ke 200+ bank & e-wallet via Xendit — otomatis setelah TX confirmed</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="di-feature">
+    <span class="di-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.4"/></svg></span>
+    <div><div class="di-feat-title">Scan QRIS Nyata</div>
+    <div class="di-feat-desc">Parser CRC-16/CCITT real — bukan simulasi, bukan dummy data</div></div>
+  </div>
+  <div class="di-feature">
+    <span class="di-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L11.5 7H16L12 10.5L13.5 16L9 13L4.5 16L6 10.5L2 7H6.5L9 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+    <div><div class="di-feat-title">Jupiter ExactOut Quote</div>
+    <div class="di-feat-desc">Harga terbaik SOL/USDC→IDRX, slippage minimal, real-time dari Lite API</div></div>
+  </div>
+  <div class="di-feature">
+    <span class="di-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="4" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M1 8h16" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/></svg></span>
+    <div><div class="di-feat-title">Fee 0.5% Transparan</div>
+    <div class="di-feat-desc">Platform 70% + Dev 30% split, on-chain verifiable, tidak ada biaya tersembunyi</div></div>
+  </div>
+  <div class="di-feature">
+    <span class="di-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2L14 5V10C14 13 11.5 15.5 9 16C6.5 15.5 4 13 4 10V5L9 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+    <div><div class="di-feat-title">Non-Custodial</div>
+    <div class="di-feat-desc">Private key tidak pernah meninggalkan wallet user — setiap TX ditandatangani sendiri</div></div>
+  </div>
+
+  <div class="di-stats">
+    <div class="di-stat"><div class="di-stat-val">0.5%</div><div class="di-stat-lbl">Fee Platform</div></div>
+    <div class="di-stat"><div class="di-stat-val">200+</div><div class="di-stat-lbl">Bank & Wallet</div></div>
+    <div class="di-stat"><div class="di-stat-val">&lt;5s</div><div class="di-stat-lbl">Settlement</div></div>
+  </div>
+
+  <div class="di-chips-title">Wallet yang Didukung</div>
+  <div class="di-wallets">
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#AB9FF2"/><path d="M22 9C17 9 12 14 12 19V32L14 29.5L16 32L18 29.5L20 32L22 29.5L24 32L26 29.5L28 32L30 29.5L32 32V19C32 14 27 9 22 9Z" fill="white"/></svg>Phantom</span>
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#FC7227"/><path d="M22 10C22 10 18 16 18 20C18 22.2 19.8 24 22 24C24.2 24 26 22.2 26 20C26 20 29 23 29 27C29 31.4 25.9 35 22 35C18.1 35 15 31.4 15 27C15 21.5 22 10 22 10Z" fill="white" fill-opacity="0.95"/></svg>Solflare</span>
+    <span class="di-wallet-chip"><svg width="14" height="14" viewBox="0 0 44 44" fill="none"><rect width="44" height="44" rx="8" fill="#1A1F2E"/><rect x="13" y="20" width="18" height="13" rx="3" fill="white" fill-opacity="0.88"/></svg>Backpack</span>
+    <span class="di-wallet-chip">◎ SOL</span>
+    <span class="di-wallet-chip">IDRX</span>
+    <span class="di-wallet-chip">USDC</span>
+  </div>
+
+  <div class="di-compliance">
+    <strong>BI-FAST Settlement</strong> via Xendit — 200+ bank & e-wallet Indonesia didukung. Disbursement otomatis setelah TX confirmed on-chain. Fee 0.5% satu-satunya biaya.
+  </div>
+
+</div>
+
 <div class="frame">
 
 <!-- Android status bar — shown only on desktop phone frame -->
@@ -1783,8 +1923,7 @@ const STEPS = [
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
-  { text: 'Burning IDRX', sub: 'settlement to merchant' },
-  { text: 'IDR disbursed', sub: 'merchant credited via BI-FAST' },
+  { text: 'IDR disbursed', sub: 'merchant credited via Xendit BI-FAST' },
 ];
 
 function renderSteps() {
@@ -1903,34 +2042,39 @@ async function runRealPayment() {
     document.getElementById('btn-cancel-proc').style.display = 'block';
     document.getElementById('proc-sub').textContent = 'Open wallet and approve...';
 
+    // REAL TX ONLY — no fake signatures allowed
+    if (!txData) {
+      document.getElementById('btn-cancel-proc').style.display = 'none';
+      document.getElementById('btn-approve').disabled = false;
+      document.getElementById('btn-approve').textContent = 'Sign';
+      showError('Transaction Build Failed',
+        'Gagal membangun transaksi Jupiter swap. Pastikan wallet terkoneksi, saldo SOL/USDC cukup, lalu coba lagi.');
+      return;
+    }
     let txSignature = null;
-    if (txData && state.wallet.provider) {
-      try {
-        const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
-        const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        let tx;
-        try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
-        catch { tx = solanaWeb3.Transaction.from(txBytes); }
-        const result = await state.wallet.provider.signAndSendTransaction(tx);
-        txSignature = result.signature || result;
-        state.payment.txHash = txSignature;
-        toast('Transaction signed', 'success', 2000);
-      } catch (e) {
-        if (e.message?.includes('User rejected') || e.code === 4001) {
-          document.getElementById('btn-approve').disabled = false;
-          document.getElementById('btn-approve').textContent = 'Sign';
-          showError('Transaction Rejected', 'You rejected the signature request in your wallet.');
-          return;
-        }
-        console.warn('[SOLQ] Sign error, using simulated sig:', e.message);
-        txSignature = genFakeSig();
-        state.payment.txHash = txSignature;
-        toast('Simulated signature (no tx data)', 'warn', 3000);
+    try {
+      const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
+      const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+      let tx;
+      try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
+      catch { tx = solanaWeb3.Transaction.from(txBytes); }
+      const result = await state.wallet.provider.signAndSendTransaction(tx);
+      txSignature = result.signature || result;
+      if (typeof txSignature !== 'string' || txSignature.length < 80) {
+        throw new Error('Wallet tidak mengembalikan signature yang valid.');
       }
-    } else {
-      await sleep(1500);
-      txSignature = genFakeSig();
       state.payment.txHash = txSignature;
+      toast('Transaksi berhasil disign & dikirim', 'success', 2000);
+    } catch (e) {
+      document.getElementById('btn-cancel-proc').style.display = 'none';
+      document.getElementById('btn-approve').disabled = false;
+      document.getElementById('btn-approve').textContent = 'Sign';
+      if (e.message?.includes('User rejected') || e.code === 4001) {
+        showError('Transaksi Dibatalkan', 'Kamu membatalkan permintaan tanda tangan di wallet.');
+      } else {
+        showError('Signing Gagal', e.message || 'Wallet signing gagal. Coba lagi.');
+      }
+      return;
     }
     document.getElementById('btn-cancel-proc').style.display = 'none';
     setStep(4, 'done');
@@ -1942,80 +2086,21 @@ async function runRealPayment() {
     document.getElementById('explorer-link').textContent = 'View on Explorer: ' + txSignature.slice(0, 12) + '...';
     await sleep(800); setStep(5, 'done');
 
-    // Step 6 — Confirm on-chain
+    // Step 6 — Awaiting on-chain confirmation
     setStep(6, 'active');
-    if (txSignature && state.wallet.provider && !txSignature.startsWith('sim')) {
-      try {
-        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        await conn.confirmTransaction(txSignature, 'confirmed');
-      } catch {}
-    } else {
-      await sleep(1800);
-    }
+    try {
+      const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+      await conn.confirmTransaction(txSignature, 'confirmed');
+    } catch { await sleep(1500); }
     setStep(6, 'done');
 
-    // Step 7 — Burn IDRX
+    // Step 7 — Backend confirm + Xendit disbursement (IDR ke bank merchant)
     setStep(7, 'active');
-    document.getElementById('proc-sub').textContent = 'Burning IDRX for settlement...';
-    let burnSignature = null;
-
-    if (state.wallet.provider && state.wallet.address && state.wallet.chain === 'solana') {
-      try {
-        await sleep(2000);
-        const TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-        const ASSOC_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq');
-        const idrxMintPk = new solanaWeb3.PublicKey(IDRX_MINT);
-        const userPk = new solanaWeb3.PublicKey(state.wallet.address);
-        const [userIdrxAta] = solanaWeb3.PublicKey.findProgramAddressSync(
-          [userPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMintPk.toBuffer()],
-          ASSOC_TOKEN_PROGRAM_ID
-        );
-        const burnAmtAtomic = BigInt(Math.round(state.payment.amountIDR * 100));
-        const burnData = new Uint8Array(9);
-        burnData[0] = 8;
-        new DataView(burnData.buffer, 1).setBigUint64(0, burnAmtAtomic, true);
-        const burnIx = new solanaWeb3.TransactionInstruction({
-          programId: TOKEN_PROGRAM_ID,
-          keys: [
-            { pubkey: userIdrxAta, isSigner: false, isWritable: true },
-            { pubkey: idrxMintPk,  isSigner: false, isWritable: true },
-            { pubkey: userPk,      isSigner: true,  isWritable: false },
-          ],
-          data: burnData,
-        });
-        const rpcConn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        const { blockhash, lastValidBlockHeight } = await rpcConn.getLatestBlockhash();
-        const burnTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: userPk });
-        burnTx.add(burnIx);
-        toast('Approve IDRX burn in wallet...', 'info', 8000);
-        const burnResult = await state.wallet.provider.signAndSendTransaction(burnTx);
-        burnSignature = typeof burnResult === 'string' ? burnResult : (burnResult?.signature ?? null);
-        state.payment.burnTxHash = burnSignature;
-        toast('IDRX burned — awaiting confirmation', 'success', 3000);
-        try {
-          await rpcConn.confirmTransaction({ signature: burnSignature, blockhash, lastValidBlockHeight }, 'confirmed');
-        } catch {}
-      } catch (burnErr) {
-        if (burnErr.message?.includes('User rejected') || burnErr.code === 4001) {
-          toast('Burn cancelled — manual settlement pending', 'warn', 6000);
-        } else {
-          console.warn('[SOLQ] Burn error:', burnErr.message);
-          toast('Burn failed — manual settlement pending', 'warn', 3000);
-        }
-      }
-    } else {
-      await sleep(1200);
-    }
-    setStep(7, 'done');
-
-    // Step 8 — Confirm + IDRX disburse
-    setStep(8, 'active');
-    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant...';
+    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via Xendit...';
     try {
       const qris = state.qris;
       const confirmPayload = {
         tx_hash: txSignature,
-        burn_tx_hash: burnSignature || null,
         cluster: CLUSTER,
         payer_account: state.wallet.address,
         merchant_name: qris?.merchantName ?? null,
@@ -2053,11 +2138,6 @@ async function runRealPayment() {
     document.getElementById('btn-approve').textContent = 'Sign';
     showError('Payment Failed', e.message || 'An error occurred. Please try again.');
   }
-}
-
-function genFakeSig() {
-  const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({ length: 88 }, () => c[Math.floor(Math.random() * c.length)]).join('');
 }
 
 // ═══════════════════════════════════════════
