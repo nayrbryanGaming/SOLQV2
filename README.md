@@ -50,16 +50,14 @@
 4. [Payment Flow End-to-End](#payment-flow-end-to-end)
 5. [System Architecture](#system-architecture)
 6. [Key Features](#key-features)
-7. [8 Absolute Laws](#8-absolute-laws)
-8. [Production Hardening](#production-hardening)
-9. [Fee Structure](#fee-structure)
-10. [On-Chain Proof](#on-chain-proof)
-11. [Tech Stack](#tech-stack)
-12. [Quick Start](#quick-start)
-13. [Environment Variables](#environment-variables)
-14. [Security Model](#security-model)
-15. [Compliance](#compliance)
-16. [Roadmap](#roadmap)
+7. [Fee Structure](#fee-structure)
+8. [On-Chain Proof](#on-chain-proof)
+9. [Tech Stack](#tech-stack)
+10. [Quick Start](#quick-start)
+11. [Environment Variables](#environment-variables)
+12. [Security Model](#security-model)
+13. [Compliance](#compliance)
+14. [Roadmap](#roadmap)
 
 ---
 
@@ -246,48 +244,6 @@ graph TD
 | **Android Phone Chrome** | Web apps show authentic Android status bar (time, signal, battery) + nav bar (back/home/recents) |
 
 ---
-
-## 8 Absolute Laws
-
-| # | Law | Technical Implementation | Key File |
-|---|---|---|---|
-| **1** | **ZERO CUSTODY** | Private keys never enter SOLQ servers. Signing always client-side via Phantom/MWA. | `lib/services/solana_service.dart` |
-| **2** | **ZERO MOCK** | CRC-16 validation is fatal (throws, not silent). Zero dummy transactions in real mode. | `api/utils/qris.js` |
-| **3** | **REAL MAINNET** | All TX verified on Solana Mainnet-Beta. Treasury ATA balance delta checked. | `api/utils/solana.js` |
-| **4** | **DETERMINISTIC PRICING** | 60s cache, 2min staleness, exactly 50bps spread. Three-layer oracle fallback. | `api/utils/pricing.js` |
-| **5** | **TRANSPARENT FEE** | Platform fee + network fee + slippage ALL shown BEFORE confirmation. | `api/v1/payment-intents/index.js` |
-| **6** | **EXPLICIT FAILURE** | System halts with informative errors on oracle/gas/RPC failure. Zero silent failure. | `api/utils/pricing.js` |
-| **7** | **IMMUTABLE AUDIT** | PostgreSQL + SHA-256 integrity hash. Every security event logged to 3 independent tiers. | `backend/src/services/auditLogger.ts` |
-| **8** | **IDENTICAL MIRROR** | GitHub Actions auto-mirrors to `nayrbryanGaming/SOLQV2` on every push to `main`. | `.github/workflows/mirror.yml` |
-
----
-
-## Production Hardening
-
-### 1. Jailbreak Detection — False Positive Fix
-- **Issue**: `FlutterJailbreakDetection.developerMode` blocked all 25 test phones (Xiaomi/OPPO/Vivo with dev mode on)
-- **Fix**: Removed `developerMode` check — only `isJailbroken` blocks the app. `apk-nosec` removes all checks for demo
-- **Result**: Zero false positives on normal Android devices
-
-### 2. Scanner Stabilization — Zero Black Screen
-- **Issue**: Persistent black screen on Android during `resumed` state transitions
-- **Fix**: `MobileScanner` lifecycle hardening — controller reused, not destructively disposed
-- **Result**: Zero black screen throughout the Android scanner flow
-
-### 3. Wallet Connection Hardening — Zero Parsing Errors
-- **Issue**: `phantom_encryption_public_key` confused with `account_key`
-- **Fix**: Strict `account_key` extraction — encryption keys rejected, `_connectedPublicKey` 100% accurate
-- **Result**: Payer identity always correct
-
-### 4. QRIS Robustness — 100+ Institutions
-- **Issue**: Bank detection only covered 6 institutions; SME stickers often failed validation
-- **Fix**: `detectBank()` expanded to 100+ banks/e-wallets; permissive mode for low-quality stickers
-- **Result**: All valid QRIS codes processable across Indonesia
-
-### 5. Cloud-First API Routing — Zero Localhost Errors
-- **Issue**: App crashed when local test server was offline
-- **Fix**: SOLQService actively rejects `localhost` and `192.168.x.x`. Dynamic discovery to Vercel/Render
-- **Result**: Always connects to live production endpoints
 
 ---
 
@@ -492,16 +448,14 @@ MIT © 2026 SOLQ Team — Vincentius Bryan Kwandou
 4. [Alur Pembayaran End-to-End](#alur-pembayaran-end-to-end)
 5. [Arsitektur Sistem](#arsitektur-sistem)
 6. [Fitur Utama](#fitur-utama)
-7. [8 Hukum Absolut](#8-hukum-absolut)
-8. [Production Hardening](#production-hardening-id)
-9. [Struktur Biaya](#struktur-biaya)
-10. [Bukti On-Chain](#bukti-on-chain)
-11. [Tech Stack](#tech-stack-id)
-12. [Quick Start](#quick-start-id)
-13. [Environment Variables](#environment-variables-id)
-14. [Model Keamanan](#model-keamanan)
-15. [Kepatuhan Regulasi](#kepatuhan-regulasi)
-16. [Roadmap](#roadmap-id)
+7. [Struktur Biaya](#struktur-biaya)
+8. [Bukti On-Chain](#bukti-on-chain)
+9. [Tech Stack](#tech-stack-id)
+10. [Quick Start](#quick-start-id)
+11. [Environment Variables](#environment-variables-id)
+12. [Model Keamanan](#model-keamanan)
+13. [Kepatuhan Regulasi](#kepatuhan-regulasi)
+14. [Roadmap](#roadmap-id)
 
 ---
 
@@ -701,50 +655,6 @@ graph TD
 | **Risk Engine** | Skor 0-100, 4 tier: LOW / MEDIUM / HIGH / BLOCK. OFAC = auto-block (skor 100). |
 | **OJK Audit Log** | Hash integritas SHA-256 per event. 3 tier: console / JSONL / WORM webhook. Retensi 5 tahun. |
 | **Android Phone Chrome** | Web app menampilkan status bar Android asli (waktu, sinyal, baterai) + nav bar (back/home/recents) |
-
----
-
-## 8 Hukum Absolut
-
-| # | Hukum | Implementasi Teknis | File Kunci |
-|---|---|---|---|
-| **1** | **ZERO CUSTODY** | Private key tidak pernah masuk server SOLQ. Penandatanganan selalu di sisi klien via Phantom/MWA. | `lib/services/solana_service.dart` |
-| **2** | **ZERO MOCK** | Validasi CRC-16 bersifat fatal (throw, bukan silent). Zero transaksi dummy di real mode. | `api/utils/qris.js` |
-| **3** | **REAL MAINNET** | Semua TX diverifikasi di Solana Mainnet-Beta. Delta saldo ATA treasury diperiksa. | `api/utils/solana.js` |
-| **4** | **DETERMINISTIC PRICING** | Cache 60 detik, staleness 2 menit, spread tepat 50bps. Tiga lapis fallback oracle. | `api/utils/pricing.js` |
-| **5** | **TRANSPARENT FEE** | Platform fee + network fee + slippage SEMUA ditampilkan SEBELUM konfirmasi. | `api/v1/payment-intents/index.js` |
-| **6** | **EXPLICIT FAILURE** | Sistem berhenti dengan error informatif pada kegagalan oracle/gas/RPC. Zero silent failure. | `api/utils/pricing.js` |
-| **7** | **IMMUTABLE AUDIT** | PostgreSQL + hash integritas SHA-256. Setiap security event dicatat ke 3 tier independen. | `backend/src/services/auditLogger.ts` |
-| **8** | **IDENTICAL MIRROR** | GitHub Actions auto-mirror ke `nayrbryanGaming/SOLQV2` setiap push ke `main`. | `.github/workflows/mirror.yml` |
-
----
-
-## Production Hardening (ID)
-
-### 1. Deteksi Jailbreak — Perbaikan False Positive
-- **Masalah**: `FlutterJailbreakDetection.developerMode` memblokir semua 25 ponsel uji (Xiaomi/OPPO/Vivo dengan mode developer aktif)
-- **Perbaikan**: Hapus pengecekan `developerMode` — hanya `isJailbroken` yang memblokir app. `apk-nosec` menghapus semua pengecekan untuk demo
-- **Hasil**: Zero false positive di perangkat Android normal
-
-### 2. Stabilisasi Scanner — Zero Black Screen
-- **Masalah**: Persistent black screen di Android saat transisi state `resumed`
-- **Perbaikan**: Hardening lifecycle `MobileScanner` — controller digunakan ulang, tidak dihancurkan
-- **Hasil**: Zero black screen sepanjang alur scanner Android
-
-### 3. Hardening Koneksi Wallet — Zero Parsing Error
-- **Masalah**: `phantom_encryption_public_key` tertukar dengan `account_key`
-- **Perbaikan**: Ekstraksi `account_key` yang ketat — encryption key ditolak, `_connectedPublicKey` 100% akurat
-- **Hasil**: Identitas payer selalu benar
-
-### 4. Robustness QRIS — 100+ Institusi
-- **Masalah**: Deteksi bank hanya mencakup 6 institusi; stiker SME sering gagal validasi
-- **Perbaikan**: `detectBank()` diperluas ke 100+ bank/e-wallet; mode permissive untuk stiker berkualitas rendah
-- **Hasil**: Semua kode QRIS valid dapat diproses di seluruh Indonesia
-
-### 5. API Routing Cloud-First — Zero Error Localhost
-- **Masalah**: App crash saat server uji lokal offline
-- **Perbaikan**: SOLQService secara aktif menolak `localhost` dan `192.168.x.x`. Penemuan dinamis ke Vercel/Render
-- **Hasil**: Selalu terhubung ke endpoint produksi live
 
 ---
 
