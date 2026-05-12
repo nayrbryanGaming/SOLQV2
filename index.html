@@ -1672,6 +1672,33 @@ async function runRealPayment() {
       } catch(e) { console.warn('[SOLQ] Jupiter swap build error:', e.message); }
     }
 
+    // Oracle fallback — direct SOL transfer when Jupiter fails, no quote needed
+    if (!txData && state.wallet.address && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
+      try {
+        let lamports = 0;
+        if (state.payment.jupiterQuote?.inAmount) {
+          lamports = parseInt(state.payment.jupiterQuote.inAmount);
+        } else {
+          const solIdr = state.prices.sol.idr;
+          if (!solIdr) throw new Error('No price data');
+          const spread = PLATFORM_FEE_BPS / 10000;
+          const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
+          lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
+        }
+        if (lamports > 0) {
+          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+          const { blockhash } = await conn.getLatestBlockhash();
+          const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+          fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+          const serialized = fallTx.serialize({ requireAllSignatures: false });
+          txData = btoa(String.fromCharCode(...serialized));
+          toast('Processing via direct SOL transfer', 'info', 2500);
+        }
+      } catch(e) { console.warn('[SOLQ] Oracle SOL fallback:', e.message); }
+    }
+
     await sleep(300);
     setStep(3, 'done');
 

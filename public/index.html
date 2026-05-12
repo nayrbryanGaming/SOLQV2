@@ -2156,7 +2156,8 @@ async function runRealPayment() {
         const _im = state.payment.token === 'SOL' ? SOL_MINT : USDC_MINT;
         const _sp = PLATFORM_FEE_BPS / 10000;
         const _tot = state.payment.amountIDR + Math.round(state.payment.amountIDR * _sp);
-        const _amt = _tot.swapMode === 'ExactIn' ? parseInt(state.payment.jupiterQuote.inAmount) : Math.round(_tot * 100);
+        const _pm = state.payment.jupiterQuote?.swapMode || 'ExactOut';
+        const _amt = _pm === 'ExactIn' ? parseInt(state.payment.jupiterQuote.inAmount) : Math.round(_tot * 100);
         const _ru = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${_im}&outputMint=${IDRX_MINT}&amount=${_amt}&swapMode=ExactOut&slippageBps=300`;
         const _rr = await fetch(_ru, { signal: AbortSignal.timeout(8000) });
         if (_rr.ok) { const _dd = await _rr.json(); if (_dd.inAmount && !_dd.error) { state.payment.jupiterQuote = _dd; console.log('[SOLQ] Quote refreshed'); } }
@@ -2211,12 +2212,20 @@ async function runRealPayment() {
       }
 
 
-      // Mainnet SOL transfer fallback — when Jupiter swap build fails but quote succeeded.
-      // Uses exact inAmount from Jupiter quote so the correct SOL value moves on-chain.
-      // Backend (fetchTransactionFacts) now includes SOL deltas so this TX will verify.
-      if (!txData && state.payment.jupiterQuote && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
+      // Mainnet SOL transfer fallback — works with OR without Jupiter quote.
+      // Uses quote inAmount if available, otherwise derives lamports from oracle price.
+      if (!txData && state.wallet.address && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
         try {
-          const lamports = parseInt(state.payment.jupiterQuote.inAmount);
+          let lamports = 0;
+          if (state.payment.jupiterQuote?.inAmount) {
+            lamports = parseInt(state.payment.jupiterQuote.inAmount);
+          } else {
+            const solIdr = state.prices.sol.idr;
+            if (!solIdr) throw new Error('No price data');
+            const spread = PLATFORM_FEE_BPS / 10000;
+            const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
+            lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005); // +0.5% slippage buffer
+          }
           if (lamports > 0) {
             const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
             const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
@@ -2226,7 +2235,7 @@ async function runRealPayment() {
             fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
             const serialized = fallTx.serialize({ requireAllSignatures: false });
             txData = btoa(String.fromCharCode(...serialized));
-            toast('Processing via direct transfer', 'info', 2500);
+            toast('Processing via direct SOL transfer', 'info', 2500);
           }
         } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
       }
