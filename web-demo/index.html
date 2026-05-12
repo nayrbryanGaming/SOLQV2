@@ -571,7 +571,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   </div>
 
   <h1 class="di-headline" data-t="headline">Bayar QRIS pakai SOL,<br>terima <em>Rupiah</em> real-time</h1>
-  <p class="di-desc" data-t="desc">Non-custodial orchestrator: user scan QRIS merchant Indonesia mana pun, swap SOL/USDC→IDRX via Jupiter, settlement BI-FAST ke rekening merchant dalam detik.</p>
+  <p class="di-desc" data-t="desc">Non-custodial orchestrator: user scan QRIS merchant Indonesia mana pun, swap SOL/USDC via Jupiter, disbursement IDR ke rekening merchant via Xendit dalam detik.</p>
 
   <!-- How it works -->
   <div class="di-steps">
@@ -1021,13 +1021,13 @@ const STRINGS = {
   en: {
     badge:'INTERACTIVE DEMO · LIVE', brandSub:'Solana × QRIS Payment',
     headline:'Pay any QRIS with SOL,<br>receive <em>Rupiah</em> instantly',
-    desc:'Non-custodial orchestrator: scan any Indonesian merchant QRIS, swap SOL/USDC→IDRX via Jupiter, BI-FAST settlement to merchant in seconds.',
+    desc:'Non-custodial orchestrator: scan any Indonesian merchant QRIS, swap SOL/USDC via Jupiter, IDR disbursement to merchant via Xendit in seconds.',
     howItWorks:'HOW IT WORKS',
     s1title:'Scan Merchant QRIS', s1desc:'Camera reads EMVCo TLV — extracts shop name, NMID, acquirer bank automatically',
-    s2title:'Jupiter ExactOut Swap', s2desc:'SOL/USDC→IDRX at best price, 0.5% transparent fee, gas covered by platform',
-    s3title:'BI-FAST Settlement', s3desc:'IDRX redeemed → IDR disbursed to 200+ banks & e-wallets via Xendit',
+    s2title:'Jupiter ExactOut Swap', s2desc:'SOL/USDC best-price swap, 0.5% transparent fee, gas covered by platform',
+    s3title:'BI-FAST Settlement', s3desc:'IDR disbursed to 200+ banks & e-wallets via Xendit',
     f1title:'Real QRIS Scan', f1desc:'Camera scans any Indonesian merchant QRIS — real CRC-16/CCITT parser',
-    f2title:'Jupiter ExactOut Quote', f2desc:'Best SOL/USDC→IDRX price, minimal slippage, real-time from Lite API',
+    f2title:'Jupiter ExactOut Quote', f2desc:'Best SOL/USDC price, minimal slippage, real-time from Lite API',
     f3title:'Transparent 0.5% Fee', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, no hidden fees',
     f4title:'Non-Custodial', f4desc:'Private key never leaves user wallet — every TX signed by user',
     feeLbl:'Platform Fee', bankLbl:'Banks & Wallets', settleLbl:'Settlement',
@@ -1038,11 +1038,11 @@ const STRINGS = {
   id: {
     badge:'DEMO INTERAKTIF · LIVE', brandSub:'Solana × QRIS Payment',
     headline:'Bayar QRIS pakai SOL,<br>terima <em>Rupiah</em> real-time',
-    desc:'Non-custodial orchestrator: user scan QRIS merchant Indonesia mana pun, swap SOL/USDC→IDRX via Jupiter, settlement BI-FAST ke rekening merchant dalam detik.',
+    desc:'Non-custodial orchestrator: user scan QRIS merchant Indonesia mana pun, swap SOL/USDC via Jupiter, disbursement IDR ke rekening merchant via Xendit dalam detik.',
     howItWorks:'CARA KERJA',
     s1title:'Scan QRIS Merchant', s1desc:'Kamera baca EMVCo TLV — ekstrak nama toko, NMID, bank acquirer otomatis',
-    s2title:'Jupiter Swap ExactOut', s2desc:'SOL/USDC→IDRX dengan quote terbaik, fee 0.5% transparan, gas ditanggung platform',
-    s3title:'Settlement BI-FAST', s3desc:'IDRX di-redeem → disbursement IDR ke 200+ bank & e-wallet via Xendit',
+    s2title:'Jupiter Swap ExactOut', s2desc:'SOL/USDC harga terbaik, fee 0.5% transparan, gas ditanggung platform',
+    s3title:'Settlement BI-FAST', s3desc:'Disbursement IDR ke 200+ bank & e-wallet via Xendit',
     f1title:'Scan QRIS Nyata', f1desc:'Kamera device scan QRIS merchant Indonesia mana pun — parser CRC-16/CCITT real',
     f2title:'Jupiter ExactOut Quote', f2desc:'Harga terbaik SOL/USDC→IDRX, slippage minimal, real-time dari Lite API',
     f3title:'Fee 0.5% Transparan', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, tidak ada biaya tersembunyi',
@@ -1871,7 +1871,7 @@ async function fetchQuote() {
       fee_split: { platform_share_idr: Math.round(platformFee * 0.7), dev_share_idr: Math.round(platformFee * 0.3) },
       network_fee_idr: 2, network_fee_note: 'Gas sponsored by SOLQ',
       total_idr: amtIDR + platformFee,
-      route: token === 'SOL' ? 'SOL → USDC → IDRX via Jupiter' : 'USDC → IDRX via Jupiter',
+      route: token === 'SOL' ? 'SOL → USDC → IDR (Jupiter + Xendit)' : 'USDC → IDR (Jupiter + Xendit)',
       quote_valid_seconds: 30,
     };
   }

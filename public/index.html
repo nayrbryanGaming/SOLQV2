@@ -813,7 +813,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
       </div>
       <div class="row" style="border-bottom:none">
         <div class="row-label">Settlement rail</div>
-        <div class="row-val">IDRX → BI-FAST</div>
+        <div class="row-val">IDR via Xendit</div>
       </div>
     </div>
   </div>
@@ -823,7 +823,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
   <!-- Footer -->
   <div class="footer-note">
     <div class="footer-note-dot"></div>
-    <span class="footer-note-text">Powered by Solana · QRIS Settlement via IDRX</span>
+    <span class="footer-note-text">Powered by Solana · QRIS Settlement via Xendit</span>
   </div>
 </div>
 
@@ -968,8 +968,8 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
   <div class="confirm-section">
     <div class="section-label">Routing</div>
     <div class="card" style="padding:4px 14px">
-      <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC → IDRX</div></div>
-      <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDRX → IDR via BI-FAST</div></div>
+      <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC (via Jupiter)</div></div>
+      <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDR via Xendit BI-FAST</div></div>
     </div>
   </div>
 
@@ -1890,7 +1890,7 @@ function showConfirmScreen(qris) {
 
   const routeSwap = document.getElementById('route-swap');
   const token = state.payment.token;
-  routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDRX via Jupiter' : 'SOL → USDC → IDRX via Jupiter');
+  routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDR (Jupiter + Xendit)' : 'SOL → USDC → IDR (Jupiter + Xendit)');
 
   if (qris.amount) {
     // Amount locked in QR (dynamic or static with tag 54)
@@ -1931,7 +1931,7 @@ function selectToken(t) {
   ['SOL', 'USDC', 'IDRX'].forEach(x => document.getElementById('tok-' + x.toLowerCase())?.classList.remove('active'));
   document.getElementById('tok-' + t.toLowerCase())?.classList.add('active');
   const routeSwap = document.getElementById('route-swap');
-  routeSwap.textContent = t === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (t === 'USDC' ? 'USDC → IDRX via Jupiter' : 'SOL → USDC → IDRX via Jupiter');
+  routeSwap.textContent = t === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (t === 'USDC' ? 'USDC → IDR (Jupiter + Xendit)' : 'SOL → USDC → IDR (Jupiter + Xendit)');
   if (state.payment.amountIDR >= 1000) fetchQuote();
 }
 
@@ -2149,8 +2149,20 @@ async function runRealPayment() {
     }
     setStep(1, 'done');
 
-    // Step 2 — Quote
-    setStep(2, 'active'); await sleep(500); setStep(2, 'done');
+    // Step 2 — Quote (re-fetch to prevent stale-quote simulation failure)
+    setStep(2, 'active');
+    if (state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
+      try {
+        const _im = state.payment.token === 'SOL' ? SOL_MINT : USDC_MINT;
+        const _sp = PLATFORM_FEE_BPS / 10000;
+        const _tot = state.payment.amountIDR + Math.round(state.payment.amountIDR * _sp);
+        const _amt = _tot.swapMode === 'ExactIn' ? parseInt(state.payment.jupiterQuote.inAmount) : Math.round(_tot * 100);
+        const _ru = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${_im}&outputMint=${IDRX_MINT}&amount=${_amt}&swapMode=ExactOut&slippageBps=300`;
+        const _rr = await fetch(_ru, { signal: AbortSignal.timeout(8000) });
+        if (_rr.ok) { const _dd = await _rr.json(); if (_dd.inAmount && !_dd.error) { state.payment.jupiterQuote = _dd; console.log('[SOLQ] Quote refreshed'); } }
+      } catch (_) {}
+    }
+    setStep(2, 'done');
 
     // Step 3 — Build transaction
     setStep(3, 'active');
@@ -2180,7 +2192,7 @@ async function runRealPayment() {
             userPublicKey: state.wallet.address,
             dynamicComputeUnitLimit: true,
             prioritizationFeeLamports: 'auto',
-            skipUserAccountsRpcCalls: true,
+            wrapAndUnwrapSol: true,
           };
           const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
             method: 'POST',

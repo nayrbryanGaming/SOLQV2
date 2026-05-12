@@ -38,9 +38,9 @@
     {
       "source": "/(api|v1)/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Origin", "value": "https://solq.vercel.app" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, Idempotency-Key" }
       ]
     },
     {
@@ -58,9 +58,11 @@
         { "key": "Surrogate-Control", "value": "no-store" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://solq-backend.onrender.com https://solq.railway.app https://api.coingecko.com https://lite-api.jup.ag https://quote-api.jup.ag https://api.binance.com https://mainnet.helius-rpc.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://solana-api.projectserum.com https://tokens.jup.ag; worker-src blob:; frame-ancestors 'none';" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://solq-backend.onrender.com https://solq.railway.app https://api.coingecko.com https://lite-api.jup.ag https://quote-api.jup.ag https://price.jup.ag https://api.jup.ag https://api.binance.com https://mainnet.helius-rpc.com https://api.mainnet-beta.solana.com https://api.devnet.solana.com https://solana-api.projectserum.com https://tokens.jup.ag https://open.er-api.com https://api.frankfurter.app; worker-src blob:; frame-ancestors 'none';" }
       ]
     }
   ]

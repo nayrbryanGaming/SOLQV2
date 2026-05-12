@@ -645,7 +645,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div class="tok-picker">
         <button class="tok-btn active" id="tok-sol" onclick="selectToken('SOL')">◎ SOL</button>
         <button class="tok-btn" id="tok-usdc" onclick="selectToken('USDC')">$ USDC</button>
-        <button class="tok-btn" id="tok-idrx" onclick="selectToken('IDRX')">🇮🇩 IDRX</button>
+        <button class="tok-btn" id="tok-idrx" onclick="selectToken('IDRX')">IDRX</button>
       </div>
     </div>
 
@@ -1441,7 +1441,7 @@ async function fetchQuote() {
     const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
     const outAtomic = Math.round(totalIDR * 100); // IDRX 2 decimals
     try {
-      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=100&platformFeeBps=${PLATFORM_FEE_BPS}`;
+      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=250`;
       const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
       if (r.ok) {
         const d = await r.json();
@@ -1615,9 +1615,19 @@ async function runRealPayment() {
     }
     setStep(1, 'done');
 
-    // Step 2 — Quote
+    // Step 2 — Quote (re-fetch to prevent stale-quote simulation failure)
     setStep(2, 'active');
-    await sleep(600);
+    if (state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
+      try {
+        const _im = state.payment.token === 'SOL' ? SOL_MINT : USDC_MINT;
+        const _sp = PLATFORM_FEE_BPS / 10000;
+        const _tot = state.payment.amountIDR + Math.round(state.payment.amountIDR * _sp);
+        const _amt = Math.round(_tot * 100);
+        const _ru = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${_im}&outputMint=${IDRX_MINT}&amount=${_amt}&swapMode=ExactOut&slippageBps=300`;
+        const _rr = await fetch(_ru, { signal: AbortSignal.timeout(8000) });
+        if (_rr.ok) { const _dd = await _rr.json(); if (_dd.inAmount && !_dd.error) { state.payment.jupiterQuote = _dd; console.log('[SOLQ] Quote refreshed'); } }
+      } catch (_) {}
+    }
     setStep(2, 'done');
 
     // Step 3 — Build Transaction
@@ -1651,6 +1661,7 @@ async function runRealPayment() {
             userPublicKey: state.wallet.address,
             dynamicComputeUnitLimit: true,
             prioritizationFeeLamports: 'auto',
+            wrapAndUnwrapSol: true,
           }),
           signal: AbortSignal.timeout(15000),
         });

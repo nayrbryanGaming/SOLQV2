@@ -26,3 +26,32 @@ backend/audit_logs.jsonl
 apk-live/*.apk
 apk-demo/*.apk
 .claude/
+
+# Internal dev files (must not be public)
+SESSION_SUMMARY.md
+SOLQ_AUDIT_*.md
+scratch/
+SOLQ.html
+design-canvas.jsx
+ios-frame.jsx
+screens.jsx
+settings.jsx
+tweaks-panel.jsx
+
+# Flutter source (not needed by Vercel)
+lib/
+android/
+ios/
+test/
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+web/
+
+# APK artifacts
+apk-nosec/
+apk-demo-nosec/
+solq-demo-arm64.apk
+debug-info/
+build.log
+hs_err_*.log
