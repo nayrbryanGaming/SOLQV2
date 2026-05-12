@@ -1870,10 +1870,9 @@ async function runRealPayment() {
         }
       } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
 
-      // Jupiter client-side fallback
-      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
+      // Jupiter client-side fallback (mainnet only)
+      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
-          // BUG-C004 fix: use ATA for feeAccount, not raw wallet address
           const feeAccount = getPlatformFeeAccount();
           const swapBody = {
             quoteResponse: state.payment.jupiterQuote,
@@ -1893,6 +1892,21 @@ async function runRealPayment() {
             txData = swapD.swapTransaction || null;
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
+      }
+
+      // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)
+      if (!txData && CLUSTER === 'devnet') {
+        try {
+          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+          const { blockhash } = await conn.getLatestBlockhash();
+          const testTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+          testTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports: 10000 }));
+          const serialized = testTx.serialize({ requireAllSignatures: false });
+          txData = btoa(String.fromCharCode(...serialized));
+          toast('[DEVNET] Test TX: native SOL transfer', 'info', 3000);
+        } catch (e) { console.warn('[SOLQ] Devnet fallback TX:', e.message); }
       }
     }
     await sleep(300); setStep(3, 'done');

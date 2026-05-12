@@ -102,9 +102,11 @@ input::placeholder{color:var(--ink3)}
 .di-compliance strong{color:oklch(0.42 0.14 145)}
 /* Mobile: phone fills viewport, landing content scrolls below */
 @media(max-width:899px){
+  html{overflow-x:hidden}
   html,body{height:auto;overflow-y:auto}
-  body{display:flex!important;flex-direction:column;min-height:100dvh;padding:0!important}
-  .frame{height:100dvh;min-height:0;flex-shrink:0;border-radius:0!important;box-shadow:none!important;margin:0!important}
+  body{display:flex!important;flex-direction:column;min-height:100dvh;padding:0!important;overflow-x:hidden}
+  .frame{width:100%!important;max-width:none!important;height:100dvh;min-height:0;flex-shrink:0;border-radius:0!important;box-shadow:none!important;margin:0!important}
+  .desktop-info{max-width:100%;overflow-x:hidden}
 }
 /* Desktop 900px+: landing left, phone right */
 @media(min-width:900px){
@@ -606,7 +608,7 @@ input::placeholder{color:var(--ink3)}
   <div class="di-badge"><span class="di-badge-dot"></span> LIVE · MAINNET</div>
 
   <div class="di-logo">
-    <div class="di-mark">SQ</div>
+    <div class="di-mark"><img src="/assets/logos/solq_icon.png" width="30" height="30" alt="SOLQ" style="border-radius:6px;display:block"></div>
     <div>
       <div class="di-brand">SOLQ</div>
       <div class="di-brand-sub">Solana × QRIS Payment</div>
@@ -2012,10 +2014,9 @@ async function runRealPayment() {
         }
       } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
 
-      // Jupiter client-side fallback
-      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
+      // Jupiter client-side fallback (mainnet only)
+      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
-          // BUG-C004 fix: use ATA for feeAccount, not raw wallet address
           const feeAccount = getPlatformFeeAccount();
           const swapBody = {
             quoteResponse: state.payment.jupiterQuote,
@@ -2035,6 +2036,21 @@ async function runRealPayment() {
             txData = swapD.swapTransaction || null;
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
+      }
+
+      // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)
+      if (!txData && CLUSTER === 'devnet') {
+        try {
+          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+          const { blockhash } = await conn.getLatestBlockhash();
+          const testTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+          testTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports: 10000 }));
+          const serialized = testTx.serialize({ requireAllSignatures: false });
+          txData = btoa(String.fromCharCode(...serialized));
+          toast('[DEVNET] Test TX: native SOL transfer', 'info', 3000);
+        } catch (e) { console.warn('[SOLQ] Devnet fallback TX:', e.message); }
       }
     }
     await sleep(300); setStep(3, 'done');
