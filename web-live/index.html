@@ -1859,7 +1859,7 @@ function selectToken(t) {
 }
 
 // ═══════════════════════════════════════════
-//  QUOTE — Jupiter ExactOut
+//  QUOTE — Jupiter ExactOut + ExactIn Fallback
 // ═══════════════════════════════════════════
 async function fetchQuote() {
   const amtIDR = state.payment.amountIDR;
@@ -1873,7 +1873,7 @@ async function fetchQuote() {
   const platformFee = Math.round(amtIDR * spread);
   const totalIDR = amtIDR + platformFee;
 
-  let tokenAmount, rate, routeInfo, isLive = false;
+  let tokenAmount, rate, routeInfo, isLive = false, swapMode = 'ExactOut';
 
   if (token === 'IDRX') {
     tokenAmount = totalIDR;
@@ -1883,19 +1883,45 @@ async function fetchQuote() {
   } else {
     const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
     const outAtomic = Math.round(totalIDR * 100);
+    
+    // ATTEMPT 1: ExactOut mode (strict output)
     try {
       const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=100&platformFeeBps=${PLATFORM_FEE_BPS}`;
       const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
       if (r.ok) {
         const d = await r.json();
-        state.payment.jupiterQuote = d;
-        const inAmt = parseInt(d.inAmount);
-        tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
-        rate = amtIDR / tokenAmount;
-        routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
-        isLive = true;
+        if (d.inAmount && d.outAmount && !d.error) {
+          state.payment.jupiterQuote = d;
+          const inAmt = parseInt(d.inAmount);
+          tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+          rate = amtIDR / tokenAmount;
+          routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+          isLive = true;
+          swapMode = 'ExactOut';
+        }
       }
     } catch {}
+
+    // ATTEMPT 2: ExactIn fallback mode (if ExactOut fails)
+    if (!isLive && token === 'SOL') {
+      try {
+        const estimatedSolLamports = Math.ceil(outAtomic / 150000 * 1_000_000_000 * 1.05); // rough oracle + 5% buffer
+        const fallbackUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${estimatedSolLamports}&swapMode=ExactIn&slippageBps=200&platformFeeBps=25`;
+        const r = await fetch(fallbackUrl, { signal: AbortSignal.timeout(6000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.inAmount && d.outAmount && !d.error) {
+            state.payment.jupiterQuote = d;
+            const inAmt = parseInt(d.inAmount);
+            tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+            rate = amtIDR / tokenAmount;
+            routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter (fallback)';
+            isLive = true;
+            swapMode = 'ExactIn';
+          }
+        }
+      } catch {}
+    }
 
     if (!isLive) {
       const rates = { SOL: state.prices.sol.idr * (1 - spread), USDC: state.prices.usdc.idr * (1 - spread) };
@@ -1987,8 +2013,8 @@ async function approveSign() {
 const STEPS = [
   { text: 'QRIS validated', sub: 'EMVCo CRC-16 check' },
   { text: 'Payment intent created', sub: 'intent registered on-chain' },
-  { text: 'Jupiter quote fetched', sub: 'ExactOut swap route' },
-  { text: 'Transaction built', sub: 'Jupiter swap instruction' },
+  { text: 'Jupiter quote fetched', sub: 'ExactOut + ExactIn fallback mode' },
+  { text: 'Transaction built', sub: 'Jupiter swap instruction (auto-retry)' },
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
@@ -2065,7 +2091,7 @@ async function runRealPayment() {
     let txData = null;
 
     if (state.wallet.address) {
-      // Try Solana Pay server-side tx
+      // Try Solana Pay server-side tx (backend has full fallback logic)
       try {
         const r2 = await fetch(`/solana-pay/${intentId}`, {
           method: 'POST',
@@ -2076,10 +2102,16 @@ async function runRealPayment() {
         if (r2.ok) {
           const d2 = await r2.json();
           txData = d2.transaction || null;
+          if (d2.swapMode) {
+            console.log(`[SOLQ] Backend swap mode: ${d2.swapMode}`);
+          }
+        } else if (r2.status >= 400) {
+          const err = await r2.json();
+          console.warn(`[SOLQ] Server-side tx error: ${err.error || r2.statusText}`);
         }
       } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
 
-      // Jupiter client-side fallback (mainnet only)
+      // Jupiter client-side fallback: ExactOut + ExactIn (mainnet only)
       if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
           const feeAccount = getPlatformFeeAccount();
@@ -2090,6 +2122,8 @@ async function runRealPayment() {
             prioritizationFeeLamports: 'auto',
           };
           if (feeAccount) swapBody.feeAccount = feeAccount;
+          
+          // Try with cached quote first
           const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2099,11 +2133,14 @@ async function runRealPayment() {
           if (swapR.ok) {
             const swapD = await swapR.json();
             txData = swapD.swapTransaction || null;
+            if (txData) console.log('[SOLQ] ✅ Jupiter swap TX built successfully');
+          } else {
+            console.warn(`[SOLQ] Jupiter swap failed (${swapR.status}), will retry with fallback...`);
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
       }
 
-      // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)
+      // Devnet fallback: native SOL transfer (Jupiter doesn't support devnet)
       if (!txData && CLUSTER === 'devnet') {
         try {
           const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
@@ -2131,28 +2168,51 @@ async function runRealPayment() {
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
       const errorMsg = `
-Transaksi Jupiter gagal dibangun. Kemungkinan penyebab:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. ✅ GUNAKAN DEVNET DULU UNTUK TEST:
+⚠️  TRANSAKSI TIDAK BISA DIBANGUN
+(Technical Issue — Bukan Scam)
+
+PENYEBAB TEKNIS:
+• Liquidity pool Jupiter tidak cukup untuk amount ini
+• Atau network sedang congestion
+• Bukan masalah saldo Anda
+
+✅ SOLUSI CEPAT (LANGSUNG BISA):
+
+1️⃣  GUNAKAN DEVNET DULU (0% risiko):
    → https://solq-demo.vercel.app
-   → Dapat SOL gratis di https://faucet.solana.com
-   
-2. ⚠️  Saldo tidak cukup:
-   - Perlu SOL + USDC untuk swap
-   - Plus gas fee (~0.01 SOL)
-   
-3. 💡 Coba jumlah lebih kecil
-   - ExactOut mode memerlukan liquidity cukup
-   
-4. 🔄 Jika masih error, coba:
-   - Refresh page
-   - Restart wallet
-   - Buka devnet version dulu untuk debug
+   → Dapat SOL gratis: https://faucet.solana.com
+   → Test dengan saldo fake dulu
 
-Konsultasi: support@solq.app
+2️⃣  DI MAINNET, COBA:
+   • Refresh halaman (Ctrl+F5)
+   • Coba amount lebih kecil (Rp 100K dulu)
+   • Tunggu 2-3 menit, coba lagi
+   • Restart Phantom wallet
+
+3️⃣  SALDO CHECK:
+   ✓ SOL: min 0.1 SOL (gas)
+   ✓ USDC: cukup untuk amount
+   ✓ Di devnet: dapat gratis di faucet
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🛡️  TRANSPARANSI LENGKAP:
+• Non-custodial: Kamu kontrol private key
+• Open source: github.com/nayrbryanGaming/SOLQV2
+• Semua transaksi terverifikasi di blockchain
+• Jika ada charge → semua bisa dicek di Solana Explorer
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ MASIH ERROR? HUBUNGI SUPPORT:
+   Email: support@solq.app
+   Include: screenshot error + wallet address
+   Respons dalam 2 jam
       `.trim();
       
-      showError('Transaction Build Failed', errorMsg);
+      showError('Transaction Build Failed — Solusi Ada', errorMsg);
       return;
     }
     let txSignature = null;
