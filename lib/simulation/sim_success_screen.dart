@@ -155,7 +155,7 @@ class _SimSuccessScreenState extends State<SimSuccessScreen>
                         style: TextStyle(color: Color(0xFF8B2EE8), fontSize: 12)),
                     onPressed: () async {
                       final url = Uri.parse(
-                          'https://explorer.solana.com/tx/$sig?cluster=mainnet-beta');
+                          'https://explorer.solana.com/tx/$sig?cluster=devnet');
                       if (await canLaunchUrl(url)) launchUrl(url, mode: LaunchMode.externalApplication);
                     },
                   ),

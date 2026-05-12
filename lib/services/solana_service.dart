@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:bs58/bs58.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:solana_mobile_wallet_adapter_client/solana_mobile_wallet_adapter_client.dart';
@@ -18,6 +20,7 @@ class SolanaService {
   );
   static const _keyAuthToken = 'mwa_auth_token';
   static const _keyPublicKey = 'mwa_public_key';
+  static const _mwaChannel = MethodChannel('com.solq.mwa');
 
   final _sigCtrl = StreamController<String>.broadcast();
   Stream<String> get signatureStream => _sigCtrl.stream;
@@ -43,23 +46,41 @@ class SolanaService {
   Future<void> connect() async {
     if (_isConnecting) return;
     _isConnecting = true;
-    LocalAssociationScenario? scenario;
     try {
-      scenario = await LocalAssociationScenario.create(
-        portRange: const Uint16Range(8900, 9000),
-      );
-      scenario.startActivityForResult(null, null);
-      final client = await scenario.start().timeout(const Duration(seconds: 60));
+      if (Platform.isAndroid) {
+        // Native MWA via platform channel (API 31+ required for X25519)
+        final result = await _mwaChannel.invokeMapMethod<String, dynamic>(
+          'associate',
+          {'portMin': 8900, 'portMax': 9000},
+        ).timeout(const Duration(seconds: 70));
 
-      final result = await client.authorize(
-        identityUri: Uri.parse(AppConfig.appUrl),
-        iconUri: Uri.parse('${AppConfig.appUrl}/logo.png'),
-        identityName: 'SOLQ',
-        cluster: 'mainnet-beta',
-      );
+        _authToken = result?['authToken'] as String?;
+        _publicKey = result?['publicKey'] as String?;
 
-      _authToken = result.authToken;
-      _publicKey = base58.encode(result.accounts.first.publicKey);
+        if (_publicKey == null || _authToken == null) {
+          throw Exception('MWA returned invalid result');
+        }
+      } else {
+        // Non-Android: use stub (throws UnsupportedError on non-Android)
+        LocalAssociationScenario? scenario;
+        try {
+          scenario = await LocalAssociationScenario.create(
+            portRange: const Uint16Range(8900, 9000),
+          );
+          scenario.startActivityForResult(null, null);
+          final client = await scenario.start().timeout(const Duration(seconds: 60));
+          final mwaResult = await client.authorize(
+            identityUri: Uri.parse(AppConfig.appUrl),
+            iconUri: Uri.parse('${AppConfig.appUrl}/logo.png'),
+            identityName: 'SOLQ',
+            cluster: AppConfig.cluster,
+          );
+          _authToken = mwaResult.authToken;
+          _publicKey = base58.encode(mwaResult.accounts.first.publicKey);
+        } finally {
+          await scenario?.close();
+        }
+      }
 
       await _storage.write(key: _keyAuthToken, value: _authToken);
       await _storage.write(key: _keyPublicKey, value: _publicKey);
@@ -69,8 +90,18 @@ class SolanaService {
       rethrow;
     } finally {
       _isConnecting = false;
-      await scenario?.close();
     }
+  }
+
+  /// Connect with a manually entered wallet address (no wallet app required).
+  /// Transactions will use Solana Pay URL fallback for signing.
+  Future<void> connectManual(String address) async {
+    if (address.isEmpty) throw ArgumentError('Address cannot be empty');
+    _publicKey = address;
+    _authToken = 'manual-connect';
+    await _storage.write(key: _keyAuthToken, value: _authToken);
+    await _storage.write(key: _keyPublicKey, value: _publicKey);
+    _sigCtrl.add('CONNECTED');
   }
 
   /// Demo-only: connect with a hardcoded read-only address (no MWA required).

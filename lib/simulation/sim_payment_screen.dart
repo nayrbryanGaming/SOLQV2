@@ -48,7 +48,7 @@ class _SimPaymentScreenState extends State<SimPaymentScreen> {
     try {
       final amt = int.tryParse(_amountCtrl.text) ?? 50000;
       final res = await http.post(
-        Uri.parse('${AppConfig.apiBaseUrl}/v1/simulation/quote'),
+        Uri.parse('${AppConfig.apiBaseUrl}/simulation/quote'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'amount_idr': amt, 'token': _selectedToken}),
       ).timeout(const Duration(seconds: 6));
@@ -108,7 +108,7 @@ class _SimPaymentScreenState extends State<SimPaymentScreen> {
       Map<String, dynamic> result;
 
       final res = await http.post(
-        Uri.parse('${AppConfig.apiBaseUrl}/v1/simulation/pay'),
+        Uri.parse('${AppConfig.apiBaseUrl}/simulation/pay'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'amount_idr': amt,

@@ -5,7 +5,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
+import '../services/language_service.dart';
 import 'sim_payment_screen.dart';
+import 'sim_settings_screen.dart';
 
 class SimScannerScreen extends StatefulWidget {
   const SimScannerScreen({super.key});
@@ -22,6 +24,7 @@ class _SimScannerScreenState extends State<SimScannerScreen>
   bool _isProcessing = false;
   bool _torchOn      = false;
   String? _statusMsg;
+  final _lang = LanguageService();
 
   @override
   void initState() {
@@ -104,7 +107,7 @@ class _SimScannerScreenState extends State<SimScannerScreen>
     // First: try backend parse (full EMVCo + CRC validation)
     try {
       final res = await http.post(
-        Uri.parse('${AppConfig.apiBaseUrl}/v1/simulation/parse-qris'),
+        Uri.parse('${AppConfig.apiBaseUrl}/simulation/parse-qris'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'qris_payload': payload}),
       ).timeout(const Duration(seconds: 5));
@@ -205,12 +208,32 @@ class _SimScannerScreenState extends State<SimScannerScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _chip('SIMULATION MODE', const Color(0xFFFF6B00)),
-                IconButton(
-                  icon: Icon(
-                    _torchOn ? Icons.flashlight_on : Icons.flashlight_off,
-                    color: Colors.white,
-                  ),
-                  onPressed: _toggleTorch,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _torchOn ? Icons.flashlight_on : Icons.flashlight_off,
+                        color: Colors.white,
+                      ),
+                      onPressed: _toggleTorch,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined, color: Colors.white),
+                      tooltip: _lang.currentLanguage == AppLanguage.en ? 'Settings' : 'Pengaturan',
+                      onPressed: () async {
+                        _sharedController?.stop();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SimSettingsScreen()),
+                        );
+                        if (mounted) {
+                          setState(() {}); // rebuild to reflect lang change
+                          _sharedController?.start();
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -241,15 +264,19 @@ class _SimScannerScreenState extends State<SimScannerScreen>
                       ),
                     ).animate().fadeIn()
                   else
-                    const Text(
-                      'Arahkan kamera ke kode QRIS merchant',
-                      style: TextStyle(color: Colors.white70, fontSize: 15),
+                    Text(
+                      _lang.currentLanguage == AppLanguage.en
+                          ? 'Point camera at merchant QRIS code'
+                          : 'Arahkan kamera ke kode QRIS merchant',
+                      style: const TextStyle(color: Colors.white70, fontSize: 15),
                       textAlign: TextAlign.center,
                     ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Nama toko, NMID, dan kota akan terbaca otomatis',
-                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  Text(
+                    _lang.currentLanguage == AppLanguage.en
+                        ? 'Shop name, NMID & city read automatically'
+                        : 'Nama toko, NMID, dan kota akan terbaca otomatis',
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
                     textAlign: TextAlign.center,
                   ),
                 ],
