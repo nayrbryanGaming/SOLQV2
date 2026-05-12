@@ -16,7 +16,7 @@ import {
 // IDRX EVM bridge via Wormhole/deBridge is on roadmap.
 import { createDisbursement, mapBankCode } from '../utils/xendit.js';
 
-const MIN_DISBURSEMENT_IDR = 32000; // ~2 USD — Xendit minimum + IDRX minimum
+const MIN_DISBURSEMENT_IDR = 1000; // Rp 1.000 — minimum per spesifikasi SOLQ
 
 function normalizeStringField(value, fallback = null) {
   if (typeof value !== 'string') {

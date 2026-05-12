@@ -352,6 +352,7 @@ input::placeholder{color:var(--ink3)}
 .step-state{margin-top:6px;font-family:var(--font-mono);font-size:10px;color:var(--ink3)}
 .proc-explorer{margin-top:16px;width:100%}
 .proc-explorer.hidden{display:none}
+.hidden{display:none!important}
 .proc-explorer a{
   display:flex;align-items:center;justify-content:center;gap:6px;
   padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);
@@ -1053,7 +1054,7 @@ const USDC_MINT  = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const IDRX_MINT  = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
 const TOKEN_PROGRAM_ID_STR  = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const ASSOC_TOKEN_PROG_STR  = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bsXq';
-const MIN_PAYMENT_IDR       = 32000; // IDRX minimum redeem: ~2 USD
+const MIN_PAYMENT_IDR       = 1000; // Minimum Rp 1.000
 const RPC_ENDPOINTS = [
   'https://api.mainnet-beta.solana.com',
   'https://solana-api.projectserum.com',
@@ -1602,13 +1603,15 @@ function showConfirmScreen(qris) {
   const token = state.payment.token;
   routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDRX via Jupiter' : 'SOL → USDC → IDRX via Jupiter');
 
-  if (qris.isDynamic && qris.amount) {
+  if (qris.amount) {
+    // Amount locked in QR (dynamic or static with tag 54)
     document.getElementById('amount-wrap-input').classList.add('hidden');
     document.getElementById('amount-fixed-wrap').classList.remove('hidden');
     document.getElementById('amount-fixed-val').textContent = rp(qris.amount);
     state.payment.amountIDR = qris.amount;
     document.getElementById('amount-section-label').textContent = 'Amount · locked by merchant';
   } else {
+    // No amount in QR — user must enter manually
     document.getElementById('amount-wrap-input').classList.remove('hidden');
     document.getElementById('amount-fixed-wrap').classList.add('hidden');
     document.getElementById('amount-input').value = '';
