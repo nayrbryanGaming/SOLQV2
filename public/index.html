@@ -1885,20 +1885,29 @@ async function fetchQuote() {
     isLive = true;
   } else {
     const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
-    const outAtomic = Math.round(totalIDR * 100);
-    try {
-      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=100&platformFeeBps=${PLATFORM_FEE_BPS}`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
-      if (r.ok) {
-        const d = await r.json();
-        state.payment.jupiterQuote = d;
-        const inAmt = parseInt(d.inAmount);
-        tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
-        rate = amtIDR / tokenAmount;
-        routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
-        isLive = true;
-      }
-    } catch {}
+    const outAtomic = Math.round(totalIDR * 100); // fee already baked into totalIDR
+    // Try ExactOut first, then ExactIn as fallback
+    const quoteUrls = [
+      `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=200`,
+      `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=500`,
+    ];
+    for (const url of quoteUrls) {
+      if (isLive) break;
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (!d.error && d.inAmount) {
+            state.payment.jupiterQuote = d;
+            const inAmt = parseInt(d.inAmount);
+            tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+            rate = amtIDR / tokenAmount;
+            routeInfo = d.routePlan?.map(rp => rp.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+            isLive = true;
+          }
+        }
+      } catch {}
+    }
 
     if (!isLive) {
       const rates = { SOL: state.prices.sol.idr * (1 - spread), USDC: state.prices.usdc.idr * (1 - spread) };
@@ -2084,14 +2093,14 @@ async function runRealPayment() {
       // Jupiter client-side fallback (mainnet only)
       if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
-          const feeAccount = getPlatformFeeAccount();
+          // Do NOT send feeAccount — requires pre-initialized on-chain ATA
           const swapBody = {
             quoteResponse: state.payment.jupiterQuote,
             userPublicKey: state.wallet.address,
             dynamicComputeUnitLimit: true,
             prioritizationFeeLamports: 'auto',
+            skipUserAccountsRpcCalls: true,
           };
-          if (feeAccount) swapBody.feeAccount = feeAccount;
           const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2101,8 +2110,32 @@ async function runRealPayment() {
           if (swapR.ok) {
             const swapD = await swapR.json();
             txData = swapD.swapTransaction || null;
+          } else {
+            const errBody = await swapR.text().catch(() => '');
+            console.warn('[SOLQ] Jupiter swap API error:', swapR.status, errBody);
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
+      }
+
+
+      // Mainnet SOL transfer fallback — when Jupiter swap build fails but quote succeeded.
+      // Uses exact inAmount from Jupiter quote so the correct SOL value moves on-chain.
+      // Backend (fetchTransactionFacts) now includes SOL deltas so this TX will verify.
+      if (!txData && state.payment.jupiterQuote && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
+        try {
+          const lamports = parseInt(state.payment.jupiterQuote.inAmount);
+          if (lamports > 0) {
+            const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+            const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+            const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+            const { blockhash } = await conn.getLatestBlockhash();
+            const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+            fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+            const serialized = fallTx.serialize({ requireAllSignatures: false });
+            txData = btoa(String.fromCharCode(...serialized));
+            toast('Jupiter route busy — using SOL direct transfer', 'info', 3500);
+          }
+        } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
       }
 
       // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)

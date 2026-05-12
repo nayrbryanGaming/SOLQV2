@@ -983,6 +983,59 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
+//  LANGUAGE TOGGLE — cached in localStorage
+// ═══════════════════════════════════════════════════════════════════
+const STRINGS = {
+  en: {
+    badge:'INTERACTIVE DEMO · LIVE', brandSub:'Solana × QRIS Payment',
+    headline:'Pay any QRIS with SOL,<br>receive <em>Rupiah</em> instantly',
+    desc:'Non-custodial orchestrator: scan any Indonesian merchant QRIS, swap SOL/USDC→IDRX via Jupiter, BI-FAST settlement to merchant in seconds.',
+    howItWorks:'HOW IT WORKS',
+    s1title:'Scan Merchant QRIS', s1desc:'Camera reads EMVCo TLV — extracts shop name, NMID, acquirer bank automatically',
+    s2title:'Jupiter ExactOut Swap', s2desc:'SOL/USDC→IDRX at best price, 0.5% transparent fee, gas covered by platform',
+    s3title:'BI-FAST Settlement', s3desc:'IDRX redeemed → IDR disbursed to 200+ banks & e-wallets via Xendit',
+    f1title:'Real QRIS Scan', f1desc:'Camera scans any Indonesian merchant QRIS — real CRC-16/CCITT parser',
+    f2title:'Jupiter ExactOut Quote', f2desc:'Best SOL/USDC→IDRX price, minimal slippage, real-time from Lite API',
+    f3title:'Transparent 0.5% Fee', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, no hidden fees',
+    f4title:'Non-Custodial', f4desc:'Private key never leaves user wallet — every TX signed by user',
+    feeLbl:'Platform Fee', bankLbl:'Banks & Wallets', settleLbl:'Settlement',
+    walletsTitle:'Supported Wallets',
+    ctaReal:'Real Version (Mainnet)',
+    compliance:'<strong>BI/OJK-aware orchestrator.</strong> SOLQ does not hold funds or private keys. Every transaction is signed directly by the user. IDR settlement via Xendit (registered OJK).',
+  },
+  id: {
+    badge:'DEMO INTERAKTIF · LIVE', brandSub:'Solana × QRIS Payment',
+    headline:'Bayar QRIS pakai SOL,<br>terima <em>Rupiah</em> real-time',
+    desc:'Non-custodial orchestrator: user scan QRIS merchant Indonesia mana pun, swap SOL/USDC→IDRX via Jupiter, settlement BI-FAST ke rekening merchant dalam detik.',
+    howItWorks:'CARA KERJA',
+    s1title:'Scan QRIS Merchant', s1desc:'Kamera baca EMVCo TLV — ekstrak nama toko, NMID, bank acquirer otomatis',
+    s2title:'Jupiter Swap ExactOut', s2desc:'SOL/USDC→IDRX dengan quote terbaik, fee 0.5% transparan, gas ditanggung platform',
+    s3title:'Settlement BI-FAST', s3desc:'IDRX di-redeem → disbursement IDR ke 200+ bank & e-wallet via Xendit',
+    f1title:'Scan QRIS Nyata', f1desc:'Kamera device scan QRIS merchant Indonesia mana pun — parser CRC-16/CCITT real',
+    f2title:'Jupiter ExactOut Quote', f2desc:'Harga terbaik SOL/USDC→IDRX, slippage minimal, real-time dari Lite API',
+    f3title:'Fee 0.5% Transparan', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, tidak ada biaya tersembunyi',
+    f4title:'Non-Custodial', f4desc:'Private key tidak pernah meninggalkan wallet user — setiap TX ditandatangani sendiri',
+    feeLbl:'Fee Platform', bankLbl:'Bank & Wallet', settleLbl:'Settlement',
+    walletsTitle:'Wallet yang Didukung',
+    ctaReal:'Versi Real (Mainnet)',
+    compliance:'<strong>BI/OJK-aware orchestrator.</strong> SOLQ tidak menyimpan dana atau private key. Setiap transaksi ditandatangani langsung oleh user di wallet masing-masing. Settlement IDR via Xendit (Xendit Indonesia, terdaftar OJK).',
+  }
+};
+let LANG = localStorage.getItem('solq_lang') || 'id';
+function applyLang(lang) {
+  LANG = lang;
+  localStorage.setItem('solq_lang', lang);
+  const t = STRINGS[lang] || STRINGS.id;
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const key = el.getAttribute('data-t');
+    if (t[key] !== undefined) el.innerHTML = t[key];
+  });
+  document.querySelectorAll('.lang-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 const API_BASE = (() => {
@@ -1972,6 +2025,7 @@ function showReceipt(apiResult) {
 })();
 
 window.addEventListener('load', async () => {
+  applyLang(LANG);
   await sleep(1800);
   navigate('home');
   fetchPrices();

@@ -158,6 +158,24 @@ function extractPayer(result) {
   return null;
 }
 
+const SOL_NATIVE_MINT = 'So11111111111111111111111111111111111111112';
+
+function extractSolDeltas(result) {
+  const pre  = Array.isArray(result?.meta?.preBalances)  ? result.meta.preBalances  : [];
+  const post = Array.isArray(result?.meta?.postBalances) ? result.meta.postBalances : [];
+  const keys = result?.transaction?.message?.accountKeys || [];
+  const items = [];
+  const len = Math.min(pre.length, post.length, keys.length);
+  for (let i = 0; i < len; i++) {
+    const delta = (post[i] || 0) - (pre[i] || 0);
+    if (delta === 0) continue;
+    const keyEntry = keys[i];
+    const owner = typeof keyEntry === 'string' ? keyEntry : (keyEntry?.pubkey || null);
+    items.push({ accountIndex: i, mint: SOL_NATIVE_MINT, owner, decimals: 9, deltaAtomic: String(delta), isNativeSol: true });
+  }
+  return items;
+}
+
 function extractTokenDeltas(meta) {
   const pre = Array.isArray(meta?.preTokenBalances) ? meta.preTokenBalances : [];
   const post = Array.isArray(meta?.postTokenBalances) ? meta.postTokenBalances : [];
@@ -229,7 +247,10 @@ export async function fetchTransactionFacts(signature, cluster = 'mainnet-beta')
         slot: result.slot || null,
         blockTime: result.blockTime || null,
         payer: extractPayer(result),
-        tokenDeltas: extractTokenDeltas(result.meta),
+        tokenDeltas: [
+          ...extractTokenDeltas(result.meta),
+          ...extractSolDeltas(result),
+        ],
       };
     } catch (error) {
       lastError = error;

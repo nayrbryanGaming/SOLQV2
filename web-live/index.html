@@ -1884,10 +1884,10 @@ async function fetchQuote() {
     const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
     const outAtomic = Math.round(totalIDR * 100);
     
-    // ATTEMPT 1: ExactOut mode (strict output)
+    // ATTEMPT 1: ExactOut mode — no platformFeeBps (fee baked into outAtomic via totalIDR)
     try {
-      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=100&platformFeeBps=${PLATFORM_FEE_BPS}`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=200`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (r.ok) {
         const d = await r.json();
         if (d.inAmount && d.outAmount && !d.error) {
@@ -1895,18 +1895,38 @@ async function fetchQuote() {
           const inAmt = parseInt(d.inAmount);
           tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
           rate = amtIDR / tokenAmount;
-          routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+          routeInfo = d.routePlan?.map(rp => rp.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
           isLive = true;
           swapMode = 'ExactOut';
         }
       }
     } catch {}
 
-    // ATTEMPT 2: ExactIn fallback mode (if ExactOut fails)
+    // ATTEMPT 2: ExactOut with higher slippage
+    if (!isLive) {
+      try {
+        const url2 = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=500`;
+        const r = await fetch(url2, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.inAmount && d.outAmount && !d.error) {
+            state.payment.jupiterQuote = d;
+            const inAmt = parseInt(d.inAmount);
+            tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+            rate = amtIDR / tokenAmount;
+            routeInfo = d.routePlan?.map(rp => rp.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+            isLive = true;
+            swapMode = 'ExactOut';
+          }
+        }
+      } catch {}
+    }
+
+    // ATTEMPT 3: ExactIn fallback mode (if ExactOut still fails)
     if (!isLive && token === 'SOL') {
       try {
         const estimatedSolLamports = Math.ceil(outAtomic / 150000 * 1_000_000_000 * 1.05); // rough oracle + 5% buffer
-        const fallbackUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${estimatedSolLamports}&swapMode=ExactIn&slippageBps=200&platformFeeBps=25`;
+        const fallbackUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${estimatedSolLamports}&swapMode=ExactIn&slippageBps=300`;
         const r = await fetch(fallbackUrl, { signal: AbortSignal.timeout(6000) });
         if (r.ok) {
           const d = await r.json();
@@ -2112,18 +2132,16 @@ async function runRealPayment() {
       } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
 
       // Jupiter client-side fallback: ExactOut + ExactIn (mainnet only)
+      // Do NOT send feeAccount — requires pre-initialized on-chain ATA; omitting it is safe
       if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
-          const feeAccount = getPlatformFeeAccount();
           const swapBody = {
             quoteResponse: state.payment.jupiterQuote,
             userPublicKey: state.wallet.address,
             dynamicComputeUnitLimit: true,
             prioritizationFeeLamports: 'auto',
+            skipUserAccountsRpcCalls: true,
           };
-          if (feeAccount) swapBody.feeAccount = feeAccount;
-          
-          // Try with cached quote first
           const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2135,9 +2153,29 @@ async function runRealPayment() {
             txData = swapD.swapTransaction || null;
             if (txData) console.log('[SOLQ] ✅ Jupiter swap TX built successfully');
           } else {
-            console.warn(`[SOLQ] Jupiter swap failed (${swapR.status}), will retry with fallback...`);
+            const errBody = await swapR.text().catch(() => '');
+            console.warn('[SOLQ] Jupiter swap API error:', swapR.status, errBody);
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
+      }
+
+      // Mainnet SOL transfer fallback — when Jupiter swap build fails but quote succeeded.
+      // Uses exact inAmount from Jupiter quote so the correct SOL value moves on-chain.
+      if (!txData && state.payment.jupiterQuote && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
+        try {
+          const lamports = parseInt(state.payment.jupiterQuote.inAmount);
+          if (lamports > 0) {
+            const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+            const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+            const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+            const { blockhash } = await conn.getLatestBlockhash();
+            const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+            fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+            const serialized = fallTx.serialize({ requireAllSignatures: false });
+            txData = btoa(String.fromCharCode(...serialized));
+            toast('Jupiter route busy — using SOL direct transfer', 'info', 3500);
+          }
+        } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
       }
 
       // Devnet fallback: native SOL transfer (Jupiter doesn't support devnet)
