@@ -65,8 +65,6 @@ async function buildJupiterSwapTx(amountIdr, userPublicKey) {
       quoteResponse: quote,
       userPublicKey,
       wrapAndUnwrapSol: true,
-      computeUnitPriceMicroLamports: 'auto',
-      prioritizationFeeLamports: 'auto',
       feeAccount: TREASURY_IDRX_ATA,          // 0.5% platform fee → treasury
       destinationTokenAccount: TREASURY_IDRX_ATA, // IDRX output → escrow
       dynamicComputeUnitLimit: true,
