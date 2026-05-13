@@ -58,23 +58,44 @@ async function buildJupiterSwapTx(amountIdr, userPublicKey) {
   }
 
   // 2. Build unsigned swap transaction via Jupiter
+  // Note: feeAccount collects 0.5% platform fee (must be IDRX ATA of treasury).
+  // destinationTokenAccount omitted — Jupiter creates user's IDRX ATA if needed.
+  const swapBody = {
+    quoteResponse: quote,
+    userPublicKey,
+    wrapAndUnwrapSol: true,
+    feeAccount: TREASURY_IDRX_ATA,
+    dynamicComputeUnitLimit: true,
+  };
+
   const swapRes = await fetch(JUPITER_SWAP_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      quoteResponse: quote,
-      userPublicKey,
-      wrapAndUnwrapSol: true,
-      feeAccount: TREASURY_IDRX_ATA,          // 0.5% platform fee → treasury
-      destinationTokenAccount: TREASURY_IDRX_ATA, // IDRX output → escrow
-      dynamicComputeUnitLimit: true,
-    }),
+    body: JSON.stringify(swapBody),
     signal: AbortSignal.timeout(10000),
   });
 
   if (!swapRes.ok) {
     let errBody = '';
     try { errBody = await swapRes.text(); } catch (_) {}
+    // If feeAccount also fails, try without it (still produces valid TX — fee in spread)
+    if (errBody.includes('feeAccount') || errBody.includes('fee_account') || swapRes.status === 400) {
+      delete swapBody.feeAccount;
+      const swapRes2 = await fetch(JUPITER_SWAP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(swapBody),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (swapRes2.ok) {
+        const swapData2 = await swapRes2.json();
+        if (!swapData2.swapTransaction) throw new Error('Jupiter: swapTransaction kosong');
+        return { transaction: swapData2.swapTransaction, inAmount: quote.inAmount, outAmount: quote.outAmount, quote };
+      }
+      let err2 = '';
+      try { err2 = await swapRes2.text(); } catch (_) {}
+      throw new Error(`Jupiter swap fallback HTTP ${swapRes2.status}: ${err2.slice(0, 200)}`);
+    }
     throw new Error(`Jupiter swap HTTP ${swapRes.status}: ${errBody.slice(0, 200)}`);
   }
 
