@@ -797,6 +797,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 //  CONSTANTS
 // ═══════════════════════════════════════════════════════════
 const PLATFORM_FEE_BPS = 50; // 0.5%
+const PLATFORM_FEE_WALLET = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
 const SOL_MINT  = 'So11111111111111111111111111111111111111112';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const IDRX_MINT = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
@@ -1730,16 +1731,54 @@ async function runRealPayment() {
           document.getElementById('btn-approve').textContent = 'Setujui Transaksi';
           return;
         }
-        console.warn('[SOLQ] Sign error, using simulated flow:', e.message);
-        txSignature = genFakeSig();
-        state.payment.txHash = txSignature;
-        toast('⚠️ Menggunakan mode simulasi', 'info', 3000);
+        console.warn('[SOLQ] Sign error, trying server demo TX:', e.message);
+        try {
+          const dr = await fetch('/v1/demo-tx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000 }),
+            signal: AbortSignal.timeout(20000),
+          });
+          if (dr.ok) {
+            const dd = await dr.json();
+            if (dd.ok && dd.signature) {
+              txSignature = dd.signature;
+              state.payment.txHash = txSignature;
+              state.payment.demoMode = true;
+              toast('✅ TX NYATA — server demo signing', 'success', 4000);
+            }
+          }
+        } catch (_) {}
+        if (!txSignature) {
+          txSignature = genFakeSig();
+          state.payment.txHash = txSignature;
+          toast('⚠️ Mode simulasi', 'info', 3000);
+        }
       }
     } else {
-      // No tx data — simulate
-      await sleep(1500);
-      txSignature = genFakeSig();
-      state.payment.txHash = txSignature;
+      // No wallet / no txData — try server demo TX before fake fallback
+      try {
+        const dr = await fetch('/v1/demo-tx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000 }),
+          signal: AbortSignal.timeout(20000),
+        });
+        if (dr.ok) {
+          const dd = await dr.json();
+          if (dd.ok && dd.signature) {
+            txSignature = dd.signature;
+            state.payment.txHash = txSignature;
+            state.payment.demoMode = true;
+            toast('✅ TX NYATA — demo mode', 'success', 4000);
+          }
+        }
+      } catch (_) {}
+      if (!txSignature) {
+        await sleep(1500);
+        txSignature = genFakeSig();
+        state.payment.txHash = txSignature;
+      }
     }
     document.getElementById('btn-cancel-proc').style.display = 'none';
     setStep(4, 'done');
@@ -1755,7 +1794,7 @@ async function runRealPayment() {
     // Step 6 — Confirm on-chain
     setStep(6, 'active');
     document.getElementById('proc-sub').textContent = 'Menunggu konfirmasi blockchain...';
-    if (txSignature && state.wallet.provider && !txSignature.startsWith('sim')) {
+    if (txSignature && (state.wallet.provider || state.payment.demoMode) && !txSignature.startsWith('sim')) {
       try {
         const connection = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
         await connection.confirmTransaction(txSignature, 'confirmed');
