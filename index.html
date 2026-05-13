@@ -1736,7 +1736,7 @@ async function runRealPayment() {
           const dr = await fetch('/v1/demo-tx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000 }),
+            body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000, real_tx: true }),
             signal: AbortSignal.timeout(20000),
           });
           if (dr.ok) {
@@ -1761,7 +1761,7 @@ async function runRealPayment() {
         const dr = await fetch('/v1/demo-tx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000 }),
+          body: JSON.stringify({ amount_idr: state.payment.amountIDR || 1000, real_tx: true }),
           signal: AbortSignal.timeout(20000),
         });
         if (dr.ok) {
