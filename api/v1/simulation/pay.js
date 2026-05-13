@@ -98,23 +98,10 @@ async function realSolTx(seed32, pubBytes32, toB58, lamports) {
   return await rpc('sendTransaction', [txB64, { encoding: 'base64', preflightCommitment: 'confirmed', maxRetries: 3 }]);
 }
 
-// ── SOL/IDR price ──────────────────────────────────────────────────────────────
+// ── SOL/IDR price — reuse the multi-source pricing util already proven on Vercel ─
 async function getSolIdr() {
-  try {
-    const [j, f] = await Promise.all([
-      fetch('https://lite-api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
-      fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
-    ]);
-    const p = j?.data?.So11111111111111111111111111111111111111112?.price;
-    const x = f?.rates?.IDR;
-    if (p > 0 && x > 0) return p * x;
-  } catch (_) {}
-  const [b, f] = await Promise.all([
-    fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT', { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
-    fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
-  ]);
-  const solUsd = Number(b?.price); const usdIdr = f?.rates?.IDR;
-  if (solUsd > 0 && usdIdr > 0) return solUsd * usdIdr;
+  const pricing = await getRealTimePricing();
+  if (pricing?.sol_idr > 0) return pricing.sol_idr;
   throw new Error('SOL/IDR rate unavailable');
 }
 
