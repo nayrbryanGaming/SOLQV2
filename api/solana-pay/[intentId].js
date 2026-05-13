@@ -73,7 +73,9 @@ async function buildJupiterSwapTx(amountIdr, userPublicKey) {
   });
 
   if (!swapRes.ok) {
-    throw new Error(`Jupiter swap HTTP ${swapRes.status}`);
+    let errBody = '';
+    try { errBody = await swapRes.text(); } catch (_) {}
+    throw new Error(`Jupiter swap HTTP ${swapRes.status}: ${errBody.slice(0, 200)}`);
   }
 
   const swapData = await swapRes.json();
