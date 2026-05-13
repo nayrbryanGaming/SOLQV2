@@ -47,10 +47,14 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
   int _quoteSecondsLeft = _quoteLifetimeSeconds;
   bool _isRefreshingQuote = false;
 
+  // Auto-sync when waiting for wallet (Solana Pay deeplink fallback path)
+  Timer? _syncTimer;
+
   @override
   void initState() {
     super.initState();
     _startQuoteCountdown();
+    _maybeStartSyncPolling();
   }
 
   @override
@@ -59,6 +63,25 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
     if (widget.intent.state == PaymentState.created &&
         widget.intent.updatedAt != old.intent.updatedAt) {
       _resetQuoteCountdown();
+    }
+    // Start / stop polling whenever state changes
+    _maybeStartSyncPolling();
+  }
+
+  void _maybeStartSyncPolling() {
+    final state = widget.intent.state;
+    final shouldPoll = state == PaymentState.authorizationRequested ||
+        state == PaymentState.awaitingSettlement ||
+        state == PaymentState.authorized;
+
+    if (shouldPoll && _syncTimer == null) {
+      _syncTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+        if (!mounted) return;
+        await OrchestratorService().syncStatus();
+      });
+    } else if (!shouldPoll) {
+      _syncTimer?.cancel();
+      _syncTimer = null;
     }
   }
 
@@ -102,6 +125,7 @@ class _PaymentStatusViewState extends State<PaymentStatusView> {
   @override
   void dispose() {
     _quoteTimer?.cancel();
+    _syncTimer?.cancel();
     super.dispose();
   }
 

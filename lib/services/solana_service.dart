@@ -124,9 +124,44 @@ class SolanaService {
   }
 
   /// Signs and broadcasts a base64-encoded serialized transaction via MWA.
+  /// On Android: uses native platform channel (reliable, no Transport error).
+  /// On other platforms: uses Dart MWA library.
   /// Emits "SIGNED:<intentId>:<txSignature>" to signatureStream on success.
   Future<void> signSwapTransaction(String base64Tx, String intentId) async {
     if (_authToken == null) throw Exception('Wallet not connected');
+
+    if (Platform.isAndroid) {
+      // Native Android MWA — avoids "Transport error" from Dart LocalAssociationScenario
+      final result = await _mwaChannel.invokeMapMethod<String, dynamic>(
+        'signAndSend',
+        {
+          'authToken': _authToken!,
+          'transaction': base64Tx,
+          'portMin': 8900,
+          'portMax': 9000,
+        },
+      ).timeout(const Duration(seconds: 90));
+
+      final sig = result?['signature'] as String?;
+      final newToken = result?['authToken'] as String?;
+
+      if (sig == null || sig.isEmpty) {
+        throw Exception('No signature returned from wallet');
+      }
+
+      // Update auth token if refreshed by wallet
+      if (newToken != null && newToken.isNotEmpty && newToken != _authToken) {
+        _authToken = newToken;
+        await _storage.write(key: _keyAuthToken, value: newToken);
+      }
+
+      // Signature from MWA can be base64 (raw 64 bytes) or base58; normalise to base58
+      final txSig = _normaliseSignature(sig);
+      _sigCtrl.add('SIGNED:$intentId:$txSig');
+      return;
+    }
+
+    // Non-Android: use Dart MWA library
     final txBytes = base64.decode(base64Tx);
     LocalAssociationScenario? scenario;
     try {
@@ -148,6 +183,23 @@ class SolanaService {
       _sigCtrl.add('SIGNED:$intentId:$txSig');
     } finally {
       await scenario?.close();
+    }
+  }
+
+  /// Normalise a wallet signature to base58.
+  /// MWA may return base64 (raw bytes) or already-base58 strings.
+  String _normaliseSignature(String raw) {
+    // Solana base58 signatures are 87–88 chars and only base58 alphabet
+    final isBase58 = raw.length >= 80 && raw.length <= 100 &&
+        RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$').hasMatch(raw);
+    if (isBase58) return raw;
+
+    // Assume base64 → decode → re-encode as base58
+    try {
+      final bytes = base64.decode(raw);
+      return base58.encode(bytes);
+    } catch (_) {
+      return raw; // return as-is and let caller validate
     }
   }
 

@@ -59,6 +59,17 @@ class MainActivity : FlutterActivity() {
                         pendingResult = null
                         result.success(null)
                     }
+                    "signAndSend" -> {
+                        val authToken = call.argument<String>("authToken") ?: ""
+                        val txBase64  = call.argument<String>("transaction") ?: ""
+                        val portMin   = call.argument<Int>("portMin") ?: 8900
+                        val portMax   = call.argument<Int>("portMax") ?: 9000
+                        if (authToken.isEmpty() || txBase64.isEmpty()) {
+                            result.error("INVALID_ARGS", "authToken and transaction required", null)
+                        } else {
+                            startMwaSign(authToken, txBase64, portMin, portMax, result)
+                        }
+                    }
                     "isWalletInstalled" -> {
                         val solanaIntent = Intent(Intent.ACTION_VIEW, Uri.parse("solana-wallet://"))
                         val phantomIntent = Intent(Intent.ACTION_VIEW, Uri.parse("phantom://"))
@@ -230,6 +241,206 @@ class MainActivity : FlutterActivity() {
                 }
             } catch (e: Exception) {
                 failWith("ERROR", e.message ?: "Unknown MWA error")
+            }
+        }
+    }
+
+    private fun startMwaSign(
+        authToken: String,
+        txBase64: String,
+        portMin: Int,
+        portMax: Int,
+        result: MethodChannel.Result,
+    ) {
+        if (pendingResult != null) {
+            result.error("BUSY", "MWA operation already in progress", null)
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            result.error("API_TOO_LOW", "MWA requires Android 12 (API 31). Device is API ${Build.VERSION.SDK_INT}.", null)
+            return
+        }
+        pendingResult = result
+
+        serverJob = scope.launch {
+            try {
+                // ── Step 1: Find open port ────────────────────────────────────────────
+                val serverSocket = (portMin..portMax).firstNotNullOfOrNull { port ->
+                    try { ServerSocket(port).also { it.soTimeout = 70_000 } }
+                    catch (_: IOException) { null }
+                }
+                if (serverSocket == null) {
+                    failWith("NO_PORT", "No free port in range $portMin–$portMax")
+                    return@launch
+                }
+                val port = serverSocket.localPort
+
+                // ── Step 2: X25519 keypair ────────────────────────────────────────────
+                val keyGen = KeyPairGenerator.getInstance("XDH").also {
+                    it.initialize(NamedParameterSpec.X25519)
+                }
+                val keyPair = keyGen.generateKeyPair()
+                val rawPub = keyPair.public.encoded.takeLast(32).toByteArray()
+                val pubB64 = Base64.encodeToString(rawPub, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+
+                // ── Step 3: Build URI and open wallet for signing ─────────────────────
+                val assocPayload = JSONObject().apply {
+                    put("v", 1)
+                    put("port", port)
+                    put("pub", pubB64)
+                }.toString()
+                val assocB64 = Base64.encodeToString(
+                    assocPayload.toByteArray(Charsets.UTF_8),
+                    Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+                )
+                val walletUri = "solana-wallet://v1/associate?association=$assocB64"
+
+                withContext(Dispatchers.Main) {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(walletUri)).also {
+                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (e: ActivityNotFoundException) {
+                        serverSocket.close()
+                        failWith("NO_WALLET", "No MWA-compatible wallet installed")
+                    }
+                }
+
+                // ── Step 4: Accept WebSocket connection ───────────────────────────────
+                val clientSocket = try { serverSocket.accept() }
+                catch (e: Exception) {
+                    serverSocket.close()
+                    failWith("TIMEOUT", "Wallet did not connect within 70 seconds")
+                    return@launch
+                }
+                serverSocket.close()
+
+                val ins  = clientSocket.getInputStream()
+                val outs = clientSocket.getOutputStream()
+
+                // ── Step 5: WebSocket handshake ───────────────────────────────────────
+                if (!doWebSocketHandshake(ins, outs)) {
+                    clientSocket.close()
+                    failWith("WS_FAIL", "WebSocket handshake failed")
+                    return@launch
+                }
+
+                // ── Step 6: ECDH ──────────────────────────────────────────────────────
+                val helloFrame = readWsText(ins) ?: run {
+                    clientSocket.close()
+                    failWith("WS_FAIL", "No hello from wallet")
+                    return@launch
+                }
+                val helloJson   = JSONObject(helloFrame)
+                val walletPubB64 = helloJson.getString("pub")
+                val walletPubRaw = Base64.decode(walletPubB64, Base64.URL_SAFE or Base64.NO_PADDING)
+
+                val walletPubKey = buildX25519PublicKey(walletPubRaw)
+                val ka = KeyAgreement.getInstance("XDH")
+                ka.init(keyPair.private)
+                ka.doPhase(walletPubKey, true)
+                val sessionKey = MessageDigest.getInstance("SHA-256").digest(ka.generateSecret())
+
+                sendWsText(outs, JSONObject().apply { put("pub", pubB64) }.toString())
+
+                val rng = SecureRandom()
+
+                // ── Step 7: Reauthorize ───────────────────────────────────────────────
+                val nonce1 = ByteArray(12).also { rng.nextBytes(it) }
+                val reAuthReqBytes = JSONObject().apply {
+                    put("id", 1)
+                    put("method", "reauthorize")
+                    put("params", JSONObject().apply {
+                        put("auth_token", authToken)
+                        put("identity", JSONObject().apply {
+                            put("uri", "https://solq.my.id")
+                            put("icon", "https://solq.my.id/logo.png")
+                            put("name", "SOLQ")
+                        })
+                    })
+                }.toString().toByteArray(Charsets.UTF_8)
+
+                sendWsText(outs, Base64.encodeToString(
+                    nonce1 + encryptAesGcm(reAuthReqBytes, sessionKey, nonce1),
+                    Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+                ))
+
+                val reAuthMsg = readWsText(ins) ?: run {
+                    clientSocket.close()
+                    failWith("WS_FAIL", "No reauthorize response from wallet")
+                    return@launch
+                }
+                val reAuthRaw   = Base64.decode(reAuthMsg, Base64.URL_SAFE or Base64.NO_PADDING)
+                val reAuthPlain = decryptAesGcm(
+                    reAuthRaw.copyOfRange(12, reAuthRaw.size), sessionKey,
+                    reAuthRaw.copyOfRange(0, 12)
+                )
+                val reAuthJson = JSONObject(String(reAuthPlain, Charsets.UTF_8))
+                val reAuthResult = reAuthJson.optJSONObject("result")
+                    ?: run {
+                        val errMsg = reAuthJson.optJSONObject("error")?.optString("message") ?: "Reauthorize failed"
+                        clientSocket.close()
+                        failWith("WALLET_ERROR", errMsg)
+                        return@launch
+                    }
+                val newAuthToken = reAuthResult.optString("auth_token").ifEmpty { authToken }
+
+                // ── Step 8: sign_and_send_transactions ────────────────────────────────
+                val nonce2 = ByteArray(12).also { rng.nextBytes(it) }
+                val signReqBytes = JSONObject().apply {
+                    put("id", 2)
+                    put("method", "sign_and_send_transactions")
+                    put("params", JSONObject().apply {
+                        put("payloads", JSONArray().apply { put(txBase64) })
+                        put("options", JSONObject().apply {
+                            put("commitment", "confirmed")
+                        })
+                    })
+                }.toString().toByteArray(Charsets.UTF_8)
+
+                sendWsText(outs, Base64.encodeToString(
+                    nonce2 + encryptAesGcm(signReqBytes, sessionKey, nonce2),
+                    Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+                ))
+
+                val signMsg = readWsText(ins) ?: run {
+                    clientSocket.close()
+                    failWith("WS_FAIL", "No sign response from wallet")
+                    return@launch
+                }
+                clientSocket.close()
+
+                val signRaw   = Base64.decode(signMsg, Base64.URL_SAFE or Base64.NO_PADDING)
+                val signPlain = decryptAesGcm(
+                    signRaw.copyOfRange(12, signRaw.size), sessionKey,
+                    signRaw.copyOfRange(0, 12)
+                )
+                val signJson = JSONObject(String(signPlain, Charsets.UTF_8))
+
+                val signResult = signJson.optJSONObject("result")
+                    ?: run {
+                        val errMsg = signJson.optJSONObject("error")?.optString("message") ?: "Signing rejected"
+                        failWith("WALLET_ERROR", errMsg)
+                        return@launch
+                    }
+
+                val signatures = signResult.optJSONArray("signatures")
+                val firstSig   = if (signatures != null && signatures.length() > 0) signatures.getString(0) else null
+
+                if (firstSig.isNullOrEmpty()) {
+                    failWith("NO_SIG", "No signature returned from wallet")
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    pendingResult?.success(mapOf(
+                        "signature" to firstSig,
+                        "authToken" to newAuthToken,
+                    ))
+                    pendingResult = null
+                }
+            } catch (e: Exception) {
+                failWith("ERROR", e.message ?: "Unknown signing error")
             }
         }
     }
