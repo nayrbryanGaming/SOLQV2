@@ -138,9 +138,12 @@ class SolanaService {
         if (!quoteData) {
             console.warn(`[SOLANA] ⚠️  ExactOut insufficient liquidity, trying ExactIn mode...`);
             swapMode = 'ExactIn';
-            
-            // Estimate SOL needed for target IDR amount (rough oracle price: 1 SOL ≈ 150,000 IDR)
-            let estimatedSolLamports = Math.ceil(amountAtomic / 150000 * 1_000_000_000 * 1.05); // +5% buffer
+
+            // Use live oracle price — never hardcode SOL/IDR rate
+            const priceServiceFallback = require('./priceService').PriceService.getInstance();
+            const liveSolIdr = await priceServiceFallback.getPrice('solana', 'idr');
+            const safeRate = liveSolIdr > 0 ? liveSolIdr : 3_000_000; // absolute last resort guard
+            let estimatedSolLamports = Math.ceil((amountIdr / safeRate) * 1_000_000_000 * 1.05); // +5% buffer
             
             const fallbackParams = new URLSearchParams({
                 inputMint: resolvedMint,
