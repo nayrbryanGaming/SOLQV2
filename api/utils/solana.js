@@ -1,6 +1,7 @@
 const MAINNET_RPCS = [
   'https://api.mainnet-beta.solana.com',
-  'https://solana-mainnet.g.alchemy.com/v2/demo',
+  'https://rpc.ankr.com/solana',
+  'https://solana-rpc.publicnode.com',
 ];
 
 const DEVNET_RPCS = [
@@ -21,6 +22,7 @@ async function rpcCall(rpcUrl, method, params) {
       method,
       params,
     }),
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!response.ok) {

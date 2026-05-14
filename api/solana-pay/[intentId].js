@@ -4,10 +4,11 @@ import { createIntent, getIntent, updateIntent } from '../store.js';
 // Treasury wallet — receives SOL escrow from payer
 const TREASURY_WALLET = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
 
-// Solana mainnet RPC endpoints (fallback chain)
+// Solana mainnet RPC endpoints (fallback chain — no dead/demo keys)
 const SOLANA_RPCS = [
   'https://api.mainnet-beta.solana.com',
-  'https://solana-mainnet.g.alchemy.com/v2/demo',
+  'https://rpc.ankr.com/solana',
+  'https://solana-rpc.publicnode.com',
 ];
 
 // Jupiter price endpoint for SOL/IDR oracle (quote-only, no swap required)

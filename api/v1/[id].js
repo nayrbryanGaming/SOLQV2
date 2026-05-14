@@ -242,7 +242,9 @@ export default async (req, res) => {
     try {
       const txHash = String(req.body?.tx_hash || '').trim();
       const payerAccount = String(req.body?.payer_account || '').trim() || null;
-      const rawCluster = String(req.body?.cluster || req.query?.cluster || 'mainnet-beta').toLowerCase();
+      // Parse cluster from body, query string in URL, or default to mainnet-beta
+      const urlCluster = parseRequestUrl(req).query?.cluster || '';
+      const rawCluster = String(req.body?.cluster || urlCluster || 'mainnet-beta').toLowerCase();
       const cluster = rawCluster === 'devnet' ? 'devnet' : 'mainnet-beta';
       const recoveryContext = buildBodyRecoveryContext(req.body || {});
 

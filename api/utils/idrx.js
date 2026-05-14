@@ -9,10 +9,8 @@ import { createHmac } from 'crypto';
 const IDRX_SUPPORTED_CHAINS = ['polygon', 'base', 'bsc', 'worldchain', 'lisk', 'kaia'];
 
 const IDRX_BASE = 'https://idrx.co';
-const IDRX_API_KEY = process.env.IDRX_API_KEY ?? 'dfcdee9f7b182552';
-const IDRX_SECRET_KEY =
-  process.env.IDRX_SECRET_KEY ??
-  '0cfb87e14195c17518f4d5577325fa70e8cc7297da490f01e252ea1a0d26c2e8';
+const IDRX_API_KEY = process.env.IDRX_API_KEY ?? '';
+const IDRX_SECRET_KEY = process.env.IDRX_SECRET_KEY ?? '';
 
 const BANK_CODE_MAP = {
   BCA: 'BCA', BNI: 'BNI', BRI: 'BRI', MANDIRI: 'MANDIRI',
@@ -46,6 +44,9 @@ export async function submitRedeemRequest({
   bankAccountName,
   walletAddress = '',
 }) {
+  if (!IDRX_API_KEY || !IDRX_SECRET_KEY) {
+    throw new Error('IDRX_API_KEY and IDRX_SECRET_KEY env vars required');
+  }
   // BUG-C001 guard: fail fast with clear error before hitting IDRX API with unsupported chain
   if (!IDRX_SUPPORTED_CHAINS.includes(String(networkChainId).toLowerCase())) {
     throw new Error(
