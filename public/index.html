@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260515-live -->
+<!DOCTYPE html><!-- build:20260516-live -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -1197,7 +1197,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
       <div class="card sign-rows" style="padding:4px 14px">
         <div class="row"><div class="row-label">Send</div><div class="row-val mono" id="sign-amount-token">— —</div></div>
         <div class="row"><div class="row-label">From</div><div class="row-val mono" id="sign-from" style="font-size:11px">—</div></div>
-        <div class="row"><div class="row-label">To</div><div class="row-val">Jupiter aggregator → IDRX</div></div>
+        <div class="row"><div class="row-label">To</div><div class="row-val mono" style="font-size:11px">SOLQ Gateway (ETcQ...oZYq)</div></div>
         <div class="row" style="border-bottom:none"><div class="row-label">Merchant receives</div><div class="row-val mono" id="sign-merchant-idr">Rp —</div></div>
       </div>
       <div class="sign-warn">
@@ -2147,7 +2147,7 @@ const STEPS = [
   { text: 'QRIS validated', sub: 'EMVCo CRC-16 check' },
   { text: 'Payment intent created', sub: 'intent registered on-chain' },
   { text: 'Jupiter quote fetched', sub: 'ExactOut + ExactIn fallback mode' },
-  { text: 'Transaction built', sub: 'Jupiter swap instruction (auto-retry)' },
+  { text: 'Transaction built', sub: 'SOL transfer to gateway (Blowfish-safe)' },
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
@@ -2232,126 +2232,35 @@ async function runRealPayment() {
     }
     setStep(2, 'done');
 
-    // Step 3 — Build transaction
+    // Step 3 — Build transaction (always simple SOL transfer — no complex programs, Blowfish-safe)
     setStep(3, 'active');
     let txData = null;
 
     if (state.wallet.address) {
-      // Try Solana Pay server-side tx (backend has full fallback logic)
       try {
-        const r2 = await fetch(`/solana-pay/${intentId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account: state.wallet.address }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (r2.ok) {
-          const d2 = await r2.json();
-          txData = d2.transaction || null;
-          if (d2.swapMode) {
-            console.log(`[SOLQ] Backend swap mode: ${d2.swapMode}`);
-          }
-        } else if (r2.status >= 400) {
-          const err = await r2.json();
-          console.warn(`[SOLQ] Server-side tx error: ${err.error || r2.statusText}`);
-        }
-      } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
-
-      // Jupiter client-side fallback: ExactOut + ExactIn (mainnet only)
-      // Do NOT send feeAccount — requires pre-initialized on-chain ATA; omitting it is safe
-      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
-        try {
-          const swapBody = {
-            quoteResponse: state.payment.jupiterQuote,
-            userPublicKey: state.wallet.address,
-            dynamicComputeUnitLimit: true,
-            prioritizationFeeLamports: 'auto',
-            wrapAndUnwrapSol: true,
-          };
-          const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(swapBody),
-            signal: AbortSignal.timeout(15000),
-          });
-          if (swapR.ok) {
-            const swapD = await swapR.json();
-            txData = swapD.swapTransaction || null;
-            if (txData) console.log('[SOLQ] Jupiter swap TX built successfully');
-          } else {
-            const errBody = await swapR.text().catch(() => '');
-            console.warn('[SOLQ] Jupiter swap API error:', swapR.status, errBody);
-          }
-        } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
-      }
-
-      // Mainnet SOL transfer fallback — works with OR without Jupiter quote.
-      // Uses quote inAmount if available, otherwise derives lamports from oracle price.
-      if (!txData && state.wallet.address && state.payment.token === 'SOL' && CLUSTER !== 'devnet') {
-        try {
-          let lamports = 0;
-          if (state.payment.jupiterQuote?.inAmount) {
-            lamports = parseInt(state.payment.jupiterQuote.inAmount);
-          } else {
-            const solIdr = state.prices.sol.idr;
-            if (!solIdr) throw new Error('No price data');
-            const spread = PLATFORM_FEE_BPS / 10000;
-            const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
-            lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005); // +0.5% slippage buffer
-          }
-          if (lamports > 0) {
-            const rpc = RPC_ENDPOINTS[0];
-            const conn = new solanaWeb3.Connection(rpc, 'confirmed');
-            const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
-            const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
-            const { blockhash } = await conn.getLatestBlockhash();
-            const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
-            fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
-            const serialized = fallTx.serialize({ requireAllSignatures: false });
-            txData = btoa(String.fromCharCode(...serialized));
-            toast('Processing via direct SOL transfer', 'info', 2500);
-          }
-        } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
-      }
-
-      // USDC fallback — oracle-based when Jupiter fails
-      if (!txData && state.wallet.address && state.payment.token === 'USDC' && CLUSTER !== 'devnet') {
-        try {
-          const usdcIdr = state.prices.usdc.idr;
-          if (!usdcIdr) throw new Error('No price data');
+        let lamports = 0;
+        if (CLUSTER === 'devnet') {
+          lamports = 10000; // minimal devnet test: 0.00001 SOL
+        } else if (state.payment.jupiterQuote?.inAmount) {
+          // Jupiter quote gives exact input amount — use it for accurate pricing
+          lamports = parseInt(state.payment.jupiterQuote.inAmount);
+        } else {
+          // Oracle fallback: derive from live SOL/IDR rate
+          const solIdr = state.prices.sol.idr;
+          if (!solIdr) throw new Error('SOL price unavailable');
           const spread = PLATFORM_FEE_BPS / 10000;
           const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
-          const usdcAtomic = Math.ceil((totalIDR / usdcIdr) * 1e6 * 1.005);
-          // Build memo TX with USDC amount note — user still sends SOL as proxy
-          const solIdr = state.prices.sol.idr;
-          if (!solIdr) throw new Error('No SOL price');
-          const lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
-          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
-          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
-          const { blockhash } = await conn.getLatestBlockhash();
-          const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
-          fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
-          const serialized = fallTx.serialize({ requireAllSignatures: false });
-          txData = btoa(String.fromCharCode(...serialized));
-          toast('Processing via SOL equivalent transfer', 'info', 2500);
-        } catch (e) { console.warn('[SOLQ] USDC fallback:', e.message); }
-      }
-
-      // Devnet fallback: native SOL transfer (Jupiter doesn't support devnet)
-      if (!txData && CLUSTER === 'devnet') {
-        try {
-          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
-          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
-          const { blockhash } = await conn.getLatestBlockhash();
-          const testTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
-          testTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports: 10000 }));
-          const serialized = testTx.serialize({ requireAllSignatures: false });
-          txData = btoa(String.fromCharCode(...serialized));
-          toast('Devnet test transaction ready', 'info', 2500);
-        } catch (e) { console.warn('[SOLQ] Devnet fallback TX:', e.message); }
-      }
+          lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
+        }
+        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+        const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+        const { blockhash } = await conn.getLatestBlockhash();
+        const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+        solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+        const serialized = solTx.serialize({ requireAllSignatures: false });
+        txData = btoa(String.fromCharCode(...serialized));
+      } catch (e) { console.warn('[SOLQ] TX build:', e.message); }
     }
     await sleep(300); setStep(3, 'done');
 
@@ -2363,7 +2272,7 @@ async function runRealPayment() {
 
     if (!txData) {
       document.getElementById('btn-cancel-proc').style.display = 'none';
-      showError('Transaction Unavailable', 'Jupiter liquidity route is temporarily unavailable for this amount. Please try a smaller amount, or test the full flow at solq-demo.vercel.app. Contact support@solq.app if this persists.');
+      showError('Transaction Unavailable', 'Could not build transaction — RPC may be temporarily unreachable. Check your internet connection and try again. Contact support@solq.app if this persists.');
       return;
     }
     let txSignature = null;
