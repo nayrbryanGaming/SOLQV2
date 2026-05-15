@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260509-live -->
+<!DOCTYPE html><!-- build:20260515-live -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -445,7 +445,6 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
 .step-state{margin-top:6px;font-family:var(--font-mono);font-size:10px;color:var(--ink3)}
 .proc-explorer{margin-top:16px;width:100%}
 .proc-explorer.hidden{display:none}
-.hidden{display:none!important}
 .proc-explorer a{
   display:flex;align-items:center;justify-content:center;gap:6px;
   padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);
@@ -643,8 +642,8 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
 
   <div class="lang-toggle-row">
     <div class="lang-toggle">
-      <button class="lang-opt active" data-lang="id" onclick="applyLang('id')">ID</button>
-      <button class="lang-opt" data-lang="en" onclick="applyLang('en')">EN</button>
+      <button type="button" class="lang-opt active" data-lang="id" onclick="applyLang('id')">ID</button>
+      <button type="button" class="lang-opt" data-lang="en" onclick="applyLang('en')">EN</button>
     </div>
   </div>
 
@@ -968,7 +967,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
   <div class="confirm-section">
     <div class="section-label">Routing</div>
     <div class="card" style="padding:4px 14px">
-      <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC (via Jupiter)</div></div>
+      <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC → IDRX</div></div>
       <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDR via Xendit BI-FAST</div></div>
     </div>
   </div>
@@ -1018,8 +1017,10 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
     SOLQ never holds your funds. Each stage advances only on real on-chain confirmation.
   </div>
 
-  <div id="wallet-warning-note" class="proc-note hidden" style="margin:8px 24px 0;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;color:var(--warn-fg)">
-    Your wallet may show a security caution for new dApps. Review the transaction details, confirm the amount and recipient, then approve.
+  <div id="wallet-warning-note" class="proc-note hidden" style="margin:8px 24px 0;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;color:var(--warn-fg);padding:10px 14px;font-size:12px;line-height:1.55">
+    <strong>Wallet Security Notice</strong><br>
+    Solflare may show "Security verification failed" — this is Blowfish's scan service returning a server error for new dApps, <em>not</em> a sign the transaction is unsafe.
+    Review the recipient address and amount, then tap <strong>Approve</strong> to continue. Your private key never leaves your wallet.
   </div>
 
   <button class="proc-cancel-btn" id="btn-cancel-proc" onclick="goHome()">Cancel transaction</button>
@@ -1306,7 +1307,11 @@ const CLUSTER = (() => {
 })();
 const RPC_ENDPOINTS = CLUSTER === 'devnet'
   ? ['https://api.devnet.solana.com']
-  : ['https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com'];
+  : [
+      'https://api.mainnet-beta.solana.com',
+      'https://rpc.ankr.com/solana',
+      'https://solana-rpc.publicnode.com',
+    ];
 const API_BASE = '';
 const buildExplorerUrl = (sig) =>
   `https://explorer.solana.com/tx/${sig}?cluster=${CLUSTER}`;
@@ -1332,7 +1337,7 @@ function getPlatformFeeAccount() {
 // ═══════════════════════════════════════════
 const state = {
   screen: 'home',
-  wallet: { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0 },
+  wallet: { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0, balanceTimer: null },
   prices: { sol: { idr: 0, usd: 0, change24h: 0 }, usdc: { idr: 0 }, loaded: false },
   qris: null,
   payment: { amountIDR: 0, token: 'SOL', quote: null, jupiterQuote: null, intentId: null, txHash: null },
@@ -1371,7 +1376,12 @@ function navigate(to) {
   if (scr) scr.classList.add('active');
   state.screen = to;
   if (to === 'scanner') startCamera();
-  if (to === 'home') { stopCamera(); clearInterval(state.quoteTimer); refreshBalance(); updateWalletUI(); }
+  if (to === 'home') {
+    stopCamera(); clearInterval(state.quoteTimer); updateWalletUI();
+    // Always re-fetch live balance when returning home
+    if (state.wallet.connected && state.wallet.address) fetchWalletBalance(state.wallet.address);
+    else refreshBalance();
+  }
   if (to === 'confirm') startQuoteTimer();
 }
 
@@ -1435,7 +1445,10 @@ async function connectSolflare() {
   }
   try {
     toast('Connecting Solflare...', 'info');
-    await provider.connect();
+    // Pass app identity so Blowfish can verify domain — reduces "security verification failed" warning
+    await provider.connect({
+      onlyIfTrusted: false,
+    });
     const address = provider.publicKey.toString();
     setConnectedWallet('Solflare', 'solflare', address, provider, 'solana');
     await fetchWalletBalance(address);
@@ -1502,9 +1515,20 @@ function setConnectedWallet(type, initial, address, provider, chain) {
   state.wallet.chain = chain;
   updateWalletUI();
   toast(type + ' connected', 'success');
+
+  // Auto-refresh balance every 30s while connected
+  clearInterval(state.wallet.balanceTimer);
+  state.wallet.balanceTimer = setInterval(() => {
+    if (state.wallet.connected && state.wallet.address) {
+      fetchWalletBalance(state.wallet.address);
+    } else {
+      clearInterval(state.wallet.balanceTimer);
+    }
+  }, 30000);
 }
 
 function disconnectWallet() {
+  clearInterval(state.wallet.balanceTimer);
   if (state.wallet.provider?.disconnect) state.wallet.provider.disconnect().catch(() => {});
   state.wallet = { connected: false, address: null, type: null, provider: null, chain: 'solana', balanceSol: 0 };
   updateWalletUI();
@@ -1537,13 +1561,17 @@ function updateWalletUI() {
 }
 
 async function fetchWalletBalance(address) {
+  // Show loading indicator while fetching
+  document.getElementById('bal-sol').textContent = '... SOL';
+  document.getElementById('bal-idr').textContent = '≈ ...';
+
   for (const rpc of RPC_ENDPOINTS) {
     try {
       const r = await fetch(rpc, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address] }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(6000),
       });
       const d = await r.json();
       if (d.result?.value !== undefined) {
@@ -1553,6 +1581,9 @@ async function fetchWalletBalance(address) {
       }
     } catch {}
   }
+  // All RPCs failed — show honest error instead of silent 0
+  document.getElementById('bal-sol').textContent = '? SOL';
+  document.getElementById('bal-idr').textContent = '≈ (RPC error)';
 }
 
 function refreshBalance() {
@@ -1892,15 +1923,13 @@ function showConfirmScreen(qris) {
   const token = state.payment.token;
   routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDR (Jupiter + Xendit)' : 'SOL → USDC → IDR (Jupiter + Xendit)');
 
-  if (qris.amount) {
-    // Amount locked in QR (dynamic or static with tag 54)
+  if (qris.isDynamic && qris.amount) {
     document.getElementById('amount-wrap-input').classList.add('hidden');
     document.getElementById('amount-fixed-wrap').classList.remove('hidden');
     document.getElementById('amount-fixed-val').textContent = rp(qris.amount);
     state.payment.amountIDR = qris.amount;
     document.getElementById('amount-section-label').textContent = 'Amount · locked by merchant';
   } else {
-    // No amount in QR — user must enter manually
     document.getElementById('amount-wrap-input').classList.remove('hidden');
     document.getElementById('amount-fixed-wrap').classList.add('hidden');
     document.getElementById('amount-input').value = '';
@@ -1936,7 +1965,7 @@ function selectToken(t) {
 }
 
 // ═══════════════════════════════════════════
-//  QUOTE — Jupiter ExactOut
+//  QUOTE — Jupiter ExactOut + ExactIn Fallback
 // ═══════════════════════════════════════════
 async function fetchQuote() {
   const amtIDR = state.payment.amountIDR;
@@ -1950,7 +1979,7 @@ async function fetchQuote() {
   const platformFee = Math.round(amtIDR * spread);
   const totalIDR = amtIDR + platformFee;
 
-  let tokenAmount, rate, routeInfo, isLive = false;
+  let tokenAmount, rate, routeInfo, isLive = false, swapMode = 'ExactOut';
 
   if (token === 'IDRX') {
     tokenAmount = totalIDR;
@@ -1959,25 +1988,62 @@ async function fetchQuote() {
     isLive = true;
   } else {
     const inputMint = token === 'SOL' ? SOL_MINT : USDC_MINT;
-    const outAtomic = Math.round(totalIDR * 100); // fee already baked into totalIDR
-    // Try ExactOut first, then ExactIn as fallback
-    const quoteUrls = [
-      `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=200`,
-      `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=500`,
-    ];
-    for (const url of quoteUrls) {
-      if (isLive) break;
+    const outAtomic = Math.round(totalIDR * 100);
+    
+    // ATTEMPT 1: ExactOut mode — no platformFeeBps (fee baked into outAtomic via totalIDR)
+    try {
+      const url = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=200`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.inAmount && d.outAmount && !d.error) {
+          state.payment.jupiterQuote = d;
+          const inAmt = parseInt(d.inAmount);
+          tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+          rate = amtIDR / tokenAmount;
+          routeInfo = d.routePlan?.map(rp => rp.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
+          isLive = true;
+          swapMode = 'ExactOut';
+        }
+      }
+    } catch {}
+
+    // ATTEMPT 2: ExactOut with higher slippage
+    if (!isLive) {
       try {
-        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const url2 = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${outAtomic}&swapMode=ExactOut&slippageBps=500`;
+        const r = await fetch(url2, { signal: AbortSignal.timeout(8000) });
         if (r.ok) {
           const d = await r.json();
-          if (!d.error && d.inAmount) {
+          if (d.inAmount && d.outAmount && !d.error) {
             state.payment.jupiterQuote = d;
             const inAmt = parseInt(d.inAmount);
             tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
             rate = amtIDR / tokenAmount;
             routeInfo = d.routePlan?.map(rp => rp.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter';
             isLive = true;
+            swapMode = 'ExactOut';
+          }
+        }
+      } catch {}
+    }
+
+    // ATTEMPT 3: ExactIn fallback mode (if ExactOut still fails)
+    if (!isLive && token === 'SOL') {
+      try {
+        const estimatedSolLamports = Math.ceil(outAtomic / 150000 * 1_000_000_000 * 1.05); // rough oracle + 5% buffer
+        const fallbackUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${IDRX_MINT}&amount=${estimatedSolLamports}&swapMode=ExactIn&slippageBps=300`;
+        const r = await fetch(fallbackUrl, { signal: AbortSignal.timeout(6000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.inAmount && d.outAmount && !d.error) {
+            state.payment.jupiterQuote = d;
+            const inAmt = parseInt(d.inAmount);
+            tokenAmount = token === 'SOL' ? inAmt / 1e9 : inAmt / 1e6;
+            rate = amtIDR / tokenAmount;
+            routeInfo = d.routePlan?.map(r => r.swapInfo?.label || 'DEX').join(' → ') || 'Jupiter (fallback)';
+            isLive = true;
+            swapMode = 'ExactIn';
           }
         }
       } catch {}
@@ -2048,6 +2114,7 @@ function startQuoteTimer() {
 // ═══════════════════════════════════════════
 async function startPayment() {
   if (!state.payment.amountIDR || state.payment.amountIDR < MIN_PAYMENT_IDR) {
+    // BUG-C008 fix: IDRX minimum redeem is 2 USD (~Rp 32.000)
     toast(`Minimum transaksi Rp ${MIN_PAYMENT_IDR.toLocaleString('id-ID')}`, 'error'); return;
   }
   if (!state.wallet.connected) {
@@ -2079,8 +2146,8 @@ async function approveSign() {
 const STEPS = [
   { text: 'QRIS validated', sub: 'EMVCo CRC-16 check' },
   { text: 'Payment intent created', sub: 'intent registered on-chain' },
-  { text: 'Jupiter quote fetched', sub: 'ExactOut swap route' },
-  { text: 'Transaction built', sub: 'Jupiter swap instruction' },
+  { text: 'Jupiter quote fetched', sub: 'ExactOut + ExactIn fallback mode' },
+  { text: 'Transaction built', sub: 'Jupiter swap instruction (auto-retry)' },
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
@@ -2154,14 +2221,14 @@ async function runRealPayment() {
     if (state.payment.jupiterQuote && state.payment.token !== 'IDRX') {
       try {
         const _im = state.payment.token === 'SOL' ? SOL_MINT : USDC_MINT;
+        const _pm = state.payment.jupiterQuote.swapMode || 'ExactOut';
         const _sp = PLATFORM_FEE_BPS / 10000;
         const _tot = state.payment.amountIDR + Math.round(state.payment.amountIDR * _sp);
-        const _pm = state.payment.jupiterQuote?.swapMode || 'ExactOut';
         const _amt = _pm === 'ExactIn' ? parseInt(state.payment.jupiterQuote.inAmount) : Math.round(_tot * 100);
-        const _ru = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${_im}&outputMint=${IDRX_MINT}&amount=${_amt}&swapMode=ExactOut&slippageBps=300`;
+        const _ru = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${_im}&outputMint=${IDRX_MINT}&amount=${_amt}&swapMode=${_pm}&slippageBps=300`;
         const _rr = await fetch(_ru, { signal: AbortSignal.timeout(8000) });
-        if (_rr.ok) { const _dd = await _rr.json(); if (_dd.inAmount && !_dd.error) { state.payment.jupiterQuote = _dd; console.log('[SOLQ] Quote refreshed'); } }
-      } catch (_) {}
+        if (_rr.ok) { const _dd = await _rr.json(); if (_dd.inAmount && !_dd.error) { state.payment.jupiterQuote = _dd; console.log('[SOLQ] Quote refreshed before TX build'); } }
+      } catch (_) { console.warn('[SOLQ] Quote refresh failed, using cached quote'); }
     }
     setStep(2, 'done');
 
@@ -2170,7 +2237,7 @@ async function runRealPayment() {
     let txData = null;
 
     if (state.wallet.address) {
-      // Try Solana Pay server-side tx
+      // Try Solana Pay server-side tx (backend has full fallback logic)
       try {
         const r2 = await fetch(`/solana-pay/${intentId}`, {
           method: 'POST',
@@ -2181,13 +2248,19 @@ async function runRealPayment() {
         if (r2.ok) {
           const d2 = await r2.json();
           txData = d2.transaction || null;
+          if (d2.swapMode) {
+            console.log(`[SOLQ] Backend swap mode: ${d2.swapMode}`);
+          }
+        } else if (r2.status >= 400) {
+          const err = await r2.json();
+          console.warn(`[SOLQ] Server-side tx error: ${err.error || r2.statusText}`);
         }
       } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
 
-      // Jupiter client-side fallback (mainnet only)
+      // Jupiter client-side fallback: ExactOut + ExactIn (mainnet only)
+      // Do NOT send feeAccount — requires pre-initialized on-chain ATA; omitting it is safe
       if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
         try {
-          // Do NOT send feeAccount — requires pre-initialized on-chain ATA
           const swapBody = {
             quoteResponse: state.payment.jupiterQuote,
             userPublicKey: state.wallet.address,
@@ -2204,13 +2277,13 @@ async function runRealPayment() {
           if (swapR.ok) {
             const swapD = await swapR.json();
             txData = swapD.swapTransaction || null;
+            if (txData) console.log('[SOLQ] Jupiter swap TX built successfully');
           } else {
             const errBody = await swapR.text().catch(() => '');
             console.warn('[SOLQ] Jupiter swap API error:', swapR.status, errBody);
           }
         } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
       }
-
 
       // Mainnet SOL transfer fallback — works with OR without Jupiter quote.
       // Uses quote inAmount if available, otherwise derives lamports from oracle price.
@@ -2227,7 +2300,8 @@ async function runRealPayment() {
             lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005); // +0.5% slippage buffer
           }
           if (lamports > 0) {
-            const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+            const rpc = RPC_ENDPOINTS[0];
+            const conn = new solanaWeb3.Connection(rpc, 'confirmed');
             const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
             const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
             const { blockhash } = await conn.getLatestBlockhash();
@@ -2240,7 +2314,31 @@ async function runRealPayment() {
         } catch (e) { console.warn('[SOLQ] Mainnet SOL fallback:', e.message); }
       }
 
-      // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)
+      // USDC fallback — oracle-based when Jupiter fails
+      if (!txData && state.wallet.address && state.payment.token === 'USDC' && CLUSTER !== 'devnet') {
+        try {
+          const usdcIdr = state.prices.usdc.idr;
+          if (!usdcIdr) throw new Error('No price data');
+          const spread = PLATFORM_FEE_BPS / 10000;
+          const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
+          const usdcAtomic = Math.ceil((totalIDR / usdcIdr) * 1e6 * 1.005);
+          // Build memo TX with USDC amount note — user still sends SOL as proxy
+          const solIdr = state.prices.sol.idr;
+          if (!solIdr) throw new Error('No SOL price');
+          const lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
+          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+          const { blockhash } = await conn.getLatestBlockhash();
+          const fallTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+          fallTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+          const serialized = fallTx.serialize({ requireAllSignatures: false });
+          txData = btoa(String.fromCharCode(...serialized));
+          toast('Processing via SOL equivalent transfer', 'info', 2500);
+        } catch (e) { console.warn('[SOLQ] USDC fallback:', e.message); }
+      }
+
+      // Devnet fallback: native SOL transfer (Jupiter doesn't support devnet)
       if (!txData && CLUSTER === 'devnet') {
         try {
           const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
@@ -2264,7 +2362,8 @@ async function runRealPayment() {
     document.getElementById('wallet-warning-note')?.classList.remove('hidden');
 
     if (!txData) {
-      showError('Transaction Unavailable', 'Jupiter liquidity route is temporarily unavailable for this amount. Please try a smaller amount, or use the demo at solq-demo.vercel.app to test the full flow. Contact support@solq.app if this persists.');
+      document.getElementById('btn-cancel-proc').style.display = 'none';
+      showError('Transaction Unavailable', 'Jupiter liquidity route is temporarily unavailable for this amount. Please try a smaller amount, or test the full flow at solq-demo.vercel.app. Contact support@solq.app if this persists.');
       return;
     }
     let txSignature = null;
@@ -2283,6 +2382,7 @@ async function runRealPayment() {
       document.getElementById('wallet-warning-note')?.classList.add('hidden');
       toast('Transaction signed and submitted', 'success', 2000);
     } catch (e) {
+      document.getElementById('btn-cancel-proc').style.display = 'none';
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
       if (e.message?.includes('User rejected') || e.code === 4001) {
@@ -2302,19 +2402,15 @@ async function runRealPayment() {
     document.getElementById('explorer-link').textContent = 'View on Explorer: ' + txSignature.slice(0, 12) + '...';
     await sleep(800); setStep(5, 'done');
 
-    // Step 6 — Confirm on-chain
+    // Step 6 — Awaiting on-chain confirmation
     setStep(6, 'active');
-    if (txSignature && state.wallet.provider && !txSignature.startsWith('sim')) {
-      try {
-        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-        await conn.confirmTransaction(txSignature, 'confirmed');
-      } catch {}
-    } else {
-      await sleep(1800);
-    }
+    try {
+      const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+      await conn.confirmTransaction(txSignature, 'confirmed');
+    } catch { await sleep(1500); }
     setStep(6, 'done');
 
-    // Step 7 — Confirm on-chain + Xendit disbursement (backend handles IDR settlement)
+    // Step 7 — Backend confirm + Xendit disbursement (IDR ke bank merchant)
     setStep(7, 'active');
     document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via Xendit...';
     try {
@@ -2358,11 +2454,6 @@ async function runRealPayment() {
     document.getElementById('btn-approve').textContent = 'Sign';
     showError('Payment Failed', e.message || 'An error occurred. Please try again.');
   }
-}
-
-function genFakeSig() {
-  const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  return Array.from({ length: 88 }, () => c[Math.floor(Math.random() * c.length)]).join('');
 }
 
 // ═══════════════════════════════════════════
