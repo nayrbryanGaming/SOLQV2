@@ -780,8 +780,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div class="sign-row"><span class="sign-label">Network</span><span class="sign-val">Solana Mainnet</span></div>
       <div class="sign-row"><span class="sign-label">Gas</span><span class="sign-val">Gratis ✓ (SOLQ cover)</span></div>
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);
-        border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn);margin:12px 0">
+        border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn);margin:12px 0;line-height:1.55">
         ⚠️ Periksa jumlah dengan teliti. Transaksi on-chain tidak dapat dibatalkan.
+      </div>
+      <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);
+        border-radius:10px;padding:10px 12px;font-size:11px;color:rgba(255,255,255,.7);margin-bottom:12px;line-height:1.6">
+        <strong style="color:rgba(255,255,255,.9)">Catatan Keamanan Wallet</strong><br>
+        Jika Solflare menampilkan "Security verification failed" — itu adalah error server Blowfish untuk dApp baru, bukan tanda transaksi berbahaya. Cek alamat penerima dan jumlah, lalu tap <strong>Approve</strong>.
       </div>
       <button class="btn-approve" id="btn-approve" onclick="approveSign()">Setujui Transaksi</button>
       <button class="btn-reject" onclick="closeModal('modal-sign')">Tolak</button>
@@ -803,7 +808,8 @@ const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const IDRX_MINT = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
 const RPC_ENDPOINTS = [
   'https://api.mainnet-beta.solana.com',
-  'https://solana-api.projectserum.com',
+  'https://rpc.ankr.com/solana',
+  'https://solana-rpc.publicnode.com',
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -811,7 +817,7 @@ const RPC_ENDPOINTS = [
 // ═══════════════════════════════════════════════════════════
 const state = {
   screen: 'splash',
-  wallet: { connected: false, address: null, type: null, icon: 'phantom', provider: null, balanceSol: 0 },
+  wallet: { connected: false, address: null, type: null, icon: 'phantom', provider: null, balanceSol: 0, balanceTimer: null },
   prices: { sol: { idr: 0, usd: 0, change24h: 0 }, usdc: { idr: 0 }, loaded: false },
   qris: null,
   payment: { amountIDR: 0, token: 'SOL', quote: null, jupiterQuote: null, intentId: null, txHash: null },
@@ -842,7 +848,11 @@ function navigate(to) {
   if (scr) scr.classList.add('active');
   state.screen = to;
   if (to === 'scanner') startCamera();
-  if (to === 'home') { refreshBalance(); updateWalletUI(); }
+  if (to === 'home') {
+    updateWalletUI();
+    if (state.wallet.connected && state.wallet.address) fetchWalletBalance(state.wallet.address);
+    else refreshBalance();
+  }
   if (to === 'confirm') startQuoteTimer();
 }
 
@@ -953,9 +963,16 @@ function setConnectedWallet(type, icon, address, provider) {
   state.wallet.provider = provider;
   updateWalletUI();
   toast(`✅ ${type} terhubung!`, 'success');
+  // Auto-refresh balance every 30s while wallet connected
+  clearInterval(state.wallet.balanceTimer);
+  state.wallet.balanceTimer = setInterval(() => {
+    if (state.wallet.connected && state.wallet.address) fetchWalletBalance(state.wallet.address);
+    else clearInterval(state.wallet.balanceTimer);
+  }, 30000);
 }
 
 function disconnectWallet() {
+  clearInterval(state.wallet.balanceTimer);
   if (state.wallet.provider?.disconnect) {
     state.wallet.provider.disconnect().catch(() => {});
   }
@@ -987,24 +1004,27 @@ function updateWalletUI() {
 }
 
 async function fetchWalletBalance(address) {
-  try {
-    for (const rpc of RPC_ENDPOINTS) {
-      try {
-        const r = await fetch(rpc, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance', params:[address] }),
-          signal: AbortSignal.timeout(5000),
-        });
-        const d = await r.json();
-        if (d.result?.value !== undefined) {
-          state.wallet.balanceSol = d.result.value / 1e9;
-          refreshBalance();
-          return;
-        }
-      } catch {}
-    }
-  } catch {}
+  document.getElementById('bal-sol').textContent = '... SOL';
+  document.getElementById('bal-idr').textContent = '≈ ...';
+  for (const rpc of RPC_ENDPOINTS) {
+    try {
+      const r = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getBalance', params:[address] }),
+        signal: AbortSignal.timeout(6000),
+      });
+      const d = await r.json();
+      if (d.result?.value !== undefined) {
+        state.wallet.balanceSol = d.result.value / 1e9;
+        refreshBalance();
+        return;
+      }
+    } catch {}
+  }
+  // All RPCs failed — show honest error
+  document.getElementById('bal-sol').textContent = '? SOL';
+  document.getElementById('bal-idr').textContent = '≈ (RPC error)';
 }
 
 function refreshBalance() {
