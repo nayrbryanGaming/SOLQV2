@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260516-app -->
+<!DOCTYPE html><!-- build:20260517-app -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -1063,9 +1063,27 @@ const CLUSTER = (() => {
   const p = new URLSearchParams(location.search).get('cluster') || '';
   return p.toLowerCase() === 'devnet' ? 'devnet' : 'mainnet-beta';
 })();
+// Browser-reachable RPCs first. api.mainnet-beta.solana.com frequently
+// returns 403/429 from browsers — keep it as a last-resort fallback only.
 const RPC_ENDPOINTS = CLUSTER === 'devnet'
   ? ['https://api.devnet.solana.com']
-  : ['https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com'];
+  : [
+      'https://solana-rpc.publicnode.com',
+      'https://rpc.ankr.com/solana',
+      'https://api.mainnet-beta.solana.com',
+    ];
+
+async function getRecentBlockhashWithFallback() {
+  let lastErr = null;
+  for (const rpc of RPC_ENDPOINTS) {
+    try {
+      const c = new solanaWeb3.Connection(rpc, 'confirmed');
+      const { blockhash } = await c.getLatestBlockhash('confirmed');
+      if (blockhash) return { blockhash, rpc, connection: c };
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error('All Solana RPCs unreachable: ' + (lastErr?.message || 'unknown'));
+}
 const API_BASE = '';
 const buildExplorerUrl = (sig) =>
   `https://explorer.solana.com/tx/${sig}?cluster=${CLUSTER}`;
@@ -1900,8 +1918,11 @@ async function runRealPayment() {
     // Step 3 — Build transaction (always simple SOL transfer — Blowfish-safe, no Jupiter swap)
     setStep(3, 'active');
     let txData = null;
+    let txBuildError = null;
 
-    if (state.wallet.address) {
+    if (!state.wallet.address) {
+      txBuildError = 'Wallet not connected. Connect your wallet and try again.';
+    } else {
       try {
         let lamports = 0;
         if (CLUSTER === 'devnet') {
@@ -1910,20 +1931,24 @@ async function runRealPayment() {
           lamports = parseInt(state.payment.jupiterQuote.inAmount);
         } else {
           const solIdr = state.prices.sol.idr;
-          if (!solIdr) throw new Error('SOL price unavailable');
+          if (!solIdr) throw new Error('SOL/IDR price oracle unavailable. Refresh and try again.');
           const spread = PLATFORM_FEE_BPS / 10000;
           const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
           lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
         }
-        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        if (!lamports || lamports < 1) throw new Error('Invalid lamports amount (' + lamports + ')');
+
+        const { blockhash } = await getRecentBlockhashWithFallback();
         const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
         const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
-        const { blockhash } = await conn.getLatestBlockhash();
         const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
         solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
         const serialized = solTx.serialize({ requireAllSignatures: false });
         txData = btoa(String.fromCharCode(...serialized));
-      } catch (e) { console.warn('[SOLQ] TX build:', e.message); }
+      } catch (e) {
+        txBuildError = e.message || 'Could not build transaction.';
+        console.warn('[SOLQ] TX build:', txBuildError);
+      }
     }
     await sleep(300); setStep(3, 'done');
 
@@ -1937,7 +1962,7 @@ async function runRealPayment() {
       document.getElementById('btn-cancel-proc').style.display = 'none';
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
-      showError('Transaction Unavailable', 'Could not build transaction — RPC may be temporarily unreachable, or your wallet balance / price oracle is missing. Try again. Contact support@solq.app if this persists.');
+      showError('Transaction Unavailable', txBuildError || 'Could not build transaction. Refresh and try again. Contact support@solq.app if this persists.');
       return;
     }
     let txSignature = null;
