@@ -1,12 +1,16 @@
-// Helius webhook — on-chain event listener for IDRX payments
+// Helius webhook — on-chain event listener for SOLQ Gateway deposits
+// Triggers Xendit disbursement when SOL arrives at the gateway wallet.
 // BUG-OLD-004 FIX: HMAC-SHA256 signature verification
+// BUG-FIX 20260516: switched from IDRX (EVM-only) to Xendit; detect native SOL deposits
 
 import { createHmac } from 'crypto';
-import { getIntent, updateIntent } from '../../store.js';
-import { createDisbursement, mapBankCode } from '../../utils/idrx.js';
+import { getIntent, updateIntent, paymentIntents, getMerchant } from '../../store.js';
+import { createDisbursement, mapBankCode } from '../../utils/xendit.js';
 
-const IDRX_MINT = 'idrxZcP8xiKkYk6XGD4uz1dxEYCWSgKDHqgjsBbwDur';
-const TREASURY_ITA = 'DqjBhjX9tFzMy9zYXwepXW8GNuqfuDCJ4J7sX1C78p6g';
+// Native SOL deposits land at the gateway wallet (matches PLATFORM_FEE_WALLET in client)
+const GATEWAY_WALLET = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
+const LAMPORTS_PER_SOL = 1_000_000_000;
+const MIN_DISBURSEMENT_IDR = 1000;
 
 function verifyHeliusSignature(rawBody, headerSig) {
   const secret = process.env.HELIUS_WEBHOOK_SECRET;
@@ -37,67 +41,92 @@ export default async (req, res) => {
   }
 
   const events = Array.isArray(req.body) ? req.body : [req.body];
+  const results = [];
 
   for (const event of events) {
     try {
       const txSig = event?.signature;
       const nativeTransfers = Array.isArray(event?.nativeTransfers) ? event.nativeTransfers : [];
-      const tokenTransfers = Array.isArray(event?.tokenTransfers) ? event.tokenTransfers : [];
 
-      // Look for IDRX transfer to treasury wallet
-      const idrxTransfer = tokenTransfers.find(
-        (t) => t?.mint === IDRX_MINT && t?.toUserAccount === TREASURY_ITA && Number(t?.tokenAmount) > 0,
+      // Look for native SOL transfer landing at the gateway wallet
+      const gatewayDeposit = nativeTransfers.find(
+        (t) => t?.toUserAccount === GATEWAY_WALLET && Number(t?.amount) > 0,
       );
+      if (!gatewayDeposit || !txSig) continue;
 
-      if (!idrxTransfer || !txSig) continue;
+      const fromAddress = gatewayDeposit.fromUserAccount;
+      const lamports = Number(gatewayDeposit.amount);
 
-      // Try to match to a payment intent by payer address or tx signature
-      const fromAddress = idrxTransfer.fromUserAccount;
-      const intentId = event?.description?.match(/pi_\w+/)?.[0] ?? null;
+      // Match an intent by description (pi_xxx) or by payer wallet (latest open intent)
+      let intentId = event?.description?.match(/pi_\w+/)?.[0] || null;
+      let intent = intentId ? await getIntent(intentId) : null;
+      if (!intent && fromAddress) {
+        // Fallback: find most recent open intent for this payer
+        const candidates = Object.values(paymentIntents).filter(
+          (p) => p && p.payer_account === fromAddress && p.status !== 'COMPLETED',
+        );
+        if (candidates.length > 0) {
+          intent = candidates.sort((a, b) =>
+            new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+          )[0];
+          intentId = intent.id;
+        }
+      }
 
-      if (!intentId) continue;
+      if (!intent || intent.status === 'COMPLETED') continue;
 
-      const intent = await getIntent(intentId);
-      if (!intent) continue;
-      if (intent.status === 'COMPLETED') continue;
+      const amountIdr = Number(intent.amount_details?.fiat_amount || 0);
 
-      const idrxAtomic = Number(idrxTransfer.tokenAmount);
-      const amountIdr = idrxAtomic / 100; // IDRX has 2 decimals
-
-      // Mark on-chain confirmed
+      // Mark on-chain confirmed (idempotent — keep going if already confirmed)
       await updateIntent(intentId, {
         status: 'ON_CHAIN_CONFIRMED',
         txHash: txSig,
         tx_hash: txSig,
         payer_account: fromAddress || intent.payer_account,
-        idrx_received_atomic: idrxAtomic,
+        sol_received_lamports: lamports,
+        sol_received_sol: lamports / LAMPORTS_PER_SOL,
       });
 
-      // Trigger Xendit disbursement
-      const merchantAccount = intent.merchant_account ?? intent.merchant?.pan ?? null;
-      const bankCode = intent.bank_code ?? null;
-      const beneficiaryName = intent.merchant?.name ?? 'QRIS Merchant';
+      // Resolve merchant bank details (registry > intent fields)
+      const intentNmid = intent.nmid ?? intent.merchant_id ?? intent.merchant?.id ?? null;
+      const registered = intentNmid ? await getMerchant(intentNmid) : null;
+      const merchantAccount = registered?.bank_account ?? intent.merchant_account ?? intent.merchant?.pan ?? null;
+      const bankCode = registered?.bank_code ?? intent.bank_code ?? null;
+      const beneficiaryName = registered?.account_name ?? intent.merchant?.name ?? 'QRIS Merchant';
 
-      if (merchantAccount && mapBankCode(bankCode) && amountIdr >= 1000) {
-        const disbursement = await createDisbursement({
-          externalId: intentId,
-          bankCode,
-          accountNumber: merchantAccount,
-          amountIdr,
-          beneficiaryName,
-          description: `SOLQ Helius ${intentId.slice(0, 20)}`,
-        });
-        await updateIntent(intentId, {
-          status: 'COMPLETED',
-          settlement_status: 'DISBURSED',
-          idrx_disbursement_id: disbursement.id ?? disbursement.external_id,
-          idrx_disbursement_status: disbursement.status ?? 'PENDING',
-        });
+      // Trigger Xendit disbursement (Solana → IDR)
+      if (merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
+        try {
+          const disbursement = await createDisbursement({
+            externalId: `solq_helius_${intentId}_${txSig.slice(0, 8)}`,
+            bankCode,
+            accountNumber: merchantAccount,
+            amountIdr,
+            beneficiaryName,
+            description: `SOLQ Helius ${intentId.slice(0, 20)}`,
+          });
+          await updateIntent(intentId, {
+            status: 'COMPLETED',
+            settlement_status: 'DISBURSED',
+            xendit_disbursement_id: disbursement?.id ?? null,
+            xendit_disbursement_status: disbursement?.status ?? 'COMPLETED',
+          });
+          results.push({ intentId, txSig, disbursed: true });
+        } catch (err) {
+          await updateIntent(intentId, {
+            settlement_status: 'SETTLEMENT_PENDING',
+            settlement_error: String(err.message || err),
+          });
+          results.push({ intentId, txSig, disbursed: false, error: String(err.message || err) });
+        }
+      } else {
+        await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
+        results.push({ intentId, txSig, disbursed: false, reason: 'missing_merchant_or_bank' });
       }
-    } catch (_) {
-      // Non-fatal: continue processing other events
+    } catch (err) {
+      results.push({ error: String(err.message || err) });
     }
   }
 
-  res.status(200).json({ received: events.length });
+  res.status(200).json({ received: events.length, processed: results });
 };

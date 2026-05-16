@@ -4,8 +4,7 @@ import { createPrivateKey, sign as nodeSign } from 'node:crypto';
 
 const PLATFORM_WALLET = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
 const DEV_WALLET = '35z7X59rtyts557Up1RAwpyYN7x2cFqcDc7RjPuNxFzr';
-const SPREAD_BPS = 50; // 0.5%
-const MIN_FEE_IDR = 2500;
+const SPREAD_BPS = 50; // 0.5% — locked, pure percentage, no minimum floor
 
 const SOLANA_RPCS = [
   'https://api.mainnet-beta.solana.com',
@@ -170,7 +169,7 @@ export default async (req, res) => {
   const spread = SPREAD_BPS / 10000;
   const effectiveRate = rate * (1 - spread);
   const tokenAmount = tok === 'IDRX' ? amountIdr : amountIdr / effectiveRate;
-  const platformFee = Math.max(MIN_FEE_IDR, Math.round(amountIdr * spread));
+  const platformFee = Math.round(amountIdr * spread);
   const platformShare = Math.round(platformFee * 0.70);
   const devShare = platformFee - platformShare;
   const fakeSig = fakeSignature();

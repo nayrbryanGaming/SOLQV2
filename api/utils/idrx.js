@@ -130,6 +130,10 @@ export async function createDisbursement({
 
 // Test IDRX API connectivity — calls GET /api/auth/get-bank-accounts (no burn needed)
 export async function testConnectivity() {
+  if (!IDRX_API_KEY || !IDRX_SECRET_KEY) {
+    return { ok: false, status: 0, data: null, error: 'IDRX_API_KEY and IDRX_SECRET_KEY env vars not set' };
+  }
+
   const timestamp = String(Date.now());
   const urlPath = '/api/auth/get-bank-accounts';
   const signature = buildSignature(timestamp, 'GET', urlPath, '');

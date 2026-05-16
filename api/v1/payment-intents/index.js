@@ -63,9 +63,8 @@ export default async (req, res) => {
         ? Number((amountIdr / pricing.usdc_idr).toFixed(6))
         : 0;
 
-      const SPREAD_BPS = 50; // 0.5%
-      const MIN_FEE_IDR = 2500;
-      const platformFee = Math.max(MIN_FEE_IDR, Math.round(amountIdr * (SPREAD_BPS / 10000)));
+      const SPREAD_BPS = 50; // 0.5% — pure percentage, no minimum floor
+      const platformFee = Math.round(amountIdr * (SPREAD_BPS / 10000));
       const networkFee = 0.000005;
       const networkFeeIdr = Number((networkFee * pricing.sol_idr).toFixed(6));
       const currencySource = String(currency || 'IDRX').toUpperCase();
