@@ -427,7 +427,14 @@ export default async (req, res) => {
       let disbursement = null;
       let disbursementError = null;
       const burnTxHash = normalizeStringField(req.body?.burn_tx_hash, null);
-      const amountIdr = Number(existing.amount_details?.fiat_amount ?? existing.platformFee ?? 0);
+      // BUG-FIX 20260516: remove `existing.platformFee` fallback — platformFee is the FEE,
+      // not the AMOUNT. Using it as amountIdr would disburse Rp 50 instead of Rp 10,000.
+      // If fiat_amount missing, also try body recovery context, then fail safely.
+      const amountIdr = Number(
+        existing.amount_details?.fiat_amount ??
+        recoveryContext.amountIdr ??
+        0
+      );
 
       // BUG-C008 fix: enforce minimum disbursement amount
       if (amountIdr > 0 && amountIdr < MIN_DISBURSEMENT_IDR) {
@@ -449,10 +456,17 @@ export default async (req, res) => {
       const bankAccountName =
         registeredMerchant?.account_name ?? existing.merchant?.name ?? 'QRIS Merchant';
 
+      // BUG-FIX 20260516: race-condition guard — if a disbursement was already triggered
+      // (e.g. by the Helius webhook firing in parallel), don't re-disburse. The webhook and
+      // this path share the same canonical external_id `solq_<intentId>_<txHash8>` so even
+      // if they both call Xendit, idempotency makes it safe — but we skip the second call.
+      const alreadyDisbursed = Boolean(intent?.xendit_disbursement_id || intent?.settlement_status === 'DISBURSED');
+
       // Xendit disbursement: on-chain TX confirmed → send IDR to merchant bank/e-wallet
-      if (txHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
+      if (!alreadyDisbursed && txHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
         try {
           disbursement = await createDisbursement({
+            // Canonical external_id — same as helius.js so Xendit treats them as one
             externalId: `solq_${intentId}_${txHash.slice(0, 8)}`,
             bankCode,
             accountNumber: merchantAccount,
@@ -472,6 +486,12 @@ export default async (req, res) => {
             settlement_error: disbursementError,
           });
         }
+      } else if (alreadyDisbursed) {
+        disbursement = {
+          id: intent.xendit_disbursement_id,
+          status: intent.xendit_disbursement_status ?? 'COMPLETED',
+          idempotent: true,
+        };
       } else if (!merchantAccount || !mapBankCode(bankCode)) {
         await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
       }

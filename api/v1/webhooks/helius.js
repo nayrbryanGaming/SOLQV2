@@ -94,11 +94,20 @@ export default async (req, res) => {
       const bankCode = registered?.bank_code ?? intent.bank_code ?? null;
       const beneficiaryName = registered?.account_name ?? intent.merchant?.name ?? 'QRIS Merchant';
 
+      // BUG-FIX 20260516: race-condition guard — if user-initiated /confirm already
+      // disbursed, skip. Xendit external_id below is canonical and idempotent, but
+      // skipping avoids a wasted API round-trip.
+      if (intent.xendit_disbursement_id || intent.settlement_status === 'DISBURSED') {
+        results.push({ intentId, txSig, disbursed: true, idempotent: true });
+        continue;
+      }
+
       // Trigger Xendit disbursement (Solana → IDR)
       if (merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
         try {
           const disbursement = await createDisbursement({
-            externalId: `solq_helius_${intentId}_${txSig.slice(0, 8)}`,
+            // Canonical external_id — same as confirm.js so Xendit treats them as one
+            externalId: `solq_${intentId}_${txSig.slice(0, 8)}`,
             bankCode,
             accountNumber: merchantAccount,
             amountIdr,
