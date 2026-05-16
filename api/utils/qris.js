@@ -431,10 +431,16 @@ function extractMerchantId(decoded, rawPayload = '') {
   return null;
 }
 
+// EMVCo QRIS standard caps payload at ~512 chars. Cap at 4096 to be safe
+// (accommodates merchant-name encoding quirks and extra TLV fields), but
+// reject obviously DoS-sized inputs that could OOM the nested-TLV parser.
+const QRIS_MAX_LEN = 4096;
+
 export function decodeQris(rawPayload) {
   const payload = String(rawPayload || '').trim();
   if (!payload) throw new Error('Empty QRIS payload');
   if (payload.length < 20) throw new Error('QRIS payload too short');
+  if (payload.length > QRIS_MAX_LEN) throw new Error(`QRIS payload too long (${payload.length} > ${QRIS_MAX_LEN})`);
 
   const data = {
     merchantAccountInfo: {},
