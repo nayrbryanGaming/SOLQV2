@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260509-live -->
+<!DOCTYPE html><!-- build:20260516-app -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -1012,7 +1012,7 @@ input::placeholder{color:var(--ink3)}
       <div class="card sign-rows" style="padding:4px 14px">
         <div class="row"><div class="row-label">Send</div><div class="row-val mono" id="sign-amount-token">— —</div></div>
         <div class="row"><div class="row-label">From</div><div class="row-val mono" id="sign-from" style="font-size:11px">—</div></div>
-        <div class="row"><div class="row-label">To</div><div class="row-val">Jupiter aggregator → IDRX</div></div>
+        <div class="row"><div class="row-label">To</div><div class="row-val mono" style="font-size:11px">SOLQ Gateway (ETcQ...oZYq)</div></div>
         <div class="row" style="border-bottom:none"><div class="row-label">Merchant receives</div><div class="row-val mono" id="sign-merchant-idr">Rp —</div></div>
       </div>
       <div class="sign-warn">
@@ -1825,7 +1825,7 @@ const STEPS = [
   { text: 'QRIS validated', sub: 'EMVCo CRC-16 check' },
   { text: 'Payment intent created', sub: 'intent registered on-chain' },
   { text: 'Jupiter quote fetched', sub: 'ExactOut swap route' },
-  { text: 'Transaction built', sub: 'Jupiter swap instruction' },
+  { text: 'Transaction built', sub: 'SOL transfer to gateway (Blowfish-safe)' },
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
@@ -1897,63 +1897,33 @@ async function runRealPayment() {
     // Step 2 — Quote
     setStep(2, 'active'); await sleep(500); setStep(2, 'done');
 
-    // Step 3 — Build transaction
+    // Step 3 — Build transaction (always simple SOL transfer — Blowfish-safe, no Jupiter swap)
     setStep(3, 'active');
     let txData = null;
 
     if (state.wallet.address) {
-      // Try Solana Pay server-side tx
       try {
-        const r2 = await fetch(`/solana-pay/${intentId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account: state.wallet.address }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (r2.ok) {
-          const d2 = await r2.json();
-          txData = d2.transaction || null;
+        let lamports = 0;
+        if (CLUSTER === 'devnet') {
+          lamports = 10000;
+        } else if (state.payment.jupiterQuote?.inAmount) {
+          lamports = parseInt(state.payment.jupiterQuote.inAmount);
+        } else {
+          const solIdr = state.prices.sol.idr;
+          if (!solIdr) throw new Error('SOL price unavailable');
+          const spread = PLATFORM_FEE_BPS / 10000;
+          const totalIDR = state.payment.amountIDR + Math.round(state.payment.amountIDR * spread);
+          lamports = Math.ceil((totalIDR / solIdr) * 1e9 * 1.005);
         }
-      } catch (e) { console.warn('[SOLQ] Solana Pay tx:', e.message); }
-
-      // Jupiter client-side fallback (mainnet only)
-      if (!txData && state.payment.jupiterQuote && state.payment.token !== 'IDRX' && CLUSTER !== 'devnet') {
-        try {
-          const feeAccount = getPlatformFeeAccount();
-          const swapBody = {
-            quoteResponse: state.payment.jupiterQuote,
-            userPublicKey: state.wallet.address,
-            dynamicComputeUnitLimit: true,
-            prioritizationFeeLamports: 'auto',
-          };
-          if (feeAccount) swapBody.feeAccount = feeAccount;
-          const swapR = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(swapBody),
-            signal: AbortSignal.timeout(15000),
-          });
-          if (swapR.ok) {
-            const swapD = await swapR.json();
-            txData = swapD.swapTransaction || null;
-          }
-        } catch (e) { console.warn('[SOLQ] Jupiter swap build:', e.message); }
-      }
-
-      // Devnet fallback: native SOL transfer (Jupiter tidak support devnet)
-      if (!txData && CLUSTER === 'devnet') {
-        try {
-          const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
-          const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
-          const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
-          const { blockhash } = await conn.getLatestBlockhash();
-          const testTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
-          testTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports: 10000 }));
-          const serialized = testTx.serialize({ requireAllSignatures: false });
-          txData = btoa(String.fromCharCode(...serialized));
-          toast('[DEVNET] Test TX: native SOL transfer', 'info', 3000);
-        } catch (e) { console.warn('[SOLQ] Devnet fallback TX:', e.message); }
-      }
+        const conn = new solanaWeb3.Connection(RPC_ENDPOINTS[0], 'confirmed');
+        const fromPk = new solanaWeb3.PublicKey(state.wallet.address);
+        const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
+        const { blockhash } = await conn.getLatestBlockhash();
+        const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
+        solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
+        const serialized = solTx.serialize({ requireAllSignatures: false });
+        txData = btoa(String.fromCharCode(...serialized));
+      } catch (e) { console.warn('[SOLQ] TX build:', e.message); }
     }
     await sleep(300); setStep(3, 'done');
 
@@ -1967,29 +1937,7 @@ async function runRealPayment() {
       document.getElementById('btn-cancel-proc').style.display = 'none';
       document.getElementById('btn-approve').disabled = false;
       document.getElementById('btn-approve').textContent = 'Sign';
-      const errorMsg = `
-Transaksi Jupiter gagal dibangun. Kemungkinan penyebab:
-
-1. ✅ GUNAKAN DEVNET DULU UNTUK TEST:
-   → https://solq-demo.vercel.app
-   → Dapat SOL gratis di https://faucet.solana.com
-   
-2. ⚠️  Saldo tidak cukup:
-   - Perlu SOL + USDC untuk swap
-   - Plus gas fee (~0.01 SOL)
-   
-3. 💡 Coba jumlah lebih kecil
-   - ExactOut mode memerlukan liquidity cukup
-   
-4. 🔄 Jika masih error, coba:
-   - Refresh page
-   - Restart wallet
-   - Buka devnet version dulu untuk debug
-
-Konsultasi: support@solq.app
-      `.trim();
-      
-      showError('Transaction Build Failed', errorMsg);
+      showError('Transaction Unavailable', 'Could not build transaction — RPC may be temporarily unreachable, or your wallet balance / price oracle is missing. Try again. Contact support@solq.app if this persists.');
       return;
     }
     let txSignature = null;
