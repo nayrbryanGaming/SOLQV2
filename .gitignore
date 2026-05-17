@@ -57,6 +57,9 @@ backend/audit_logs.jsonl
 
 # Secrets & Environment
 .env
+.env.local
+.env.*.local
+.env.production
 backend/.env
 *.key
 *.pem
