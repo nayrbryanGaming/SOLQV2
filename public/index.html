@@ -2348,6 +2348,7 @@ async function runRealPayment() {
     // Step 7 — Backend confirm + IDRX redeem (IDR ke bank merchant via Polygon burn)
     setStep(7, 'active');
     document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via IDRX...';
+    state.payment.settlementStatus = 'PROCESSING';
     try {
       const qris = state.qris;
       const confirmPayload = {
@@ -2370,16 +2371,28 @@ async function runRealPayment() {
       });
       if (confirmRes.ok) {
         const cd = await confirmRes.json();
-        const st = cd.settlement_status ?? cd.idrx_redeem?.status ?? 'PROCESSING';
-        toast('Settlement: ' + st, 'success', 3000);
+        if (cd.idrx_disbursement?.status === 'DISBURSED') {
+          state.payment.settlementStatus = 'DISBURSED';
+          state.payment.burnTxHash = cd.idrx_disbursement.burnTxHash;
+          state.payment.burnExplorer = cd.idrx_disbursement.burnExplorer;
+        } else if (cd.disbursement_pending) {
+          state.payment.settlementStatus = 'PENDING';
+          state.payment.settlementPendingReason = cd.disbursement_pending.status;
+          console.log('[SOLQ] Settlement pending:', cd.disbursement_pending.status, cd.disbursement_pending.note || '');
+        }
       }
     } catch (confirmErr) {
       console.warn('[SOLQ] Confirm error:', confirmErr.message);
+      state.payment.settlementStatus = 'PENDING';
     }
 
-    // Done
+    // Done. Show appropriate sub-status — Solana side is final regardless.
     document.querySelectorAll('.step').forEach(el => { el.className = 'step done'; });
-    document.getElementById('proc-sub').textContent = 'IDR sent to merchant.';
+    if (state.payment.settlementStatus === 'DISBURSED') {
+      document.getElementById('proc-sub').textContent = 'IDR sent to merchant.';
+    } else {
+      document.getElementById('proc-sub').textContent = 'Payment confirmed. Settlement processing — merchant credited shortly.';
+    }
     await sleep(1200);
     showReceipt();
 
