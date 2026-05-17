@@ -11,10 +11,11 @@ import {
   isValidSolanaSignature,
   verifyFinalizedSignature,
 } from '../utils/solana.js';
-// BUG-C001: IDRX Redeem requires EVM chain (Polygon/Base/BNB/etc). Solana NOT supported.
-// For Solana → IDR, we use Xendit disbursement directly (already integrated).
-// IDRX EVM bridge via Wormhole/deBridge is on roadmap.
-import { createDisbursement, mapBankCode } from '../utils/xendit.js';
+// IDRX-only off-ramp: Solana SOL payment in → platform burns IDRX on Polygon
+// from pre-funded inventory → IDRX redeem-request API pays merchant in IDR.
+// Per platform policy (2026-05-17), Xendit is forbidden; all disbursements
+// must flow through IDRX. See api/utils/idrx-evm.js for the full flow.
+import { disburseFromInventory, mapBankCode } from '../utils/idrx-evm.js';
 
 const MIN_DISBURSEMENT_IDR = 1000; // Rp 1.000 — minimum per spesifikasi SOLQ
 
@@ -422,21 +423,17 @@ export default async (req, res) => {
       const canonicalPayer = onChainPayer || payerAccount || existing.payer_account || null;
       const intent = await confirmIntent(intentId, txHash, canonicalPayer);
 
-      // BUG-C001 fix: Xendit disbursement for Solana → IDR
-      // (IDRX redeem only supports EVM chains; Xendit handles Solana path)
+      // IDRX off-ramp: burn IDRX on Polygon (inventory wallet) → redeem-request → BI-FAST to merchant.
       let disbursement = null;
       let disbursementError = null;
-      const burnTxHash = normalizeStringField(req.body?.burn_tx_hash, null);
       // BUG-FIX 20260516: remove `existing.platformFee` fallback — platformFee is the FEE,
       // not the AMOUNT. Using it as amountIdr would disburse Rp 50 instead of Rp 10,000.
-      // If fiat_amount missing, also try body recovery context, then fail safely.
       const amountIdr = Number(
         existing.amount_details?.fiat_amount ??
         recoveryContext.amountIdr ??
         0
       );
 
-      // BUG-C008 fix: enforce minimum disbursement amount
       if (amountIdr > 0 && amountIdr < MIN_DISBURSEMENT_IDR) {
         return res.status(400).json({
           error: 'AMOUNT_BELOW_MINIMUM',
@@ -456,42 +453,51 @@ export default async (req, res) => {
       const bankAccountName =
         registeredMerchant?.account_name ?? existing.merchant?.name ?? 'QRIS Merchant';
 
-      // BUG-FIX 20260516: race-condition guard — if a disbursement was already triggered
-      // (e.g. by the Helius webhook firing in parallel), don't re-disburse. The webhook and
-      // this path share the same canonical external_id `solq_<intentId>_<txHash8>` so even
-      // if they both call Xendit, idempotency makes it safe — but we skip the second call.
-      const alreadyDisbursed = Boolean(intent?.xendit_disbursement_id || intent?.settlement_status === 'DISBURSED');
+      // Race-condition guard: if Helius webhook already disbursed via the same intent, skip.
+      const alreadyDisbursed = Boolean(intent?.burn_tx_hash || intent?.settlement_status === 'DISBURSED');
 
-      // Xendit disbursement: on-chain TX confirmed → send IDR to merchant bank/e-wallet
-      if (!alreadyDisbursed && txHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
-        try {
-          disbursement = await createDisbursement({
-            // Canonical external_id — same as helius.js so Xendit treats them as one
-            externalId: `solq_${intentId}_${txHash.slice(0, 8)}`,
-            bankCode,
-            accountNumber: merchantAccount,
-            amountIdr,
-            beneficiaryName: bankAccountName,
-            description: `SOLQ payment ${intentId}`,
-          });
-          await updateIntent(intentId, {
-            settlement_status: 'DISBURSED',
-            xendit_disbursement_id: disbursement?.id ?? null,
-            xendit_disbursement_status: disbursement?.status ?? 'COMPLETED',
-          });
-        } catch (err) {
-          disbursementError = String(err.message || err);
-          await updateIntent(intentId, {
-            settlement_status: 'SETTLEMENT_PENDING',
-            settlement_error: disbursementError,
-          });
-        }
-      } else if (alreadyDisbursed) {
+      if (alreadyDisbursed) {
         disbursement = {
-          id: intent.xendit_disbursement_id,
-          status: intent.xendit_disbursement_status ?? 'COMPLETED',
+          burn_tx_hash: intent.burn_tx_hash,
+          status: intent.settlement_status ?? 'DISBURSED',
           idempotent: true,
         };
+      } else if (txHash && merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
+        try {
+          const result = await disburseFromInventory({
+            amountIdr,
+            bankCode,
+            bankAccount: merchantAccount,
+            bankAccountName,
+            bankName: mapBankCode(bankCode),
+          });
+
+          if (result.status === 'DISBURSED') {
+            disbursement = result;
+            await updateIntent(intentId, {
+              settlement_status: 'DISBURSED',
+              burn_tx_hash: result.burnTxHash,
+              burn_explorer: result.burnExplorer,
+              idrx_redeem_response: result.redeem,
+            });
+          } else {
+            // Inventory empty, gas empty, RPC down, IDRX rejected — settle later.
+            // User TX on Solana is already final; we don't surface this as a failure.
+            disbursementError = result;
+            await updateIntent(intentId, {
+              settlement_status: 'SETTLEMENT_PENDING',
+              settlement_pending_reason: result.status,
+              settlement_pending_detail: result,
+            });
+          }
+        } catch (err) {
+          disbursementError = { status: 'UNEXPECTED_ERROR', error: String(err.message || err) };
+          await updateIntent(intentId, {
+            settlement_status: 'SETTLEMENT_PENDING',
+            settlement_pending_reason: 'UNEXPECTED_ERROR',
+            settlement_pending_detail: disbursementError,
+          });
+        }
       } else if (!merchantAccount || !mapBankCode(bankCode)) {
         await updateIntent(intentId, { settlement_status: 'AWAITING_MANUAL_SETTLEMENT' });
       }
@@ -512,10 +518,9 @@ export default async (req, res) => {
           token_deltas: facts.tokenDeltas,
         },
         payer_warning: payerMismatchWarning,
-        xendit_disbursement: disbursement ?? undefined,
-        disbursement_error: disbursementError ?? undefined,
-        // Note: burn_tx_hash only used for EVM IDRX path (future roadmap)
-        note: 'Solana offramp: Xendit disbursement. IDRX EVM bridge: roadmap.',
+        idrx_disbursement: disbursement ?? undefined,
+        disbursement_pending: disbursementError ?? undefined,
+        note: 'Solana SOL in → IDRX burn on Polygon (inventory) → IDR to merchant bank via IDRX redeem.',
       });
     } catch (error) {
       res.status(400).json({ error: error.message });

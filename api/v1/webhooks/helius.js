@@ -1,11 +1,12 @@
-// Helius webhook — on-chain event listener for SOLQ Gateway deposits
-// Triggers Xendit disbursement when SOL arrives at the gateway wallet.
-// BUG-OLD-004 FIX: HMAC-SHA256 signature verification
-// BUG-FIX 20260516: switched from IDRX (EVM-only) to Xendit; detect native SOL deposits
+// Helius webhook — on-chain event listener for SOLQ Gateway deposits.
+// Triggers IDRX burn-and-redeem from the platform's Polygon inventory wallet
+// when SOL arrives at the gateway wallet.
+//
+// HMAC-SHA256 signature verification (HELIUS_WEBHOOK_SECRET) is mandatory.
 
 import { createHmac } from 'crypto';
 import { getIntent, updateIntent, paymentIntents, getMerchant } from '../../store.js';
-import { createDisbursement, mapBankCode } from '../../utils/xendit.js';
+import { disburseFromInventory, mapBankCode } from '../../utils/idrx-evm.js';
 
 // Native SOL deposits land at the gateway wallet (matches PLATFORM_FEE_WALLET in client)
 const GATEWAY_WALLET = 'ETcQvsQek2w9feLfsqoe4AypCWfnrSwQiv3djqocaP2m';
@@ -94,37 +95,47 @@ export default async (req, res) => {
       const bankCode = registered?.bank_code ?? intent.bank_code ?? null;
       const beneficiaryName = registered?.account_name ?? intent.merchant?.name ?? 'QRIS Merchant';
 
-      // BUG-FIX 20260516: race-condition guard — if user-initiated /confirm already
-      // disbursed, skip. Xendit external_id below is canonical and idempotent, but
-      // skipping avoids a wasted API round-trip.
-      if (intent.xendit_disbursement_id || intent.settlement_status === 'DISBURSED') {
+      // Race-condition guard: if user-initiated /confirm already burned-and-redeemed, skip.
+      if (intent.burn_tx_hash || intent.settlement_status === 'DISBURSED') {
         results.push({ intentId, txSig, disbursed: true, idempotent: true });
         continue;
       }
 
-      // Trigger Xendit disbursement (Solana → IDR)
+      // IDRX off-ramp: burn IDRX from Polygon inventory, then redeem-request to merchant bank.
       if (merchantAccount && mapBankCode(bankCode) && amountIdr >= MIN_DISBURSEMENT_IDR) {
         try {
-          const disbursement = await createDisbursement({
-            // Canonical external_id — same as confirm.js so Xendit treats them as one
-            externalId: `solq_${intentId}_${txSig.slice(0, 8)}`,
-            bankCode,
-            accountNumber: merchantAccount,
+          const result = await disburseFromInventory({
             amountIdr,
-            beneficiaryName,
-            description: `SOLQ Helius ${intentId.slice(0, 20)}`,
+            bankCode,
+            bankAccount: merchantAccount,
+            bankAccountName: beneficiaryName,
+            bankName: mapBankCode(bankCode),
           });
-          await updateIntent(intentId, {
-            status: 'COMPLETED',
-            settlement_status: 'DISBURSED',
-            xendit_disbursement_id: disbursement?.id ?? null,
-            xendit_disbursement_status: disbursement?.status ?? 'COMPLETED',
-          });
-          results.push({ intentId, txSig, disbursed: true });
+
+          if (result.status === 'DISBURSED') {
+            await updateIntent(intentId, {
+              status: 'COMPLETED',
+              settlement_status: 'DISBURSED',
+              burn_tx_hash: result.burnTxHash,
+              burn_explorer: result.burnExplorer,
+              idrx_redeem_response: result.redeem,
+            });
+            results.push({ intentId, txSig, disbursed: true, burn: result.burnTxHash });
+          } else {
+            await updateIntent(intentId, {
+              status: 'COMPLETED', // Solana side is final — only off-ramp pending
+              settlement_status: 'SETTLEMENT_PENDING',
+              settlement_pending_reason: result.status,
+              settlement_pending_detail: result,
+            });
+            results.push({ intentId, txSig, disbursed: false, pending: result.status });
+          }
         } catch (err) {
           await updateIntent(intentId, {
+            status: 'COMPLETED',
             settlement_status: 'SETTLEMENT_PENDING',
-            settlement_error: String(err.message || err),
+            settlement_pending_reason: 'UNEXPECTED_ERROR',
+            settlement_pending_detail: { error: String(err.message || err) },
           });
           results.push({ intentId, txSig, disbursed: false, error: String(err.message || err) });
         }

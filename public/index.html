@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260517-live -->
+<!DOCTYPE html><!-- build:20260517-idrx -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -680,7 +680,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
       <div class="di-step-num">3</div>
       <div>
         <div class="di-step-title" data-t="s3title">Settlement BI-FAST</div>
-        <div class="di-step-desc" data-t="s3desc">Disbursement IDR ke 200+ bank & e-wallet via Xendit — otomatis setelah TX confirmed</div>
+        <div class="di-step-desc" data-t="s3desc">Disbursement IDR ke 200+ bank & e-wallet via IDRX — otomatis setelah TX confirmed</div>
       </div>
     </div>
   </div>
@@ -721,7 +721,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
   </div>
 
   <div class="di-compliance" data-t="compliance">
-    <strong>BI-FAST Settlement</strong> via Xendit — 200+ bank & e-wallet Indonesia didukung. Disbursement otomatis setelah TX confirmed on-chain. Fee 0.5% satu-satunya biaya.
+    <strong>BI-FAST Settlement</strong> via IDRX — 200+ bank & e-wallet Indonesia didukung. Disbursement otomatis setelah TX confirmed on-chain. Fee 0.5% satu-satunya biaya.
   </div>
 
 </div>
@@ -812,7 +812,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
       </div>
       <div class="row" style="border-bottom:none">
         <div class="row-label">Settlement rail</div>
-        <div class="row-val">IDR via Xendit</div>
+        <div class="row-val">IDR via IDRX</div>
       </div>
     </div>
   </div>
@@ -822,7 +822,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
   <!-- Footer -->
   <div class="footer-note">
     <div class="footer-note-dot"></div>
-    <span class="footer-note-text">Powered by Solana · QRIS Settlement via Xendit</span>
+    <span class="footer-note-text">Powered by Solana · QRIS Settlement via IDRX</span>
   </div>
 </div>
 
@@ -968,7 +968,7 @@ html,body{background:radial-gradient(ellipse at 18% 62%,rgba(153,69,255,.12) 0%,
     <div class="section-label">Routing</div>
     <div class="card" style="padding:4px 14px">
       <div class="row"><div class="row-label">On-chain swap</div><div class="row-val" id="route-swap">SOL → USDC → IDRX</div></div>
-      <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDR via Xendit BI-FAST</div></div>
+      <div class="row" style="border-bottom:none"><div class="row-label">Settlement</div><div class="row-val">IDR via IDRX BI-FAST</div></div>
     </div>
   </div>
 
@@ -1243,14 +1243,14 @@ const STRINGS = {
     howItWorks:'HOW IT WORKS',
     s1title:'Scan Merchant QRIS', s1desc:'Camera reads EMVCo TLV — extracts shop name, NMID, acquirer bank automatically',
     s2title:'Jupiter ExactOut Swap', s2desc:'SOL/USDC→IDRX at best price, 0.5% transparent fee, gas covered by platform',
-    s3title:'BI-FAST Settlement', s3desc:'IDR disbursed to 200+ banks & e-wallets via Xendit — automatic after TX confirmed',
+    s3title:'BI-FAST Settlement', s3desc:'IDR disbursed to 200+ banks & e-wallets via IDRX — automatic after TX confirmed',
     f1title:'Real QRIS Scan', f1desc:'Real CRC-16/CCITT parser — not simulation, not dummy data',
     f2title:'Jupiter ExactOut Quote', f2desc:'Best SOL/USDC→IDRX price, minimal slippage, real-time from Lite API',
     f3title:'Transparent 0.5% Fee', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, no hidden fees',
     f4title:'Non-Custodial', f4desc:'Private key never leaves user wallet — every TX signed by user',
     feeLbl:'Platform Fee', bankLbl:'Banks & Wallets', settleLbl:'Settlement',
     walletsTitle:'Supported Wallets',
-    compliance:'<strong>BI-FAST Settlement</strong> via Xendit — 200+ Indonesian banks & e-wallets supported. Automatic disbursement after TX confirmed on-chain. 0.5% is the only fee.',
+    compliance:'<strong>BI-FAST Settlement</strong> via IDRX — 200+ Indonesian banks & e-wallets supported. Automatic disbursement after TX confirmed on-chain. 0.5% is the only fee.',
     connectWallet:'Connect wallet', payAnyQris:'PAY ANY QRIS',
     scanHint:'Scan a merchant QRIS sticker', scanSub:'Camera opens · merchant receives rupiah',
     liveRates:'LIVE RATES', notConnected:'NOT CONNECTED', tapConnect:'Tap to connect a Solana wallet',
@@ -1262,14 +1262,14 @@ const STRINGS = {
     howItWorks:'CARA KERJA',
     s1title:'Scan QRIS Merchant', s1desc:'Kamera baca EMVCo TLV — ekstrak nama toko, NMID, bank acquirer otomatis',
     s2title:'Jupiter Swap ExactOut', s2desc:'SOL/USDC→IDRX dengan quote terbaik, fee 0.5% transparan, gas ditanggung platform',
-    s3title:'Settlement BI-FAST', s3desc:'Disbursement IDR ke 200+ bank & e-wallet via Xendit — otomatis setelah TX confirmed',
+    s3title:'Settlement BI-FAST', s3desc:'Disbursement IDR ke 200+ bank & e-wallet via IDRX — otomatis setelah TX confirmed',
     f1title:'Scan QRIS Nyata', f1desc:'Parser CRC-16/CCITT real — bukan simulasi, bukan dummy data',
     f2title:'Jupiter ExactOut Quote', f2desc:'Harga terbaik SOL/USDC→IDRX, slippage minimal, real-time dari Lite API',
     f3title:'Fee 0.5% Transparan', f3desc:'Platform 70% + Dev 30% split, on-chain verifiable, tidak ada biaya tersembunyi',
     f4title:'Non-Custodial', f4desc:'Private key tidak pernah meninggalkan wallet user — setiap TX ditandatangani sendiri',
     feeLbl:'Fee Platform', bankLbl:'Bank & Wallet', settleLbl:'Settlement',
     walletsTitle:'Wallet yang Didukung',
-    compliance:'<strong>BI-FAST Settlement</strong> via Xendit — 200+ bank & e-wallet Indonesia didukung. Disbursement otomatis setelah TX confirmed on-chain. Fee 0.5% satu-satunya biaya.',
+    compliance:'<strong>BI-FAST Settlement</strong> via IDRX — 200+ bank & e-wallet Indonesia didukung. Disbursement otomatis setelah TX confirmed on-chain. Fee 0.5% satu-satunya biaya.',
     connectWallet:'Hubungkan wallet', payAnyQris:'BAYAR QRIS',
     scanHint:'Scan kode QRIS merchant', scanSub:'Kamera terbuka · merchant terima rupiah',
     liveRates:'HARGA LIVE', notConnected:'BELUM TERHUBUNG', tapConnect:'Ketuk untuk hubungkan Solana wallet',
@@ -1938,7 +1938,7 @@ function showConfirmScreen(qris) {
 
   const routeSwap = document.getElementById('route-swap');
   const token = state.payment.token;
-  routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDR (Jupiter + Xendit)' : 'SOL → USDC → IDR (Jupiter + Xendit)');
+  routeSwap.textContent = token === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (token === 'USDC' ? 'USDC → IDR (IDRX redeem)' : 'SOL → USDC → IDR (IDRX redeem)');
 
   if (qris.isDynamic && qris.amount) {
     document.getElementById('amount-wrap-input').classList.add('hidden');
@@ -1977,7 +1977,7 @@ function selectToken(t) {
   ['SOL', 'USDC', 'IDRX'].forEach(x => document.getElementById('tok-' + x.toLowerCase())?.classList.remove('active'));
   document.getElementById('tok-' + t.toLowerCase())?.classList.add('active');
   const routeSwap = document.getElementById('route-swap');
-  routeSwap.textContent = t === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (t === 'USDC' ? 'USDC → IDR (Jupiter + Xendit)' : 'SOL → USDC → IDR (Jupiter + Xendit)');
+  routeSwap.textContent = t === 'IDRX' ? 'IDRX direct (1:1 IDR)' : (t === 'USDC' ? 'USDC → IDR (IDRX redeem)' : 'SOL → USDC → IDR (IDRX redeem)');
   if (state.payment.amountIDR >= 1000) fetchQuote();
 }
 
@@ -2168,7 +2168,7 @@ const STEPS = [
   { text: 'Waiting for signature', sub: 'sign in your wallet' },
   { text: 'Broadcasting to Solana', sub: CLUSTER },
   { text: 'Awaiting confirmation', sub: 'waiting for finality' },
-  { text: 'IDR disbursed', sub: 'merchant credited via Xendit BI-FAST' },
+  { text: 'IDR disbursed', sub: 'merchant credited via IDRX BI-FAST' },
 ];
 
 function renderSteps() {
@@ -2345,9 +2345,9 @@ async function runRealPayment() {
     } catch { await sleep(1500); }
     setStep(6, 'done');
 
-    // Step 7 — Backend confirm + Xendit disbursement (IDR ke bank merchant)
+    // Step 7 — Backend confirm + IDRX redeem (IDR ke bank merchant via Polygon burn)
     setStep(7, 'active');
-    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via Xendit...';
+    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via IDRX...';
     try {
       const qris = state.qris;
       const confirmPayload = {

@@ -70,3 +70,5 @@ credentials.json
 android/app/key.jks
 android/key.properties
 keystore_base64.txt
+
+.claude/worktrees/
