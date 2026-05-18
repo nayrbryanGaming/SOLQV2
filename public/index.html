@@ -2285,7 +2285,8 @@ async function runRealPayment() {
         const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
         solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
         const serialized = solTx.serialize({ requireAllSignatures: false });
-        txData = btoa(String.fromCharCode(...serialized));
+        let _s = ''; for (let _i = 0; _i < serialized.length; _i++) _s += String.fromCharCode(serialized[_i]);
+        txData = btoa(_s);
         console.log('[SOLQ] TX built:', lamports, 'lamports →', PLATFORM_FEE_WALLET);
       } catch (e) {
         txBuildError = e.message || 'Could not build transaction.';
@@ -2387,6 +2388,7 @@ async function runRealPayment() {
     } catch (confirmErr) {
       console.warn('[SOLQ] Confirm error:', confirmErr.message);
       state.payment.settlementStatus = 'PENDING';
+      toast('Settlement tertunda — TX Anda aman, merchant akan dibayar otomatis.', 'warn', 6000);
     }
 
     // Done. Show appropriate sub-status — Solana side is final regardless.

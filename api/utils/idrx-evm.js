@@ -23,7 +23,7 @@
 // event, matching IDRX's "burn must happen inside the platform" expectation.
 
 import { JsonRpcProvider, Wallet, Contract, formatUnits } from 'ethers';
-import { createHmac } from 'crypto';
+import { createHmac } from 'node:crypto';
 
 const POLYGON_RPCS = [
   'https://polygon.publicnode.com',

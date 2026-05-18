@@ -1921,11 +1921,16 @@ async function runRealPayment() {
       });
       if (confirmRes.ok) {
         const cd = await confirmRes.json();
-        const st = cd.settlement_status ?? cd.idrx_redeem?.status ?? 'PROCESSING';
+        const st = cd.settlement_status ?? cd.idrx_disbursement?.status ?? 'PROCESSING';
         toast(`✅ Settlement: ${st}`, 'success', 3000);
+      } else {
+        const errText = await confirmRes.text().catch(() => '');
+        console.warn('[SOLQ] Confirm non-OK', confirmRes.status, errText);
+        toast('Settlement tertunda — TX Anda aman, merchant akan dibayar otomatis.', 'warn', 6000);
       }
     } catch (confirmErr) {
       console.warn('[SOLQ] Confirm error:', confirmErr.message);
+      toast('Settlement tertunda — TX Anda aman, merchant akan dibayar otomatis.', 'warn', 6000);
     }
 
     // All done

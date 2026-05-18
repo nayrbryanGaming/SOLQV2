@@ -4,7 +4,7 @@
 //
 // HMAC-SHA256 signature verification (HELIUS_WEBHOOK_SECRET) is mandatory.
 
-import { createHmac } from 'crypto';
+import { createHmac } from 'node:crypto';
 import { getIntent, updateIntent, paymentIntents, getMerchant } from '../../store.js';
 import { disburseFromInventory, mapBankCode } from '../../utils/idrx-evm.js';
 

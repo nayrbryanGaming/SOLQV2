@@ -523,7 +523,8 @@ export default async (req, res) => {
         note: 'Solana SOL in → IDRX burn on Polygon (inventory) → IDR to merchant bank via IDRX redeem.',
       });
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      const isClientError = error.message?.startsWith('Intent') || error.message?.includes('required') || error.message?.includes('below minimum');
+      res.status(isClientError ? 400 : 500).json({ error: error.message });
     }
   } else {
     res.status(405).json({ error: 'Method not allowed' });

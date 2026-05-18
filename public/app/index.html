@@ -1948,7 +1948,8 @@ async function runRealPayment() {
         const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
         solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
         const serialized = solTx.serialize({ requireAllSignatures: false });
-        txData = btoa(String.fromCharCode(...serialized));
+        let _s = ''; for (let _i = 0; _i < serialized.length; _i++) _s += String.fromCharCode(serialized[_i]);
+        txData = btoa(_s);
       } catch (e) {
         txBuildError = e.message || 'Could not build transaction.';
         console.warn('[SOLQ] TX build:', txBuildError);
@@ -2012,9 +2013,9 @@ async function runRealPayment() {
     } catch { await sleep(1500); }
     setStep(6, 'done');
 
-    // Step 7 — Backend confirm + Xendit disbursement (IDR ke bank merchant)
+    // Step 7 — Backend confirm + IDRX disbursement (IDR ke bank merchant)
     setStep(7, 'active');
-    document.getElementById('proc-sub').textContent = 'Disbursing IDR to merchant via Xendit...';
+    document.getElementById('proc-sub').textContent = 'Memproses settlement IDR via IDRX ke merchant...';
     try {
       const qris = state.qris;
       const confirmPayload = {
@@ -2033,15 +2034,20 @@ async function runRealPayment() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(confirmPayload),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(25000),
       });
       if (confirmRes.ok) {
         const cd = await confirmRes.json();
-        const st = cd.settlement_status ?? cd.idrx_redeem?.status ?? 'PROCESSING';
+        const st = cd.settlement_status ?? cd.idrx_disbursement?.status ?? 'PROCESSING';
         toast('Settlement: ' + st, 'success', 3000);
+      } else {
+        const errText = await confirmRes.text().catch(() => '');
+        console.warn('[SOLQ] Confirm non-OK', confirmRes.status, errText);
+        toast('Settlement tertunda — TX Anda aman, merchant akan dibayar otomatis.', 'warn', 6000);
       }
     } catch (confirmErr) {
       console.warn('[SOLQ] Confirm error:', confirmErr.message);
+      toast('Settlement tertunda — TX Anda aman, merchant akan dibayar otomatis.', 'warn', 6000);
     }
 
     // Done

@@ -3,7 +3,7 @@
 // BUG-C001: IDRX Redeem only supports EVM chains: Polygon, Base, BNB, WorldChain, Lisk, Kaia.
 // Solana is NOT supported. For Solana → IDR, use Xendit disbursement (see api/utils/xendit.js).
 // IDRX EVM bridge (Wormhole/deBridge) is on roadmap; not yet implemented.
-import { createHmac } from 'crypto';
+import { createHmac } from 'node:crypto';
 
 // Chains actually supported by IDRX Redeem (verified from docs.idrx.co)
 const IDRX_SUPPORTED_CHAINS = ['polygon', 'base', 'bsc', 'worldchain', 'lisk', 'kaia'];
