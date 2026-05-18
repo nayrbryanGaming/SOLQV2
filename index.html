@@ -8,6 +8,9 @@
 <title>SOLQ — Solana × QRIS Payment</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23A855F7'/><stop offset='1' stop-color='%2300D4FF'/></linearGradient></defs><circle cx='42' cy='42' r='30' fill='none' stroke='url(%23g)' stroke-width='12'/><line x1='62' y1='62' x2='80' y2='80' stroke='url(%23g)' stroke-width='12' stroke-linecap='round'/></svg>">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<!-- Buffer polyfill — required by @solana/web3.js in browsers (no Node globals) -->
+<script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+<script>if(typeof Buffer==='undefined'&&typeof buffer!=='undefined')window.Buffer=buffer.Buffer;</script>
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.78.8/lib/index.iife.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -1841,7 +1844,7 @@ async function runRealPayment() {
 
         // Derive user's IDRX Associated Token Account
         const [userIdrxAta] = solanaWeb3.PublicKey.findProgramAddressSync(
-          [userPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMintPk.toBuffer()],
+          [userPk.toBytes(), TOKEN_PROGRAM_ID.toBytes(), idrxMintPk.toBytes()],
           ASSOC_TOKEN_PROGRAM_ID
         );
 

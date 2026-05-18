@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Buffer polyfill — required by @solana/web3.js in browsers (no Node globals) -->
+<script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+<script>if(typeof Buffer==='undefined'&&typeof buffer!=='undefined')window.Buffer=buffer.Buffer;</script>
 <!-- Solana Web3.js -->
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <!-- jsQR -->
@@ -1342,7 +1345,7 @@ function getPlatformFeeAccount() {
     const feeWallet          = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
     const idrxMint           = new solanaWeb3.PublicKey(IDRX_MINT);
     const [feeAta] = solanaWeb3.PublicKey.findProgramAddressSync(
-      [feeWallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), idrxMint.toBuffer()],
+      [feeWallet.toBytes(), TOKEN_PROGRAM_ID.toBytes(), idrxMint.toBytes()],
       ASSOC_TOKEN_PROG
     );
     return feeAta.toString();
