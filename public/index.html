@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260517-idrx -->
+<!DOCTYPE html><!-- build:20260520-bufferfix -->
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- Buffer polyfill — required by @solana/web3.js in browsers (no Node globals) -->
-<script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
-<script>if(typeof Buffer==='undefined'&&typeof buffer!=='undefined')window.Buffer=buffer.Buffer;</script>
+<!-- Buffer polyfill — @solana/web3.js IIFE calls Buffer.from() at runtime (not bundled) -->
+<script src="https://cdn.jsdelivr.net/npm/buffer@6/index.js"></script>
+<script>window.Buffer=window.Buffer||(typeof buffer!=='undefined'?buffer.Buffer:undefined);</script>
 <!-- Solana Web3.js -->
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <!-- jsQR -->
@@ -1438,6 +1438,16 @@ function promptDisconnect() {
 // ═══════════════════════════════════════════
 //  WALLET CONNECTION
 // ═══════════════════════════════════════════
+function _walletConnectErr(e) {
+  const msg = e?.message || String(e);
+  if (e?.code === 4001 || /reject|cancel|denied|dismiss/i.test(msg)) {
+    toast('Connection cancelled by user', 'info');
+  } else {
+    toast('Connect failed: ' + msg.slice(0, 80), 'error', 5000);
+    console.error('[SOLQ] wallet connect error:', e);
+  }
+}
+
 async function connectPhantom() {
   closeModal('modal-wallet');
   const provider = window.phantom?.solana ?? window.solana;
@@ -1447,13 +1457,11 @@ async function connectPhantom() {
   }
   try {
     toast('Connecting Phantom...', 'info');
-    const resp = await provider.connect();
+    const resp = await provider.connect({ onlyIfTrusted: false });
     const address = resp.publicKey.toString();
     setConnectedWallet('Phantom', 'phantom', address, provider, 'solana');
     await fetchWalletBalance(address);
-  } catch (e) {
-    toast('Connection cancelled', 'error');
-  }
+  } catch (e) { _walletConnectErr(e); }
 }
 
 async function connectSolflare() {
@@ -1465,16 +1473,11 @@ async function connectSolflare() {
   }
   try {
     toast('Connecting Solflare...', 'info');
-    // Pass app identity so Blowfish can verify domain — reduces "security verification failed" warning
-    await provider.connect({
-      onlyIfTrusted: false,
-    });
+    await provider.connect({ onlyIfTrusted: false });
     const address = provider.publicKey.toString();
     setConnectedWallet('Solflare', 'solflare', address, provider, 'solana');
     await fetchWalletBalance(address);
-  } catch (e) {
-    toast('Connection cancelled', 'error');
-  }
+  } catch (e) { _walletConnectErr(e); }
 }
 
 async function connectBackpack() {
@@ -1490,9 +1493,7 @@ async function connectBackpack() {
     const address = provider.publicKey.toString();
     setConnectedWallet('Backpack', 'backpack', address, provider, 'solana');
     await fetchWalletBalance(address);
-  } catch (e) {
-    toast('Connection cancelled', 'error');
-  }
+  } catch (e) { _walletConnectErr(e); }
 }
 
 async function connectMetaMask() {
@@ -2284,9 +2285,7 @@ async function runRealPayment() {
         const toPk   = new solanaWeb3.PublicKey(PLATFORM_FEE_WALLET);
         const solTx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: fromPk });
         solTx.add(solanaWeb3.SystemProgram.transfer({ fromPubkey: fromPk, toPubkey: toPk, lamports }));
-        const serialized = solTx.serialize({ requireAllSignatures: false });
-        let _s = ''; for (let _i = 0; _i < serialized.length; _i++) _s += String.fromCharCode(serialized[_i]);
-        txData = btoa(_s);
+        txData = solTx; // store Transaction object directly — wallet handles serialize+sign
         console.log('[SOLQ] TX built:', lamports, 'lamports →', PLATFORM_FEE_WALLET);
       } catch (e) {
         txBuildError = e.message || 'Could not build transaction.';
@@ -2308,14 +2307,11 @@ async function runRealPayment() {
     }
     let txSignature = null;
     try {
-      const txBytes = Uint8Array.from(atob(txData), c => c.charCodeAt(0));
-      let tx;
-      try { tx = solanaWeb3.VersionedTransaction.deserialize(txBytes); }
-      catch { tx = solanaWeb3.Transaction.from(txBytes); }
-      const result = await state.wallet.provider.signAndSendTransaction(tx);
-      txSignature = result.signature || result;
-      if (typeof txSignature !== 'string' || txSignature.length < 80) {
-        throw new Error('Wallet tidak mengembalikan signature yang valid.');
+      // txData is a solanaWeb3.Transaction object — wallet signs and sends directly
+      const result = await state.wallet.provider.signAndSendTransaction(txData);
+      txSignature = result?.signature ?? (typeof result === 'string' ? result : null);
+      if (typeof txSignature !== 'string' || txSignature.length < 40) {
+        throw new Error('Wallet did not return a valid transaction signature.');
       }
       state.payment.txHash = txSignature;
       document.getElementById('wallet-warning-note')?.classList.add('hidden');
